@@ -50,10 +50,15 @@ run(9344, {}, async ({ ui, find, dataDir }) => {
   // 3) sua mau mac dinh, luu, file settings.json doi theo, mo ta video cap nhat
   await ui.getByRole('button', { name: 'Mẫu mặc định', exact: true }).click()
   await ui.getByLabel('Tiêu đề (bắt buộc)').fill('{ten_video} | Tập {so_tap}')
+  // cac muc trong Studio luon hien (ca khi tat "sau khi dang"), luu cung nut "Lưu mẫu"
+  await ui.getByRole('radiogroup', { name: 'Phối lại Shorts' }).getByRole('radio', { name: 'Chỉ âm thanh' }).click()
+  await ui.getByRole('radiogroup', { name: 'Bình luận' }).getByRole('radio', { name: 'Tạm dừng' }).click()
+  assert.equal(await ui.getByLabel('Mô tả video').count(), 0, 'muc da dat qua API khong lap lai')
   await ui.getByRole('button', { name: 'Lưu mẫu' }).click()
   await ui.getByText('Đã lưu', { exact: true }).waitFor()
   const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8'))
   assert.equal(saved.presets[0].title, '{ten_video} | Tập {so_tap}')
+  assert.deepEqual([saved.presets[0].optimize.remix, saved.presets[0].optimize.comments, saved.presets[0].optimizeAfterUpload], ['audio', 'pause', false])
   st = await call('hello')
   assert.equal(st.scan.videos.find((x) => x.dir.includes('tap-3')).meta.title, 'bi an tap 3 | Tập 3')
 

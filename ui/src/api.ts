@@ -8,6 +8,34 @@ export type Update = {
   error: string
   manual: boolean // khong tu cai duoc -> chi mo trang tai ve
 }
+// Mau toi uu trong Studio (src/optimize-template.js); moi preset co mot mau rieng (preset.optimize)
+type K3 = 'keep' | 'yes' | 'no'
+export type OptimizeTemplate = {
+  playlists: string[]
+  paidPromotion: K3
+  ai: K3
+  tagsMode: 'keep' | 'title'
+  extraTags: string[]
+  location: string
+  recordingDate: 'keep' | 'today' | 'publish'
+  remix: 'keep' | 'all' | 'audio' | 'none'
+  endScreen: 'keep' | 'latest'
+  category: string
+  language: string
+  comments: 'keep' | 'on' | 'pause' | 'off'
+  license: 'keep' | 'youtube' | 'creativeCommon'
+  embeddable: K3
+  like: boolean
+  description: string
+  comment: string
+  pin: boolean
+}
+// giong defaultTemplate() trong src/optimize-template.js
+export const defaultOptimizeTemplate = (): OptimizeTemplate => ({
+  playlists: [], paidPromotion: 'no', ai: 'yes', tagsMode: 'title', extraTags: [], location: 'United States',
+  recordingDate: 'today', remix: 'none', endScreen: 'latest', category: 'keep', language: '', comments: 'keep',
+  license: 'keep', embeddable: 'keep', like: true, description: '', comment: '{tieu_de}', pin: true,
+})
 export type Schedule = { mode: 'now' | 'times' | 'interval'; times: string[]; intervalHours: number }
 export type Preset = {
   id: string
@@ -26,7 +54,8 @@ export type Preset = {
   publicStatsViewable: boolean
   privacy: 'public' | 'unlisted' | 'private'
   schedule: Schedule
-  optimizeAfterUpload?: boolean // sau khi dang: tu toi uu bang mau toi uu (trang Toi uu video)
+  optimizeAfterUpload?: boolean // sau khi dang: tu toi uu trong Studio bang preset.optimize
+  optimize?: OptimizeTemplate // cac muc chi co trong Studio (ban cu chua co -> mau goc)
 }
 export type Settings = {
   root: string
@@ -132,6 +161,7 @@ export const newPreset = (id: string, name: string): Preset => ({
   notifySubscribers: true, publicStatsViewable: true, privacy: 'private',
   schedule: { mode: 'now', times: ['19:00'], intervalHours: 24 },
   optimizeAfterUpload: false,
+  optimize: defaultOptimizeTemplate(),
 })
 
 const demoSettings: Settings = {

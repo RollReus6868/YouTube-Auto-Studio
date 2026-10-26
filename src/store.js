@@ -4,6 +4,7 @@
 const fs = require('fs')
 const path = require('path')
 const { defaultPreset, normalizePreset } = require('./metadata')
+const { presetSeed } = require('./optimize-template')
 
 const DEFAULTS = {
   root: '',
@@ -31,7 +32,7 @@ class Store {
     let s = {}
     try { s = JSON.parse(fs.readFileSync(this.file, 'utf8')) } catch (_) { /* lan dau */ }
     const out = { ...DEFAULTS, ...s }
-    out.presets = (Array.isArray(s.presets) && s.presets.length ? s.presets : DEFAULTS.presets).map(normalizePreset)
+    out.presets = (Array.isArray(s.presets) && s.presets.length ? s.presets : DEFAULTS.presets).map((p) => normalizePreset(p, presetSeed(p, s.optimizeTemplates)))
     if (!out.presets.some((p) => p.id === out.defaultPreset)) out.defaultPreset = out.presets[0].id
     return out
   }
@@ -39,7 +40,7 @@ class Store {
   save(patch = {}) {
     const next = { ...this.settings, ...patch }
     if (patch.presets) {
-      next.presets = patch.presets.map(normalizePreset)
+      next.presets = patch.presets.map((p) => normalizePreset(p, presetSeed(p, next.optimizeTemplates)))
       const ids = new Set()
       for (const p of next.presets) {
         if (!p.id || ids.has(p.id)) p.id = `mau-${Date.now().toString(36)}-${ids.size}`

@@ -1,40 +1,14 @@
 // Trinh sua "mau toi uu" (src/optimize-template.js), nhom giong trang Chi tiet video cua Studio.
-// Dung o trang Toi uu video va o trang Mau mac dinh (sau khi dang: toi uu bang mau).
-import { Info, Pin, Save, Undo2 } from 'lucide-react'
+// Dung o trang Toi uu video va o trang Mau mac dinh (moi preset mot mau, preset.optimize).
+import { Info, Pin } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
-import { CATEGORIES } from '../api'
-import { Button, Card, Field, Pill, Select, TextArea, TextInput, ToggleRow, cn } from '../kit'
-import type { PageProps } from './index'
+import { CATEGORIES, defaultOptimizeTemplate, type OptimizeTemplate } from '../api'
+import { Card, Field, Select, TextArea, TextInput, ToggleRow, cn } from '../kit'
 
-type K3 = 'keep' | 'yes' | 'no'
-export type OptimizeTemplate = {
-  playlists: string[]
-  paidPromotion: K3
-  ai: K3
-  tagsMode: 'keep' | 'title'
-  extraTags: string[]
-  location: string
-  recordingDate: 'keep' | 'today' | 'publish'
-  remix: 'keep' | 'all' | 'audio' | 'none'
-  endScreen: 'keep' | 'latest'
-  category: string
-  language: string
-  comments: 'keep' | 'on' | 'pause' | 'off'
-  license: 'keep' | 'youtube' | 'creativeCommon'
-  embeddable: K3
-  like: boolean
-  description: string
-  comment: string
-  pin: boolean
-}
+export type { OptimizeTemplate } from '../api'
+export { defaultOptimizeTemplate } from '../api'
 export type Templates = Record<string, OptimizeTemplate> // 'default' + key kenh
 
-// giong defaultTemplate() trong src/optimize-template.js
-export const defaultOptimizeTemplate = (): OptimizeTemplate => ({
-  playlists: [], paidPromotion: 'no', ai: 'yes', tagsMode: 'title', extraTags: [], location: 'United States',
-  recordingDate: 'today', remix: 'none', endScreen: 'latest', category: 'keep', language: '', comments: 'keep',
-  license: 'keep', embeddable: 'keep', like: true, description: '', comment: '{tieu_de}', pin: true,
-})
 export const templateOf = (t: Templates | undefined, key: string): OptimizeTemplate =>
   ({ ...defaultOptimizeTemplate(), ...((t && (t[key] || t.default)) || {}) })
 
@@ -87,10 +61,14 @@ function ListInput({ value, onChange, placeholder, label }: { value: string[]; o
     onBlur={() => onChange([...new Set(text.split(/[,\n]/).map((t) => t.trim()).filter(Boolean))])} />
 }
 
-export function OptimizeTemplateEditor({ value: t, onChange, channelName = 'Dark Bible Study', sample = 'The Tower of Babel: Humanity’s First Rebellion Against God', compact }: {
-  value: OptimizeTemplate; onChange: (t: OptimizeTemplate) => void; channelName?: string; sample?: string; compact?: boolean
+// hide: an cac muc da dat o noi khac (vd trang Mau mac dinh dat qua API). wide: 2 cot tu man hinh xl.
+export function OptimizeTemplateEditor({ value: t, onChange, channelName = 'Dark Bible Study', sample = 'The Tower of Babel: Humanity’s First Rebellion Against God', compact, wide, hide = [] }: {
+  value: OptimizeTemplate; onChange: (t: OptimizeTemplate) => void; channelName?: string; sample?: string; compact?: boolean; wide?: boolean; hide?: (keyof OptimizeTemplate)[]
 }) {
   const set = (p: Partial<OptimizeTemplate>) => onChange({ ...t, ...p })
+  const show = (k: keyof OptimizeTemplate) => !hide.includes(k)
+  // hai o canh nhau; an mot o thi o con lai chiem ca hang
+  const pair = (a: ReactNode, b: ReactNode) => (a && b ? <div className="grid gap-3 sm:grid-cols-2">{a}{b}</div> : a || b || null)
   const preview = renderComment(t.comment, { tieu_de: sample, link: 'https://youtu.be/vyiSqHByq24', ten_kenh: channelName })
   const join = (cur: string, v: string) => (cur ? `${cur}${/\s$/.test(cur) ? '' : ' '}${v}` : v)
   const addVar = (v: string) => set({ comment: join(t.comment, v) })
@@ -103,38 +81,42 @@ export function OptimizeTemplateEditor({ value: t, onChange, channelName = 'Dark
     </div>
   )
   return (
-    <div className={cn('grid gap-3', !compact && '2xl:grid-cols-2')}>
+    <div className={cn('grid gap-3', wide ? 'xl:grid-cols-2' : !compact && '2xl:grid-cols-2')}>
       <div className="space-y-3">
         <Group title="Danh sách phát" hint="Tick mọi danh sách phát trùng tên (Studio có thể có nhiều danh sách cùng tên). Để trống = giữ nguyên.">
           <ListInput label="Tên danh sách phát" value={t.playlists} onChange={(playlists) => set({ playlists })} placeholder="Tên danh sách phát, cách nhau bằng dấu phẩy" />
         </Group>
         <Group title="Hiện thêm" hint="Các mục trong phần “Hiện thêm” của trang Chi tiết video.">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Seg label="Quảng cáo trả phí" value={t.paidPromotion} onChange={(paidPromotion) => set({ paidPromotion })} options={[['keep', KEEP], ['no', 'Không có'], ['yes', 'Có']]} />
-            <Seg label="Nội dung bị thay đổi / AI" value={t.ai} onChange={(ai) => set({ ai })} options={[['keep', KEEP], ['yes', 'Có'], ['no', 'Không']]} />
-          </div>
+          {pair(
+            show('paidPromotion') && <Seg label="Quảng cáo trả phí" value={t.paidPromotion} onChange={(paidPromotion) => set({ paidPromotion })} options={[['keep', KEEP], ['no', 'Không có'], ['yes', 'Có']]} />,
+            show('ai') && <Seg label="Nội dung bị thay đổi / AI" value={t.ai} onChange={(ai) => set({ ai })} options={[['keep', KEEP], ['yes', 'Có'], ['no', 'Không']]} />,
+          )}
           <Seg label="Thẻ" value={t.tagsMode} onChange={(tagsMode) => set({ tagsMode })} options={[['keep', KEEP], ['title', 'Thêm tiêu đề video làm thẻ']]} />
           <Field label="Thẻ thêm (tùy chọn)" hint="Thêm sau thẻ cũ, không xóa thẻ đã có; tối đa 500 ký tự như Studio.">
             <ListInput label="Thẻ thêm" value={t.extraTags} onChange={(extraTags) => set({ extraTags })} placeholder="bible stories, kinh thánh" />
           </Field>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Ngôn ngữ video và tiêu đề">
-              <Select label="Ngôn ngữ video" value={t.language} onChange={(language) => set({ language })} options={[['', KEEP], ...LANGS.map((l): [string, string] => [l, l])]} />
-            </Field>
-            <Field label="Danh mục">
-              <Select label="Danh mục" value={t.category} onChange={(category) => set({ category })} options={[['keep', KEEP], ...CATEGORIES]} />
-            </Field>
-          </div>
+          {pair(
+            show('language') && (
+              <Field label="Ngôn ngữ video và tiêu đề">
+                <Select label="Ngôn ngữ video" value={t.language} onChange={(language) => set({ language })} options={[['', KEEP], ...LANGS.map((l): [string, string] => [l, l])]} />
+              </Field>
+            ),
+            show('category') && (
+              <Field label="Danh mục">
+                <Select label="Danh mục" value={t.category} onChange={(category) => set({ category })} options={[['keep', KEEP], ...CATEGORIES]} />
+              </Field>
+            ),
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             <Seg label="Ngày quay" value={t.recordingDate} onChange={(recordingDate) => set({ recordingDate })} options={[['keep', KEEP], ['today', 'Hôm nay'], ['publish', 'Ngày đăng']]} />
             <Field label="Vị trí video" hint="Để trống = giữ nguyên.">
               <TextInput aria-label="Vị trí video" value={t.location} onChange={(e) => set({ location: e.target.value })} placeholder="United States" />
             </Field>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Seg label="Giấy phép" value={t.license} onChange={(license) => set({ license })} options={[['keep', KEEP], ['youtube', 'YouTube chuẩn'], ['creativeCommon', 'Creative Commons']]} />
-            <Seg label="Cho phép nhúng" value={t.embeddable} onChange={(embeddable) => set({ embeddable })} options={[['keep', KEEP], ['yes', 'Bật'], ['no', 'Tắt']]} />
-          </div>
+          {pair(
+            show('license') && <Seg label="Giấy phép" value={t.license} onChange={(license) => set({ license })} options={[['keep', KEEP], ['youtube', 'YouTube chuẩn'], ['creativeCommon', 'Creative Commons']]} />,
+            show('embeddable') && <Seg label="Cho phép nhúng" value={t.embeddable} onChange={(embeddable) => set({ embeddable })} options={[['keep', KEEP], ['yes', 'Bật'], ['no', 'Tắt']]} />,
+          )}
           <Seg label="Phối lại Shorts" value={t.remix} onChange={(remix) => set({ remix })} options={[['keep', KEEP], ['all', 'Video và âm thanh'], ['audio', 'Chỉ âm thanh'], ['none', 'Không cho phép']]} />
           <Seg label="Bình luận" value={t.comments} onChange={(comments) => set({ comments })} options={[['keep', KEEP], ['on', 'Bật'], ['pause', 'Tạm dừng'], ['off', 'Tắt']]} />
         </Group>
@@ -144,12 +126,14 @@ export function OptimizeTemplateEditor({ value: t, onChange, channelName = 'Dark
         </Group>
       </div>
       <div className="space-y-3">
-        <Group title="Mô tả" hint="Chỉ điền cho video CHƯA có mô tả; video đã có mô tả thì giữ nguyên.">
-          <Field label="Mô tả video" hint="Để trống = không đụng tới mô tả. Tối đa 5000 ký tự.">
-            <TextArea aria-label="Mô tả video" rows={5} maxLength={5000} value={t.description} onChange={(e) => set({ description: e.target.value })} placeholder={'{tieu_de}\n\nĐăng ký kênh {ten_kenh} để xem thêm video mới.'} />
-          </Field>
-          {vars((v) => set({ description: join(t.description, v) }))}
-        </Group>
+        {show('description') && (
+          <Group title="Mô tả" hint="Chỉ điền cho video CHƯA có mô tả; video đã có mô tả thì giữ nguyên.">
+            <Field label="Mô tả video" hint="Để trống = không đụng tới mô tả. Tối đa 5000 ký tự.">
+              <TextArea aria-label="Mô tả video" rows={5} maxLength={5000} value={t.description} onChange={(e) => set({ description: e.target.value })} placeholder={'{tieu_de}\n\nĐăng ký kênh {ten_kenh} để xem thêm video mới.'} />
+            </Field>
+            {vars((v) => set({ description: join(t.description, v) }))}
+          </Group>
+        )}
         <Group title="Sau khi lưu: trang xem video" hint="Chỉ làm được khi video Công khai / Không công khai.">
           <ToggleRow title="Thích video" hint="Bỏ qua nếu đã thích." checked={t.like} onChange={(like) => set({ like })} />
           <Field label="Bình luận ghim" hint="Để trống = không bình luận. Đã có bình luận này thì tool không đăng lại.">
@@ -171,35 +155,28 @@ export function OptimizeTemplateEditor({ value: t, onChange, channelName = 'Dark
   )
 }
 
-// The cai dat cho trang Mau mac dinh: "Sau khi dang: toi uu bang mau" + mau toi uu mac dinh.
-type OptimizeState = { templates?: Templates }
-export function PresetOptimizeCard({ state, send, checked, onToggle }: Pick<PageProps, 'state' | 'send'> & { checked: boolean; onToggle: (v: boolean) => void }) {
-  const s = state.f.optimize as OptimizeState | undefined
-  const saved = templateOf(s?.templates, 'default')
-  const savedKey = JSON.stringify(saved)
-  const [t, setT] = useState(saved)
-  useEffect(() => setT(saved), [savedKey]) // eslint-disable-line react-hooks/exhaustive-deps
-  const dirty = JSON.stringify(t) !== savedKey
-  const own = Object.keys(s?.templates || {}).filter((k) => k !== 'default').length
+// Cac muc trong Studio cua preset (trang Mau mac dinh): preset.optimize, luu cung nut "Lưu mẫu".
+// An cac muc preset da dat qua API luc dang (src/optimize-template.js API_FIELDS: luc chay giu nguyen).
+export const PRESET_API_FIELDS: (keyof OptimizeTemplate)[] = ['category', 'language', 'license', 'embeddable', 'ai', 'description']
+export function PresetOptimizeCard({ value, onChange, enabled, onToggle, channelName, className }: {
+  value: OptimizeTemplate; onChange: (t: OptimizeTemplate) => void; enabled: boolean; onToggle: (v: boolean) => void; channelName?: string; className?: string
+}) {
   return (
-    <Card title="Sau khi đăng" hint="các mục chỉ có trong YouTube Studio">
+    <Card className={className} title="Các mục trong YouTube Studio" hint="API không đặt được, tool tự làm trong Studio sau khi đăng">
       <div className="space-y-3">
-        <ToggleRow title="Sau khi đăng: tối ưu bằng mẫu" hint="Khi video đã công khai được 15 phút, tool tự mở Studio để tối ưu, rồi thích + bình luận + ghim." checked={checked} onChange={onToggle} />
-        {checked && (
-          <>
-            <div className="flex items-start gap-2 rounded-lg bg-primary/5 p-2.5 text-[11px] leading-relaxed text-muted-foreground">
-              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-              <p>Cần đăng nhập kênh ở trang <b>Tài khoản</b>. Dưới đây là <b>mẫu tối ưu mặc định</b>{own ? `; ${own} kênh có mẫu riêng (sửa ở trang Tối ưu video)` : ''}. Bật/tắt ở trên lưu cùng nút “Lưu mẫu”, còn mẫu tối ưu lưu bằng nút riêng.</p>
-            </div>
-            <OptimizeTemplateEditor value={t} onChange={setT} compact />
-            <div className="flex items-center gap-2">
-              <Button variant={dirty ? 'default' : 'outline'} className="h-9" disabled={!dirty} onClick={() => send('optimize_template_save', { channelKey: 'default', template: t })}><Save /> Lưu mẫu tối ưu</Button>
-              <Button variant="subtle" className="h-9" disabled={!dirty} onClick={() => setT(saved)}><Undo2 /> Bỏ thay đổi</Button>
-              <span className="flex-1" />
-              {dirty ? <Pill tone="warning">Chưa lưu</Pill> : <Pill tone="success">Đã lưu</Pill>}
-            </div>
-          </>
-        )}
+        <ToggleRow title="Sau khi đăng: tối ưu bằng mẫu" hint="Khi video đã công khai được 15 phút, tool tự mở Studio để đặt các mục dưới đây, rồi thích + bình luận + ghim." checked={enabled} onChange={onToggle} />
+        <div className={cn('flex items-start gap-2 rounded-lg p-2.5 text-[11px] leading-relaxed', enabled ? 'bg-primary/5 text-muted-foreground' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400')}>
+          <Info className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', enabled ? 'text-primary' : '')} />
+          <p>
+            {enabled
+              ? <>Cần đăng nhập kênh ở trang <b>Tài khoản</b>. </>
+              : <><b>Đang tắt:</b> các mục dưới đây vẫn được lưu cùng mẫu nhưng chỉ chạy khi bật công tắc ở trên. </>}
+            Danh mục, ngôn ngữ, giấy phép, cho phép nhúng, nội dung AI và mô tả đã đặt qua API ở phần trên nên không lặp lại ở đây (Studio giữ nguyên).
+          </p>
+        </div>
+        <div className={cn('transition-opacity', !enabled && 'opacity-60')}>
+          <OptimizeTemplateEditor value={value} onChange={onChange} channelName={channelName || undefined} hide={PRESET_API_FIELDS} wide />
+        </div>
       </div>
     </Card>
   )
