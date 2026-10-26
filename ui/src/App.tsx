@@ -13,6 +13,7 @@ import { GuidePage } from './GuidePage'
 import { CommentCard, FILTERS, isPending } from './CommentCard'
 import { FEATURE_PAGES } from './pages'
 import { StudioPicker, type AccountsState } from './pages/AccountsPage'
+import { PresetOptimizeCard } from './pages/OptimizeTemplateEditor'
 
 const LEVELS: Record<Level, { tone: Tone; label: string }> = {
   info: { tone: 'info', label: 'TIN' },
@@ -391,6 +392,7 @@ function PresetsPage({ state, send }: Backend) {
             <Card title="Nội dung thay đổi">
               <ToggleRow title="Có nội dung do AI tạo hoặc chỉnh sửa trông như thật" hint="Mục “Nội dung bị thay đổi” trong Studio. Bật nếu video có người, sự việc hoặc địa điểm thật được tạo/sửa bằng AI." checked={p.syntheticMedia} onChange={(v) => set({ syntheticMedia: v })} />
             </Card>
+            <PresetOptimizeCard state={state} send={send} checked={!!p.optimizeAfterUpload} onToggle={(v) => set({ optimizeAfterUpload: v })} />
           </div>
           <div className="space-y-3">
             <Card title="Chế độ hiển thị">

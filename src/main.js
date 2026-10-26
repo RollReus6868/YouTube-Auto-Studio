@@ -340,6 +340,7 @@ async function runUploads(ids) {
         })
         addHistory({ folder: item.folder, movedTo: r.folder, id: r.id, url: r.url, title: item.meta.title, at: new Date().toISOString() })
         setJob(id, { status: 'done', step: '', progress: 100, url: r.url, warnings: r.warnings })
+        if (ctx.afterUpload) ctx.afterUpload({ videoId: r.id, title: item.meta.title, publishAt: item.meta.publishAt, preset: store.presetFor({ info: item.info }), channelId: state.youtube.channel.id })
         ok++
       } catch (e) {
         setJob(id, { status: e.reason === 'stopped' ? 'stopped' : 'error', error: e.message })
@@ -576,7 +577,7 @@ const ctx = {
   studio: { use: (partition, url) => useStudio(partition, url), wc: () => studio && studio.webContents, home: STUDIO_URL },
   get desk() { return desk }, // CommentDesk chung (binh luan API + hop thu Studio), co sau app.whenReady
 }
-const FEATURES = ['accounts', 'inbox']
+const FEATURES = ['accounts', 'inbox', 'optimize']
 const started = []
 for (const name of FEATURES) {
   const f = require(`./features/${name}`)(ctx)

@@ -26,6 +26,7 @@ export type Preset = {
   publicStatsViewable: boolean
   privacy: 'public' | 'unlisted' | 'private'
   schedule: Schedule
+  optimizeAfterUpload?: boolean // sau khi dang: tu toi uu bang mau toi uu (trang Toi uu video)
 }
 export type Settings = {
   root: string
@@ -122,12 +123,13 @@ export const newPreset = (id: string, name: string): Preset => ({
   madeForKids: false, syntheticMedia: false, license: 'youtube', embeddable: true,
   notifySubscribers: true, publicStatsViewable: true, privacy: 'private',
   schedule: { mode: 'now', times: ['19:00'], intervalHours: 24 },
+  optimizeAfterUpload: false,
 })
 
 const demoSettings: Settings = {
   root: 'D:\\YouTube-DangBai', channel: 'Kênh Của Tôi',
   presets: [
-    { ...newPreset('mac-dinh', 'Video dài'), title: '{ten_video} | Tập {so_tap}', description: '{tieu_de}\n\nĐăng ngày {ngay} trên {ten_kenh}.\n\n{hashtag}', tags: ['phim hay', 'review phim', 'tóm tắt phim'], categoryId: '1', privacy: 'public', schedule: { mode: 'times', times: ['19:00'], intervalHours: 24 } },
+    { ...newPreset('mac-dinh', 'Video dài'), title: '{ten_video} | Tập {so_tap}', description: '{tieu_de}\n\nĐăng ngày {ngay} trên {ten_kenh}.\n\n{hashtag}', tags: ['phim hay', 'review phim', 'tóm tắt phim'], categoryId: '1', privacy: 'public', schedule: { mode: 'times', times: ['19:00'], intervalHours: 24 }, optimizeAfterUpload: true },
     { ...newPreset('shorts', 'Shorts'), title: '{ten_video} #shorts', tags: ['shorts'], privacy: 'public' },
   ],
   defaultPreset: 'mac-dinh', geminiModel: 'gemini-2.5-flash',

@@ -1,0 +1,334 @@
+<!doctype html><meta charset="utf-8"><title>Chi tiết video - YouTube Studio</title>
+<!-- Gia lap Studio "Chi tiet video". Cau truc theo HTML that (html/yt-3, yt-4, yt-5): ytcp-dropdown-trigger,
+     tp-yt-paper-radio-button[name], ytcp-checkbox-lit #checkbox[role=checkbox], ytcp-chip #chip-text,
+     ytcp-playlist-dialog (o tich aria-label rong, ten o span.label-text, test-id = ID danh sach phat),
+     ytcp-button#toggle-button "Hien them"/"An bot", ytve-modal-host (man hinh ket thuc), tp-yt-paper-toast.
+     Nhu that: form hien tre, muc nang cao chi co sau khi bam "Hien them", nut Luu khoa toi khi co thay doi,
+     man hinh ket thuc luu rieng. Trang thai luu trong localStorage 'opt-video-<id>'.
+     Chua co HTML that cho: o chon ngay quay (gia: ytcp-date-picker + o nhap) va cac o mau man hinh ket thuc. -->
+<style>
+  body { margin: 0; font: 13px Roboto, Arial, sans-serif; background: #282828; color: #fff }
+  ytcp-video-metadata-editor, ytcp-video-metadata-editor-advanced, ytcp-paid-product-placement-select, ytkp-altered-content-select,
+  tp-yt-paper-radio-group, ytcp-form-input-container, ytcp-chip-bar, ytcp-form-language-input, ytcp-form-select, ytcp-select,
+  ytcp-text-dropdown-trigger, ytcp-form-location, ytcp-form-autocomplete, ytcp-form-checkbox, ytcp-video-metadata-remix-settings,
+  ytcp-comment-moderation-settings, ytcp-video-metadata-playlists, ytcp-social-suggestions-textbox, ytcp-playlist-dialog,
+  ytcp-checkbox-group, ytve-modal-host, ytcp-dialog, ytve-editor, ytve-endscreen-editor-options-panel, ytcp-text-menu,
+  tp-yt-paper-listbox, ytcp-toast-manager, ytcp-date-picker, ytcp-video-metadata-editor-sidepanel { display: block }
+  ytcp-button, ytcp-button-shape, ytcp-checkbox-lit, ytcp-badge, ytcp-icon-button { display: inline-block }
+  header { height: 56px; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid #3e3e3e }
+  nav { position: fixed; top: 57px; left: 0; width: 160px; padding: 12px }
+  nav div { padding: 8px 12px; color: #ddd }
+  .top { position: sticky; top: 0; background: #282828; display: flex; align-items: center; gap: 12px; padding: 12px 0; z-index: 5 }
+  .top h1 { flex: 1; margin: 0; font-size: 24px }
+  main { margin-left: 200px; padding: 0 16px; display: grid; grid-template-columns: 470px 240px; gap: 16px; max-width: 760px }
+  .input-container { margin: 18px 0 }
+  .section-label, .section-label-with-description { font-weight: 600; font-size: 14px }
+  .section-description, .description { color: #aaa; font-size: 12px; margin: 2px 0 8px }
+  button { background: #3e3e3e; color: #fff; border: 0; border-radius: 18px; padding: 8px 14px; font-weight: 500; cursor: pointer }
+  #save button { background: #fff; color: #0f0f0f }
+  button[disabled] { opacity: .4 }
+  ytcp-dropdown-trigger { display: block; border: 1px solid #555; border-radius: 4px; padding: 6px 10px; width: 200px; position: relative; cursor: pointer }
+  ytcp-dropdown-trigger[aria-disabled=true] { opacity: .4 }
+  .label-text { font-size: 11px; color: #aaa } .dropdown-trigger-text { font-size: 14px }
+  .right-container { position: absolute; right: 8px; top: 8px }
+  ytcp-text-menu { position: absolute; z-index: 20; left: 0; top: 100% }
+  ytcp-text-menu tp-yt-paper-dialog { display: block; background: #1f1f1f; border: 1px solid #555; min-width: 220px; max-height: 260px; overflow: auto }
+  tp-yt-paper-item { display: block; padding: 8px 12px } tp-yt-paper-item:hover { background: #333 }
+  tp-yt-paper-radio-button { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer }
+  #radioContainer { width: 14px; height: 14px; border: 2px solid #aaa; border-radius: 50% }
+  tp-yt-paper-radio-button[aria-checked=true] #radioContainer { background: #3ea6ff }
+  ytcp-checkbox-lit #root-container { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer }
+  #checkbox { width: 14px; height: 14px; border: 2px solid #aaa } #checkbox[aria-checked=true] { background: #3ea6ff }
+  #checkbox[aria-disabled=true] { opacity: .4 }
+  #textbox { border: 1px solid #555; border-radius: 4px; padding: 8px; min-height: 20px }
+  ytcp-chip { display: inline-flex; gap: 4px; background: #3e3e3e; border-radius: 12px; padding: 4px 8px; margin: 2px }
+  #tags-container { border: 1px solid #555; border-radius: 4px; padding: 6px }
+  #text-input { background: transparent; border: 0; color: #fff; width: 200px }
+  #location input { background: transparent; border: 0; color: #fff; width: 180px }
+  .side ytcp-text-dropdown-trigger ytcp-dropdown-trigger { width: 220px; margin: 8px 0 }
+  .backdrop { position: fixed; inset: 0; background: #0009; z-index: 30 }
+  ytcp-playlist-dialog > tp-yt-paper-dialog { position: fixed; z-index: 40; left: 210px; top: 120px; width: 280px; height: 260px; display: flex; flex-direction: column; background: #1f1f1f; border: 1px solid #555; border-radius: 8px; padding: 12px }
+  ytcp-playlist-dialog ul { flex: 1; list-style: none; padding: 0; margin: 0 } li.row { display: flex; align-items: center; gap: 6px }
+  li.row label { display: flex; align-items: center; gap: 6px; flex: 1; cursor: pointer } ytcp-badge { background: #444; font-size: 11px; padding: 2px 6px }
+  .action-buttons { display: flex; justify-content: space-between }
+  ytcp-date-picker tp-yt-paper-dialog { position: fixed; z-index: 40; left: 210px; top: 200px; width: 260px; display: block; background: #1f1f1f; border: 1px solid #555; padding: 12px }
+  ytve-modal-host tp-yt-paper-dialog { position: fixed; z-index: 40; left: 120px; top: 60px; width: 640px; height: 480px; display: block; background: #1f1f1f; border: 1px solid #555; border-radius: 8px; padding: 16px }
+  #video-editor-modal-host-header { display: flex; gap: 12px; align-items: center } #video-editor-modal-host-title { flex: 1; font-size: 18px; font-weight: 600 }
+  .templates { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px }
+  .template { display: block; border: 1px solid #555; border-radius: 6px; padding: 30px 8px 8px; cursor: pointer }
+  tp-yt-paper-toast { position: fixed; bottom: 24px; left: 50%; background: #eee; color: #000; padding: 12px 24px; border-radius: 4px; z-index: 50 }
+  tp-yt-paper-toast[hidden] { display: none }
+  .dim { position: fixed; inset: 0; background: #0006; z-index: 25 }
+</style>
+<script src="/__file/optimize/data.js"></script>
+<ytcp-toast-manager><tp-yt-paper-toast id="paper-toast" hidden><span id="label"></span></tp-yt-paper-toast></ytcp-toast-manager>
+<header><b>▶ Studio</b><input placeholder="Tìm kiếm trên kênh của bạn" style="width:420px"></header>
+<nav><div>← Nội dung của kênh</div><div><b>Chi tiết</b></div><div>Số liệu phân tích</div><div>Trình biên tập</div><div>Bình luận</div><div>Ngôn ngữ</div></nav>
+<main>
+  <div class="top" style="grid-column: 1 / 3"><h1>Chi tiết video</h1><span id="top-buttons"></span></div>
+  <div class="col" id="left"><div id="loading">Đang tải…</div></div>
+  <ytcp-video-metadata-editor-sidepanel class="side" id="right"></ytcp-video-metadata-editor-sidepanel>
+</main>
+<script>
+const id = (/\/video\/([\w-]+)\/edit/.exec(location.pathname) || [])[1]
+const KEY = 'opt-video-' + id
+const video = OPT.videoOf(id)
+let saved = OPT.load(KEY, OPT.fresh())
+let W = JSON.parse(JSON.stringify(saved))
+const $ = (s, r = document) => r.querySelector(s)
+const esc = OPT.esc
+document.getElementById('top-buttons').innerHTML = OPT.button('discard', 'Huỷ thay đổi', { disabled: true }) + ' ' + OPT.button('save', 'Lưu', { disabled: true })
+
+function dirty() {
+  const d = JSON.stringify({ ...W, endscreen: 0 }) !== JSON.stringify({ ...saved, endscreen: 0 })
+  OPT.setDisabled($('#save'), !d)
+  OPT.setDisabled($('#discard'), !d)
+  return d
+}
+function set(k, v) { W[k] = v; paint(); dirty() }
+
+// ---- o tha xuong: ytcp-text-menu > tp-yt-paper-dialog[role=dialog] > tp-yt-paper-listbox > tp-yt-paper-item ----
+let openMenu = null
+function closeMenu() { if (openMenu) { openMenu.remove(); openMenu = null } }
+function dropdown(host, options, cur, onPick) {
+  const tr = host.querySelector('ytcp-dropdown-trigger')
+  if (tr.getAttribute('aria-disabled') === 'true') return
+  closeMenu()
+  const m = document.createElement('ytcp-text-menu')
+  m.innerHTML = `<tp-yt-paper-dialog role="dialog"><tp-yt-paper-listbox role="listbox">${options.map((o) => `<tp-yt-paper-item role="option" aria-selected="${o === cur}">${esc(o)}</tp-yt-paper-item>`).join('')}</tp-yt-paper-listbox></tp-yt-paper-dialog>`
+  m.addEventListener('click', (e) => { const it = e.target.closest('tp-yt-paper-item'); if (!it) return; e.stopPropagation(); closeMenu(); onPick(it.textContent) })
+  setTimeout(() => { host.style.position = 'relative'; host.appendChild(m); openMenu = m }, 150) // menu hien tre
+}
+document.addEventListener('click', (e) => { if (openMenu && !openMenu.parentElement.contains(e.target)) closeMenu() })
+
+// o chon (ytcp-select): data-k = truong trong W
+const select = (tag, idAttr, key, label, options) => `<${tag} id="${idAttr}" data-k="${key}" data-opts="${esc(JSON.stringify(options))}">${OPT.trigger(label, '')}</${tag}>`
+const radios = (key, items) => `<tp-yt-paper-radio-group role="radiogroup" data-k="${key}">${items.map(([name, label, aria]) => OPT.radio(name, label, aria).replace('<tp-yt-paper-radio-button', `<tp-yt-paper-radio-button data-v="${esc(label)}"`)).join('')}</tp-yt-paper-radio-group>`
+const section = (id, label, desc, body) => `<div ${id ? `id="${id}"` : ''} class="input-container"><div class="section-label-with-description">${label}</div>${desc ? `<div class="section-description">${desc}</div>` : ''}${body}</div>`
+
+function basic() {
+  return `
+  <ytcp-social-suggestions-textbox id="title-textarea" label="Tiêu đề"><div id="label"><span id="label-text">Tiêu đề (bắt buộc)</span></div>
+    <div id="textbox" slot="input" contenteditable="true" role="textbox" aria-required="true" aria-label="Thêm tiêu đề để mô tả video của bạn (nhập ký tự @ để đề cập tên một kênh)">${esc(video.title)}</div></ytcp-social-suggestions-textbox>
+  <ytcp-social-suggestions-textbox id="description-textarea"><div id="textbox" slot="input" contenteditable="true" role="textbox" aria-label="Giới thiệu về video của bạn cho người xem (nhập ký tự @ để đề cập tên một kênh)">${esc(video.title)}<br><br>In this episode of Dark Bible Study…</div></ytcp-social-suggestions-textbox>
+  ${section('', 'Hình thu nhỏ', 'Chọn hình thu nhỏ nổi bật để thu hút sự chú ý của người xem.', OPT.button('', 'Xem đề xuất'))}
+  ${section('', 'Danh sách phát', 'Thêm video của bạn vào danh sách phát để sắp xếp nội dung cho người xem.',
+    `<ytcp-video-metadata-playlists aria-label="Thêm vào danh sách phát"><ytcp-text-dropdown-trigger placeholder="Chọn">${OPT.trigger('', '', 'aria-label="Chọn danh sách phát" id="pl-trigger"')}</ytcp-text-dropdown-trigger></ytcp-video-metadata-playlists>`)}
+  <div id="audience" class="input-container"><div class="section-label">Đối tượng người xem</div>
+    <tp-yt-paper-radio-group role="radiogroup">${OPT.radio('VIDEO_MADE_FOR_KIDS_MFK', 'Có, nội dung này dành cho trẻ em')}${OPT.radio('VIDEO_MADE_FOR_KIDS_NOT_MFK', 'Không, nội dung này không dành cho trẻ em').replace('aria-checked="false"', 'aria-checked="true"')}</tp-yt-paper-radio-group>
+    <p>⌄ Giới hạn độ tuổi</p></div>
+  <div class="toggle-section">${OPT.button('toggle-button', 'Hiện thêm')}</div>
+  <p class="description" id="more-hint">Nội dung được trả tiền để quảng cáo, cộng tác và các lựa chọn khác</p>
+  <ytcp-video-metadata-editor-advanced id="advanced"></ytcp-video-metadata-editor-advanced>`
+}
+
+const LANGS = ['Không có', 'Tiếng Việt', 'Tiếng Anh', 'Tiếng Anh (Hoa Kỳ)', 'Tiếng Anh (Vương quốc Anh)', 'Tiếng Pháp', 'Tiếng Nhật']
+function advanced() {
+  return `
+  <div id="paid-promotion" class="input-container paid-promotion"><ytcp-paid-product-placement-select><div class="section-label">Nội dung được trả tiền để quảng cáo</div>
+    <div class="description"><p>Bạn phải cho chúng tôi biết video của bạn có chứa nội dung được trả tiền để quảng cáo hay không…</p></div>
+    ${radios('paid', [['VIDEO_PAID_PRODUCT_PLACEMENT_NOTIFY', 'Có, video của tôi có chứa nội dung được trả tiền để quảng cáo'], ['VIDEO_PAID_PRODUCT_PLACEMENT_NO', 'Không, video của tôi không chứa nội dung được trả tiền để quảng cáo']])}</ytcp-paid-product-placement-select></div>
+  ${section('brand-links-section', 'Hợp tác với thương hiệu', 'Chia sẻ quyền truy cập vào video và các chỉ số của video với đối tác thương hiệu.', OPT.button('brand-partner-shared-code-button', 'Chia sẻ mã truy cập'))}
+  ${section('altered-content', 'Sử dụng AI', '', `<ytkp-altered-content-select><div class="altered-content-prompt-heading">Bạn có sử dụng AI để tạo hoặc chỉnh sửa nội dung theo bất kỳ cách nào sau đây không?</div>
+    <ul class="description"><li>Có hình ảnh người thật có vẻ như nói và làm điều gì đó…</li><li>Chỉnh sửa cảnh quay của một sự kiện hoặc địa điểm có thật</li><li>Tạo ra một cảnh trông giống thật nhưng không thực sự xảy ra</li><li>Tạo nhạc là trọng tâm chính của video</li></ul>
+    ${radios('ai', [['VIDEO_HAS_ALTERED_CONTENT_YES', 'Có', 'Có, đã dùng AI'], ['VIDEO_HAS_ALTERED_CONTENT_NO', 'Không', 'Không, không dùng AI']])}
+    <div class="description">Khi bạn chọn "có", nội dung của bạn sẽ được thêm nhãn.</div></ytkp-altered-content-select>`)}
+  ${section('collaboration-container', 'Cộng tác', '', OPT.button('', 'Mời cộng sự'))}
+  ${section('', 'Phân cảnh tự động', '', OPT.checkbox('', 'Cho phép dùng phân cảnh tự động', true))}
+  ${section('', 'Địa điểm nổi bật', '', OPT.checkbox('', 'Cho phép chèn địa điểm tự động', true))}
+  ${section('', 'Thẻ (từ khóa)', 'Thẻ có thể giúp ích cho bạn nếu nội dung trong video của bạn thường dễ bị viết sai chính tả.',
+    `<ytcp-form-input-container id="tags-container"><div id="outer"><div id="child-input"><ytcp-free-text-chip-bar><ytcp-chip-bar id="chip-bar"><div class="chip-and-bar"><span id="chips"></span><input id="text-input" class="text-input" aria-label="Thẻ (từ khóa)"></div>
+      ${'<ytcp-icon-button id="copy-button" role="button" aria-label="Sao chép toàn bộ">⧉</ytcp-icon-button>'}</ytcp-chip-bar></ytcp-free-text-chip-bar></div></div>
+      <div id="description"><div id="tags-instruction" class="description">Nhập dấu phẩy sau mỗi thẻ</div><div id="tags-count" class="description"></div></div></ytcp-form-input-container>`)}
+  ${section('', 'Ngôn ngữ và chứng nhận phụ đề', 'Chọn ngôn ngữ của video và nếu cần thì cả chứng nhận phụ đề',
+    `<ytcp-form-language-input id="language-input">${select('ytcp-select', 'lang-select', 'language', 'Ngôn ngữ video', LANGS)}</ytcp-form-language-input>
+     ${select('ytcp-form-select', 'uncaptioned-reason', 'cert', 'Chứng nhận phụ đề', ['Không chọn mục nào'])}
+     ${select('ytcp-form-select', 'title-language', 'titleLanguage', 'Ngôn ngữ của tiêu đề và nội dung mô tả', LANGS)}`)}
+  ${section('recording-date-location', 'Ngày và địa điểm quay video', 'Thêm thời gian và vị trí ghi hình video. Người xem có thể tìm kiếm video theo vị trí.',
+    `<div style="display:flex;gap:12px"><ytcp-text-dropdown-trigger id="recorded-date">${OPT.trigger('Ngày quay', '')}</ytcp-text-dropdown-trigger>
+     <ytcp-form-location id="location"><ytcp-form-autocomplete><ytcp-dropdown-trigger><div role="button" class="container"><div class="left-container"><div class="label-area"><div class="label-text">Vị trí video</div></div>
+       <input aria-haspopup="false" aria-label="Vị trí video" placeholder="Không có"></div></div></ytcp-dropdown-trigger></ytcp-form-autocomplete></ytcp-form-location></div>`)}
+  ${section('', 'Giấy phép', 'Tìm hiểu về các loại giấy phép.', `${select('ytcp-form-select', 'license', 'license', 'Giấy phép', ['Giấy phép chuẩn của YouTube', 'Creative Commons - Ghi công'])}
+    <div class="checkbox-list"><ytcp-form-checkbox id="allow-embed" data-k="embed">${OPT.checkbox('', 'Cho phép nhúng', true)}</ytcp-form-checkbox>
+    ${OPT.checkbox('notify-subscribers', 'Xuất bản lên trang Kênh đăng ký và thông báo đến người đăng ký', true, true)}</div>`)}
+  ${section('content-remixing-container', 'Phối lại cho Shorts', 'Cho phép mọi người tạo video ngắn bằng nội dung trong video này.',
+    `<ytcp-video-metadata-remix-settings>${radios('remix', [['REMIX_SOURCE_OPTION_OPT_IN', 'Cho phép phối lại video và âm thanh'], ['REMIX_SOURCE_OPTION_VISUAL_OPT_OUT_AND_PERFORM_ACTIONS', 'Chỉ cho phép phối lại âm thanh'], ['REMIX_SOURCE_OPTION_OPT_OUT_AND_MUTE_DERIVATIVES', 'Không cho phép phối lại']])}</ytcp-video-metadata-remix-settings>`)}
+  ${section('category-container', 'Danh mục', 'Thêm video của bạn vào một danh mục để người xem dễ dàng tìm thấy hơn', select('ytcp-form-select', 'category', 'category', '', ['Phim và hoạt hình', 'Âm nhạc', 'Giáo dục', 'Mọi người và blog', 'Giải trí', 'Tin tức và chính trị']))}
+  ${section('', 'Bình luận và mức phân loại', 'Chọn xem bạn muốn hiển thị hay ẩn phần bình luận và chọn cách hiển thị.', `<ytcp-comment-moderation-settings>
+    ${select('ytcp-select', 'enablement-state-select', 'comments', 'Bình luận', ['Bật', 'Tạm dừng', 'Tắt'])} ${select('ytcp-select', 'moderation-type-select', 'mod', 'Kiểm duyệt', ['Cơ bản'])}
+    ${select('ytcp-select', 'allowed-commenter-mode-select', 'who', 'Người có thể bình luận', ['Bất kỳ ai'])}</ytcp-comment-moderation-settings>
+    ${OPT.checkbox('', 'Hiện số người xem thích video này', true)}`)}
+  ${section('', 'Trò chuyện trực tiếp', '', OPT.checkbox('', 'Phát lại cuộc trò chuyện trực tiếp', false) + OPT.checkbox('', 'Tóm tắt cuộc trò chuyện trực tiếp', true))}`
+}
+
+function right() {
+  const link = (lid, label) => `<ytcp-text-dropdown-trigger id="${lid}" role="button" class="input-container classic-studio-editors-links">${OPT.trigger('', label)}</ytcp-text-dropdown-trigger>`
+  return `<div style="width:220px;height:124px;background:#444">player</div>
+    <div class="description">Đường liên kết của video</div><a href="https://youtu.be/${id}" id="link">https://youtu.be/${id}</a>
+    <div class="description">Tên tệp</div><div>${esc(video.title)}</div>
+    <div class="description">Chế độ hiển thị</div><div>${video.vis}</div>
+    ${link('subtitles-editor-link', 'Phụ đề')}${link('endscreen-editor-link', 'Màn hình kết thúc')}${link('info-cards-editor-link', 'Thẻ')}${link('quiz-editor-link', 'Câu đố vui')}`
+}
+
+function paint() {
+  const pl = $('#pl-trigger .dropdown-trigger-text')
+  if (pl) pl.textContent = !W.playlists.length ? 'Chọn' : W.playlists.length === 1 ? OPT.playlists.find((p) => p.id === W.playlists[0]).name : `${W.playlists.length} danh sách phát`
+  if (!$('#paid-promotion')) return
+  for (const g of document.querySelectorAll('tp-yt-paper-radio-group[data-k]')) for (const r of g.children) r.setAttribute('aria-checked', String(W[g.dataset.k] === r.dataset.v))
+  for (const s of document.querySelectorAll('[data-opts]')) s.querySelector('.dropdown-trigger-text').textContent = W[s.dataset.k] !== undefined ? W[s.dataset.k] : JSON.parse(s.dataset.opts)[0]
+  $('#license ytcp-dropdown-trigger').setAttribute('aria-disabled', String(!!W.licenseLocked))
+  $('#allow-embed #checkbox').setAttribute('aria-checked', String(W.embed))
+  $('#recorded-date .dropdown-trigger-text').textContent = W.recDate || 'Không chọn'
+  const loc = $('#location input')
+  if (document.activeElement !== loc) loc.value = W.location
+  $('#chips').innerHTML = W.tags.map((t, i) => `<ytcp-chip role="button" id="chip-${i}" aria-label="${esc(t)}. Nhấn phím Enter để chỉnh sửa"><div id="chip-text" class="text">${esc(t)}</div><ytcp-icon-button id="delete-icon" role="button" aria-label="Xóa" data-i="${i}">✕</ytcp-icon-button></ytcp-chip>`).join('')
+  const len = W.tags.reduce((n, t) => n + t.length + (/\s/.test(t) ? 2 : 0), 0) + Math.max(0, W.tags.length - 1)
+  $('#tags-count').textContent = `${len}/500`
+}
+
+// ---- hop thoai danh sach phat (yt-4) ----
+function playlistDialog() {
+  const sel = new Set(W.playlists)
+  const d = document.createElement('ytcp-playlist-dialog')
+  d.innerHTML = `<tp-yt-paper-dialog id="dialog" role="dialog" aria-label="Chọn danh sách phát"><ytcp-checkbox-group id="playlists-list"><ul>
+    ${OPT.playlists.map((p, i) => `<li class="row"><label id="checkbox-item-${i}">${OPT.checkbox(`checkbox-${i}`, '', sel.has(p.id)).replace('<ytcp-checkbox-lit', `<ytcp-checkbox-lit test-id="${p.id}"`).replace(/aria-label="[^"]*"/, 'aria-label=""')}<span id="checkbox-label-${i}" class="checkbox-label"><span class="label label-text">${esc(p.name)}</span></span></label>${p.podcast ? '<ytcp-badge class="badge"><div class="container"><div class="label">Podcast</div></div></ytcp-badge>' : ''}</li>`).join('')}
+    </ul></ytcp-checkbox-group><div class="action-buttons">${OPT.button('', 'Danh sách phát mới', { cls: 'new-playlist-button' })}<span hidden>${OPT.button('', 'Lưu', { disabled: true, cls: 'save-button' })}</span>${OPT.button('', 'Xong', { cls: 'done-button' })}</div></tp-yt-paper-dialog>`
+  const bg = document.createElement('tp-yt-iron-overlay-backdrop'); bg.className = 'backdrop'
+  d.addEventListener('click', (e) => {
+    const lab = e.target.closest('li.row label')
+    if (lab) { e.preventDefault(); const cb = lab.querySelector('#checkbox'); cb.setAttribute('aria-checked', String(cb.getAttribute('aria-checked') !== 'true')) }
+    if (e.target.closest('.done-button')) {
+      W.playlists = [...d.querySelectorAll('ytcp-checkbox-lit')].filter((x) => x.querySelector('#checkbox').getAttribute('aria-checked') === 'true').map((x) => x.getAttribute('test-id'))
+      d.remove(); bg.remove(); paint(); dirty()
+    }
+  })
+  bg.onclick = () => { d.remove(); bg.remove() }
+  setTimeout(() => document.body.append(bg, d), 300)
+}
+
+// ---- chon ngay quay (chua co HTML that: o nhap ngay + lich) ----
+function datePicker() {
+  const now = new Date()
+  const fmt = (d) => `${d.getDate()} thg ${d.getMonth() + 1}, ${d.getFullYear()}`
+  const bg = document.createElement('div'); bg.className = 'backdrop'
+  const d = document.createElement('ytcp-date-picker')
+  const days = Array.from({ length: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() }, (_, i) => i + 1)
+  d.innerHTML = `<tp-yt-paper-dialog role="dialog"><input aria-label="Nhập ngày" value="${W.recDate || fmt(now)}"><div class="calendar">${days.map((n) => `<span role="button" class="day" data-d="${n}" style="display:inline-block;width:30px">${n}</span>`).join('')}</div></tp-yt-paper-dialog>`
+  const close = (v) => { if (v) set('recDate', v); d.remove(); bg.remove() }
+  d.querySelector('input').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return
+    const m = /^(\d{1,2}) thg (\d{1,2}), (\d{4})$/.exec(e.target.value.trim())
+    if (!m) { e.target.style.borderColor = 'red'; return }
+    close(fmt(new Date(+m[3], +m[2] - 1, +m[1])))
+  })
+  d.addEventListener('click', (e) => { if (e.target.classList.contains('day')) close(fmt(new Date(now.getFullYear(), now.getMonth(), +e.target.dataset.d))) })
+  bg.onclick = () => close()
+  document.body.append(bg, d)
+}
+
+// ---- goi y dia diem: ytcp-text-menu#search-results > tp-yt-paper-dialog > tp-yt-paper-listbox ----
+const PLACES = [['Unicar VN', 'Đường Trần Huy Liệu, Trường Vinh, Nghệ An'], ['Unix station', 'Đường Lê Mao, Thành Vinh, Nghệ An'], ['United States', 'Quốc gia'], ['United Kingdom', 'Quốc gia'], ['Unishop Vinh', 'Nguyễn Văn Cừ, Trường Vinh, Nghệ An'], ['Vietnam', 'Quốc gia'], ['Hà Nội', 'Việt Nam']]
+let placeTimer = 0
+function places(q) {
+  clearTimeout(placeTimer)
+  const old = $('#search-results'); if (old) old.remove()
+  if (!q) return
+  placeTimer = setTimeout(() => {
+    const m = document.createElement('ytcp-text-menu'); m.id = 'search-results'
+    const hits = PLACES.filter(([n]) => n.toLowerCase().includes(q.toLowerCase().slice(0, 3)))
+    m.innerHTML = `<tp-yt-paper-dialog role="dialog"><tp-yt-paper-listbox id="paper-list" role="listbox"><tp-yt-paper-item role="option" data-n="">Không có</tp-yt-paper-item>` +
+      hits.map(([n, a]) => `<tp-yt-paper-item role="option" data-n="${esc(n)}"><b>${esc(n)}</b> <span class="description">${esc(a)}</span></tp-yt-paper-item>`).join('') + '</tp-yt-paper-listbox></tp-yt-paper-dialog>'
+    m.addEventListener('click', (e) => { const o = e.target.closest('tp-yt-paper-item'); if (!o) return; W.location = o.dataset.n; $('#location input').value = o.dataset.n; m.remove(); paint(); dirty() })
+    const host = $('#location'); host.style.position = 'relative'; host.appendChild(m)
+  }, 400)
+}
+
+// ---- trinh chinh man hinh ket thuc (yt-5: ytve-modal-host; o mau: chua co HTML that) ----
+function endScreen() {
+  const host = document.createElement('ytve-modal-host'); host.id = 'host'
+  host.innerHTML = `<div class="backdrop"></div><ytcp-dialog id="dialog"><tp-yt-paper-dialog id="dialog" role="dialog">
+    <div id="video-editor-modal-host-header"><div id="video-editor-modal-host-title">Màn hình kết thúc</div>
+      ${OPT.button('discard-button', 'Hủy thay đổi')}<span id="save-container">${OPT.button('save-button', 'Lưu', { disabled: true })}</span></div>
+    <div id="content"><ytve-editor><div id="es-body">Đang tải…</div></ytve-editor></div></tp-yt-paper-dialog></ytcp-dialog>`
+  document.body.appendChild(host)
+  const close = () => host.remove()
+  const elements = '<div class="element-header"><span class="element-label">Thành phần "Đăng ký"</span></div><div class="entityName">Đăng ký: Dark Bible Study</div><div class="entityName">Video: Phù hợp nhất với người xem</div><div class="entityName">Danh sách phát: Dark Bible Study</div>'
+  const head = `<div class="header">${OPT.button('add-element-menu-button', 'Thành phần').replace('aria-label="Thành phần"', 'aria-label="Thêm màn hình kết thúc"')} ${OPT.button('', 'Nhập từ video')}</div>`
+  setTimeout(() => {
+    const body = $('#es-body', host)
+    body.innerHTML = `<ytve-endscreen-editor-options-panel>${head}` + (W.endscreen ? elements
+      : `<div class="templates"><div class="template" role="button">Lấy màn hình kết thúc của video gần đây nhất</div><div class="template" role="button">1 video, 1 đăng ký</div><div class="template" role="button">1 danh sách phát, 1 đăng ký</div><div class="template" role="button">2 video</div></div>`) + '</ytve-endscreen-editor-options-panel>'
+    for (const t of body.querySelectorAll('.template')) t.onclick = () => { body.querySelector('ytve-endscreen-editor-options-panel').innerHTML = head + elements; OPT.setDisabled($('#save-button', host), false); host.dataset.tile = t.textContent }
+  }, 700)
+  $('#discard-button', host).onclick = close
+  $('#save-button', host).onclick = () => {
+    if ($('#save-button', host).getAttribute('aria-disabled') === 'true') return
+    $('#es-body', host).innerHTML = 'Đang lưu…'
+    setTimeout(() => {
+      W.endscreen = true; saved.endscreen = true
+      OPT.save(KEY, saved)
+      OPT.log({ type: 'endscreen', id, tile: host.dataset.tile })
+      close()
+    }, 500)
+  }
+}
+
+function toast(text) {
+  const t = $('#paper-toast')
+  $('#label', t).textContent = text
+  t.hidden = false
+  clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true }, 3000)
+}
+
+function bind() {
+  $('ytcp-video-metadata-playlists').onclick = playlistDialog
+  $('#toggle-button').onclick = () => {
+    const adv = $('#advanced')
+    const label = $('#toggle-button .ytcpButtonShapeImpl__button-text-content')
+    const b = $('#toggle-button button')
+    if (label.textContent === 'Hiện thêm') {
+      if (!adv.innerHTML) { adv.innerHTML = advanced(); bindAdvanced() }
+      adv.style.display = ''; label.textContent = 'Ẩn bớt'; b.setAttribute('aria-label', 'Ẩn chế độ cài đặt nâng cao'); $('#more-hint').style.display = 'none'
+    } else { adv.style.display = 'none'; label.textContent = 'Hiện thêm'; b.setAttribute('aria-label', 'Hiện chế độ cài đặt nâng cao'); $('#more-hint').style.display = '' }
+    paint()
+  }
+  $('#toggle-button button').setAttribute('aria-label', 'Hiện chế độ cài đặt nâng cao')
+  $('#endscreen-editor-link').onclick = endScreen
+}
+
+function bindAdvanced() {
+  for (const g of document.querySelectorAll('tp-yt-paper-radio-group[data-k]')) g.addEventListener('click', (e) => { const r = e.target.closest('tp-yt-paper-radio-button'); if (r) set(g.dataset.k, r.dataset.v) })
+  for (const s of document.querySelectorAll('[data-opts]')) s.querySelector('ytcp-dropdown-trigger').addEventListener('click', (e) => { if (!openMenu || !openMenu.contains(e.target)) dropdown(s, JSON.parse(s.dataset.opts), W[s.dataset.k], (v) => set(s.dataset.k, v)) })
+  for (const c of document.querySelectorAll('ytcp-checkbox-lit')) c.addEventListener('click', () => {
+    const cb = c.querySelector('#checkbox')
+    if (cb.getAttribute('aria-disabled') === 'true') return
+    const k = c.closest('[data-k]') && c.closest('[data-k]').dataset.k
+    if (k === 'embed') set('embed', !W.embed); else cb.setAttribute('aria-checked', String(cb.getAttribute('aria-checked') !== 'true'))
+  })
+  $('#recorded-date').onclick = datePicker
+  const inp = $('#text-input')
+  const addTags = (s) => { for (const t of s.split(',').map((x) => x.trim()).filter(Boolean)) if (!W.tags.includes(t)) W.tags.push(t); inp.value = ''; paint(); dirty() }
+  inp.addEventListener('input', () => { if (inp.value.includes(',')) addTags(inp.value) })
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') addTags(inp.value) })
+  $('#chips').addEventListener('click', (e) => { const x = e.target.closest('#delete-icon'); if (x) { W.tags.splice(+x.dataset.i, 1); paint(); dirty() } })
+  $('#location input').addEventListener('input', (e) => places(e.target.value))
+}
+
+setTimeout(() => {
+  $('#save').onclick = () => {
+    if ($('#save').getAttribute('aria-disabled') === 'true') return
+    const dim = document.createElement('div'); dim.className = 'dim'; document.body.appendChild(dim)
+    setTimeout(() => {
+      saved = JSON.parse(JSON.stringify(W))
+      OPT.save(KEY, saved)
+      OPT.log({ type: 'save', id, data: saved })
+      dim.remove(); dirty()
+      toast('Đã lưu thay đổi')
+    }, 600)
+  }
+  $('#discard').onclick = () => { W = JSON.parse(JSON.stringify(saved)); paint(); dirty() }
+  $('#left').innerHTML = basic()
+  $('#right').innerHTML = right()
+  bind(); paint(); dirty()
+}, 500)
+</script>
