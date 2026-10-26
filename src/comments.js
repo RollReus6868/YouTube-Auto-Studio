@@ -23,16 +23,19 @@ class CommentDesk {
 
   get(id) { return this.items.find((x) => x.id === id) }
 
-  // fetched: ket qua Google.channelComments; tra ve so binh luan moi
-  merge(fetched, { channelId, titles = {}, skipWords = '' }) {
+  // fetched: ket qua Google.channelComments; tra ve so binh luan moi.
+  // extra: truong them cho moi muc, vd { source: 'studio', channelKey, channelName } cua hop thu Studio
+  // (comment-id cua Studio = commentId cua API, nen hai duong khong tra loi trung nhau).
+  merge(fetched, { channelId, titles = {}, skipWords = '', extra = null }) {
     const words = String(skipWords).split(',').map((w) => w.trim().toLowerCase()).filter(Boolean)
     let added = 0
     for (const c of fetched) {
       if (this.get(c.commentId)) continue
       if (c.authorChannelId === channelId || c.ownerReplied) continue // binh luan cua chinh kenh / da tra loi tren YouTube
       const item = {
-        id: c.commentId, videoId: c.videoId, videoTitle: titles[c.videoId] || '', author: c.author, text: c.text,
+        id: c.commentId, videoId: c.videoId, videoTitle: titles[c.videoId] || c.videoTitle || '', author: c.author, text: c.text,
         publishedAt: c.publishedAt, likeCount: c.likeCount, status: 'new', kind: '', draft: '', error: '', note: '',
+        ...(extra || {}), ...(c.extra || {}),
       }
       const low = c.text.toLowerCase()
       const hit = words.find((w) => low.includes(w))

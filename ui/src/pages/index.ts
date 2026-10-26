@@ -1,9 +1,10 @@
 // Trang cua cac tinh nang dang mo-dun. Moi tinh nang them MOT dong vao FEATURE_PAGES.
 // Trang thai rieng cua tinh nang nam o state.f.<id> (xem src/features/<id>.js).
-import { Users, type LucideIcon } from 'lucide-react'
+import { MessagesSquare, Users, type LucideIcon } from 'lucide-react'
 import type { ComponentType } from 'react'
 import type { State } from '../api'
 import { AccountsPage, accountsDemo } from './AccountsPage'
+import { CommunityRepliesPage, inboxDemo } from './CommunityRepliesPage'
 
 export type Send = (cmd: string, payload?: unknown) => Promise<unknown>
 export type PageProps = { state: State; send: Send; go: (page: string) => void }
@@ -21,4 +22,6 @@ export type FeaturePage = {
 
 export const FEATURE_PAGES: FeaturePage[] = [
   { id: 'accounts', label: 'Tài khoản', icon: Users, Page: AccountsPage, browser: true, first: true, demo: accountsDemo },
+  // 'community' thay trang bai cong dong cu trong App.tsx; demo nam o state.f.inbox
+  { id: 'community', label: 'Cộng đồng', icon: MessagesSquare, Page: CommunityRepliesPage, browser: true, after: 'presets', demo: inboxDemo },
 ]

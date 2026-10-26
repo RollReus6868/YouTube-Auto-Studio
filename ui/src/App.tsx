@@ -1,15 +1,16 @@
 import {
   AlertTriangle, ArrowUpCircle, BookOpen, CalendarClock, Copy, Download, Eraser, ExternalLink, FileVideo, FolderOpen, FolderPlus, Globe, Home,
-  ImageIcon, KeyRound, LayoutTemplate, Megaphone, MessageSquareReply, Palette, Plus, RefreshCw, Save, ScrollText, Settings, Sparkles,
-  SquarePlay, Square, Subtitles, Trash2, Upload, LogIn, LogOut, Send, X,
+  ImageIcon, KeyRound, LayoutTemplate, MessageSquareReply, Palette, Plus, RefreshCw, Save, ScrollText, Settings, Sparkles,
+  SquarePlay, Square, Subtitles, Trash2, Upload, LogIn, LogOut,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { call, demoState, emptyState, isDemo, newPreset, type Comment, type Job, type Level, type PostItem, type Preset, type Settings as SettingsT, type State, type VideoItem } from './api'
+import { call, demoState, emptyState, isDemo, newPreset, type Job, type Level, type Preset, type Settings as SettingsT, type State, type VideoItem } from './api'
 import {
   ActionBar, AppShell, BrowserPane, Button, Card, Choice, Dialog, EmptyState, Field, GradientProgress, LevelTag, PageBody, PageHeader, Pill, Select,
   Sidebar, TextArea, TextInput, ThemeGrid, ToggleRow, cn, type Tone,
 } from './kit'
 import { GuidePage } from './GuidePage'
+import { CommentCard, FILTERS, isPending } from './CommentCard'
 import { FEATURE_PAGES } from './pages'
 import { StudioPicker, type AccountsState } from './pages/AccountsPage'
 
@@ -507,114 +508,12 @@ function Browser({ state, send }: Backend) {
   )
 }
 
-/* ================= Bai cong dong ================= */
-function PostCard({ p, onOpen }: { p: PostItem; onOpen: () => void }) {
-  return (
-    <article className={cn('space-y-2 rounded-xl border bg-card/40 p-3', p.errors.length ? 'border-red-500/30' : 'border-border/50')}>
-      <div className="flex flex-wrap items-center gap-1">
-        {p.date ? <Chip icon={CalendarClock}>{p.date.split('-').reverse().join('/')}{p.time ? ` ${p.time}` : ''}</Chip> : <Chip>Chưa có ngày</Chip>}
-        {p.images.length > 0 && <Chip icon={ImageIcon}>{p.images.length} ảnh</Chip>}
-        <span className="min-w-0 flex-1 truncate text-right text-[11px] text-muted-foreground">{p.dir}</span>
-      </div>
-      <p className="line-clamp-4 whitespace-pre-wrap break-words text-sm">{p.text || <span className="text-muted-foreground">(không có chữ)</span>}</p>
-      {p.images.some(Boolean) && (
-        <div className="flex gap-1.5 overflow-x-auto">
-          {p.images.filter(Boolean).slice(0, 5).map((src) => <img key={src} src={src} alt="" className="h-14 w-14 shrink-0 rounded-md object-cover" />)}
-        </div>
-      )}
-      <div className="flex flex-wrap items-center gap-2">
-        {p.errors.length ? <Pill tone="error" className="max-w-full">{p.errors[0]}</Pill> : <Pill tone="success">Sẵn sàng</Pill>}
-        <span className="flex-1" />
-        <Button variant="subtle" className="h-7 px-2 text-xs" onClick={onOpen} disabled={!p.folder}><FolderOpen /> Mở</Button>
-      </div>
-    </article>
-  )
-}
-
-function CommunityPage({ state, send }: Backend) {
-  const ready = state.scan.posts.filter((p) => !p.errors.length)
-  return (
-    <>
-      <PageHeader icon={Megaphone} title="Bài cộng đồng" description="Đăng qua YouTube Studio ở khung bên phải. Bạn tự đăng nhập, tool không lưu mật khẩu." />
-      <PageBody>
-        <Card>
-          <p className="text-xs text-muted-foreground">
-            API của YouTube không hỗ trợ bài cộng đồng, nên tool sẽ thao tác trên Studio như người dùng (giai đoạn 4, cần video quay màn hình của bạn).
-            Hãy đăng nhập kênh ở khung bên phải trước.
-          </p>
-        </Card>
-        {state.scan.posts.length === 0 ? (
-          <EmptyState icon={Megaphone} text="Chưa có bài nào trong thư mục posts/. Mỗi bài là một thư mục con có noidung.txt và ảnh (tùy chọn)." />
-        ) : state.scan.posts.map((p) => <PostCard key={p.id} p={p} onOpen={() => send('open_path', p.folder)} />)}
-      </PageBody>
-      <ActionBar>
-        <Button variant="gradient" size="xl" className="flex-1" disabled title="Có ở giai đoạn 4">
-          <Megaphone /> {ready.length ? `Đăng ${ready.length} bài` : 'Đăng bài'}
-        </Button>
-        <Button variant="subtle" size="icon-xl" aria-label="Quét lại" title="Quét lại" disabled={!state.scan.root} onClick={() => send('scan')}>
-          <RefreshCw />
-        </Button>
-      </ActionBar>
-    </>
-  )
-}
-
 /* ================= Binh luan ================= */
-const KIND: Record<string, { label: string; tone: Tone }> = {
-  khen: { label: 'Khen', tone: 'success' }, hoi: { label: 'Câu hỏi', tone: 'info' }, gop_y: { label: 'Góp ý', tone: 'warning' },
-  nhay_cam: { label: 'Nhạy cảm', tone: 'error' }, spam: { label: 'Spam', tone: 'muted' },
-}
-const FILTERS: [string, string][] = [['pending', 'Chờ duyệt'], ['sent', 'Đã gửi'], ['skipped', 'Bỏ qua'], ['all', 'Tất cả']]
-const ago = (iso: string) => {
-  const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
-  return m < 60 ? `${m} phút trước` : m < 1440 ? `${Math.round(m / 60)} giờ trước` : `${Math.round(m / 1440)} ngày trước`
-}
-
-function CommentCard({ c, send, canReply }: { c: Comment; send: Backend['send']; canReply: boolean }) {
-  const [text, setText] = useState(c.draft)
-  useEffect(() => setText(c.draft), [c.draft])
-  const k = KIND[c.kind]
-  return (
-    <article className="space-y-2 rounded-xl border border-border/50 bg-card/40 p-3">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-sm font-bold">{c.author}</span>
-        <span className="text-[11px] text-muted-foreground">{c.publishedAt ? ago(c.publishedAt) : ''}</span>
-        {k && <Pill tone={k.tone}>{k.label}</Pill>}
-        <span className="flex-1" />
-        {c.videoTitle && <Chip icon={FileVideo}>{c.videoTitle}</Chip>}
-      </div>
-      <p className="whitespace-pre-wrap break-words text-sm">{c.text}</p>
-      {c.status === 'sent' ? (
-        <p className="rounded-lg bg-emerald-500/10 p-2.5 text-sm"><span className="font-semibold text-emerald-600 dark:text-emerald-400">Đã trả lời:</span> {c.draft}</p>
-      ) : c.status === 'skipped' ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <Pill tone="muted">Bỏ qua{c.note ? `: ${c.note}` : ''}</Pill>
-          <span className="flex-1" />
-          <Button variant="subtle" className="h-7 px-2 text-xs" onClick={() => send('comment_redraft', c.id)} disabled={!canReply}><Sparkles /> Soạn trả lời</Button>
-        </div>
-      ) : (
-        <>
-          {c.error && <Pill tone="error" className="max-w-full">{c.error}</Pill>}
-          <TextArea rows={2} className="min-h-[60px]" value={text} onChange={(e) => setText(e.target.value)} placeholder={c.status === 'new' ? 'Gemini chưa soạn. Bấm "Viết lại" hoặc tự gõ trả lời…' : ''} aria-label={`Trả lời ${c.author}`} />
-          <div className="flex flex-wrap items-center gap-2">
-            {c.kind === 'nhay_cam' && <span className="text-[11px] text-red-600 dark:text-red-400">Bình luận nhạy cảm, hãy đọc kỹ trước khi gửi.</span>}
-            <span className="flex-1" />
-            <Button variant="subtle" className="h-8 px-3 text-xs" onClick={() => send('comment_skip', c.id)}><X /> Bỏ qua</Button>
-            <Button variant="outline" className="h-8 px-3 text-xs" onClick={() => send('comment_redraft', c.id)} disabled={!canReply}><RefreshCw /> Viết lại</Button>
-            <Button variant="default" className="h-8 px-3 text-xs" onClick={() => send('comment_send', { id: c.id, text })} disabled={!text.trim()}><Send /> Gửi</Button>
-          </div>
-        </>
-      )}
-    </article>
-  )
-}
-
 function CommentsPage({ state, send, go }: Backend & { go: (p: string) => void }) {
   const s = state.settings
   const [filter, setFilter] = useState('pending')
-  const items = state.comments.items.filter((c) =>
-    filter === 'all' ? true : filter === 'pending' ? ['new', 'ready', 'error'].includes(c.status) : c.status === filter)
-  const pending = state.comments.items.filter((c) => ['new', 'ready', 'error'].includes(c.status)).length
+  const items = state.comments.items.filter((c) => (filter === 'all' ? true : filter === 'pending' ? isPending(c) : c.status === filter))
+  const pending = state.comments.items.filter(isPending).length
   const connected = !!state.youtube.channel
   const mode = s?.replyMode === 'auto' ? 'Tự gửi lời khen ngắn' : s?.replyMode === 'off' ? 'Tắt tự động' : 'Duyệt tay'
   return (
@@ -643,8 +542,11 @@ function CommentsPage({ state, send, go }: Backend & { go: (p: string) => void }
           <EmptyState icon={MessageSquareReply} text="Đăng nhập kênh YouTube trong Cài đặt để tool đọc bình luận dưới video." />
         ) : items.length === 0 ? (
           <EmptyState icon={MessageSquareReply} text={filter === 'pending' ? 'Không có bình luận nào chờ trả lời. Bấm "Lấy bình luận mới" để kiểm tra.' : 'Chưa có bình luận nào ở mục này.'} />
-        ) : items.map((c) => <CommentCard key={c.id} c={c} send={send} canReply={state.secrets.gemini} />)}
-        <p className="text-[11px] text-muted-foreground">Bình luận dưới bài cộng đồng sẽ có ở giai đoạn 5 (qua YouTube Studio). Tool tự kiểm tra bình luận mới mỗi 10 phút khi đang mở.</p>
+        ) : items.map((c) => (
+          <CommentCard key={c.id} c={c} canReply={state.secrets.gemini}
+            on={{ send: (text) => send('comment_send', { id: c.id, text }), skip: () => send('comment_skip', c.id), redraft: () => send('comment_redraft', c.id) }} />
+        ))}
+        <p className="text-[11px] text-muted-foreground">Bình luận dưới bài đăng (và mọi kênh đã tick) có ở trang Cộng đồng, qua hộp thư YouTube Studio. Hai trang dùng chung mã bình luận và giới hạn mỗi giờ nên không trả lời trùng. Tool tự kiểm tra bình luận mới mỗi 10 phút khi đang mở.</p>
       </PageBody>
       <ActionBar>
         <Button variant="gradient" size="xl" className="flex-1" disabled={!connected || state.comments.busy} onClick={() => send('comments_fetch')}>
@@ -873,7 +775,7 @@ function UpdatePage({ state, send }: Backend) {
   )
 }
 
-const WITH_BROWSER = new Set(['community'])
+const WITH_BROWSER = new Set<string>() // trang Cong dong (khung Studio) nay o ui/src/pages
 
 export default function App() {
   const backend = useBackend()
@@ -890,7 +792,6 @@ export default function App() {
     feature ? <feature.Page {...backend} go={go} />
     : page === 'videos' ? <VideosPage {...backend} go={go} />
     : page === 'presets' ? <PresetsPage {...backend} />
-    : page === 'community' ? <CommunityPage {...backend} />
     : page === 'comments' ? <CommentsPage {...backend} go={go} />
     : page === 'logs' ? <LogsPage {...backend} />
     : page === 'update' ? <UpdatePage {...backend} />
@@ -905,7 +806,6 @@ export default function App() {
           items={withFeatures([
             { id: 'videos', label: 'Đăng video', icon: Upload },
             { id: 'presets', label: 'Mẫu mặc định', icon: LayoutTemplate },
-            { id: 'community', label: 'Cộng đồng', icon: Megaphone },
             { id: 'comments', label: 'Bình luận', icon: MessageSquareReply },
           ], false)}
           bottomItems={withFeatures([
