@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Cộng đồng - YouTube Studio</title>
+<!-- Cau truc theo HTML that anh gui (html/yt-6-comments-inbox.html): ytcp-comment-thread > ytcp-comment[comment-id]
+     (#metadata a#name .author-text, .published-time-text, #content-text, #reply-button, ytcp-comment-video-thumbnail,
+     #reply-dialog-container > ytcp-commentbox) + ytcp-comment-replies#replies; chip ytcp-chip; tp-yt-paper-toast #label. -->
+<style>
+  * { box-sizing: border-box }
+  body { margin: 0; font: 14px Roboto, Arial, sans-serif; background: #282828; color: #fff; overflow: hidden }
+  header { height: 56px; display: flex; align-items: center; gap: 16px; padding: 0 24px; border-bottom: 1px solid #3e3e3e }
+  header .logo { font-weight: 700; font-size: 18px } header .search { flex: 1; max-width: 520px; height: 36px; border-radius: 18px; background: #3a3a3a; padding: 8px 16px; color: #aaa }
+  .layout { display: flex; height: calc(100vh - 56px) }
+  nav { width: 220px; padding: 12px; border-right: 1px solid #3e3e3e }
+  nav .me { text-align: center; padding: 12px 0 }
+  nav .me .av { width: 88px; height: 88px; border-radius: 50%; background: #6b4f2a; margin: 0 auto 8px }
+  nav a { display: block; padding: 10px 12px; color: #fff; text-decoration: none; border-radius: 8px }
+  nav a.on { background: #3a3a3a }
+  #main { flex: 1; overflow: auto; padding: 0 0 40px 32px }
+  h1 { font-size: 28px; margin: 24px 0 12px }
+  tp-yt-paper-tabs { display: flex; gap: 28px; border-bottom: 1px solid #3e3e3e }
+  tp-yt-paper-tab { color: #aaa; padding: 12px 0; cursor: pointer }
+  tp-yt-paper-tab[aria-selected=true] { color: #fff; border-bottom: 3px solid #fff }
+  #filter-bar { display: flex; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid #3e3e3e; position: relative }
+  #filter-icon { width: 24px; height: 24px; cursor: pointer; text-align: center }
+  ytcp-chip { display: inline-flex; align-items: center; gap: 6px; background: #3a3a3a; border-radius: 8px; padding: 6px 10px; font-weight: 500; cursor: pointer }
+  ytcp-chip #delete-icon, .icon { background: none; border: 0; color: #fff; cursor: pointer; font-size: 14px }
+  #text-input { background: none; border: 0; color: #fff; width: 60px }
+  .cols { display: flex; padding: 12px 0; color: #aaa; border-bottom: 1px solid #3e3e3e } .cols span:first-child { flex: 1; padding-left: 56px }
+  .cols span:last-child { width: 300px }
+  ytcp-comment-thread { display: block; border-bottom: 1px solid #3e3e3e; padding: 12px 0; min-height: 124px }
+  ytcp-comment, ytcp-comment-replies, ytcp-commentbox, ytcp-comment-video-thumbnail, yt-formatted-string, ytcp-comment-button, ytcp-button { display: block }
+  ytcp-comment #body { display: flex; gap: 12px; padding-left: 12px }
+  ytcp-comment #author-thumbnail { width: 32px; height: 32px; border-radius: 50%; background: #0b7a6a; flex: none; display: flex; align-items: center; justify-content: center }
+  ytcp-comment #author-thumbnail a { color: #fff; text-decoration: none }
+  ytcp-comment #content { flex: 1; min-width: 0 }
+  #metadata { color: #aaa; font-size: 12px; display: flex; gap: 4px } #metadata a { color: #aaa; text-decoration: none }
+  #metadata yt-formatted-string { display: inline }
+  #content-text { margin: 4px 0 } #more { display: none }
+  #toolbar { display: flex; gap: 14px; align-items: center; margin-top: 4px }
+  #reply-button button { background: #3a3a3a; color: #fff; border: 0; border-radius: 18px; padding: 8px 16px; font-weight: 600; cursor: pointer }
+  #show-replies-button button { background: none; border: 0; color: #aaa } #show-replies-button.open button { color: #fff; font-weight: 700 }
+  ytcp-comment-video-thumbnail { width: 300px; padding-right: 16px; flex: none }
+  ytcp-comment-video-thumbnail img { width: 80px; height: 45px; background: #555; border-radius: 4px; flex: none }
+  ytcp-comment-video-thumbnail #body { display: flex; gap: 8px; padding: 0; color: #fff; font-size: 13px }
+  ytcp-comment-replies { padding-left: 48px; margin-top: 8px }
+  ytcp-author-comment-badge { background: #eee; color: #111; border-radius: 12px; padding: 0 8px }
+  ytcp-commentbox { margin: 10px 316px 0 56px }
+  ytcp-commentbox #outer { border: 2px solid #fff; border-radius: 8px; padding: 6px 10px }
+  ytcp-commentbox #label-text { font-size: 11px; color: #aaa }
+  ytcp-commentbox textarea { width: 100%; background: none; border: 0; color: #fff; font: inherit; resize: none; outline: none; height: 24px }
+  ytcp-commentbox #buttons { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 8px }
+  ytcp-commentbox button { border: 0; border-radius: 18px; padding: 8px 16px; font-weight: 600; cursor: pointer; background: none; color: #fff }
+  ytcp-commentbox .vidiq-scope button { font-size: 12px; color: #aaa }
+  ytcp-commentbox #submit-button button { background: #3a3a3a } ytcp-commentbox button[aria-disabled=true] { color: #777 }
+  .spinner { width: 24px; height: 24px; border: 3px solid #555; border-top-color: #fff; border-radius: 50%; margin: 10px auto; animation: r 0.8s linear infinite }
+  @keyframes r { to { transform: rotate(360deg) } }
+  tp-yt-paper-toast { position: fixed; left: 24px; bottom: 24px; background: #f1f1f1; color: #0f0f0f; padding: 14px 20px; border-radius: 8px; min-width: 300px; display: none }
+  tp-yt-paper-toast.open { display: block }
+  [role=menu], [role=dialog] { position: absolute; background: #3a3a3a; border-radius: 8px; padding: 8px 0; z-index: 5; box-shadow: 0 4px 16px #000 }
+  [role=menu] { top: 44px; left: 0; width: 240px } [role=menuitem] { display: block; width: 100%; text-align: left; background: none; border: 0; color: #fff; padding: 10px 16px; font: inherit; cursor: pointer }
+  [role=dialog] { top: 44px; left: 40px; width: 280px; padding: 16px } [role=dialog] label { display: block; padding: 6px 0; cursor: pointer }
+  [role=dialog] .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px } [role=dialog] button { background: none; border: 0; color: #3ea6ff; font-weight: 600; cursor: pointer; padding: 6px 10px }
+  .empty { padding: 60px; text-align: center; color: #aaa }
+</style>
+</head>
+<body>
+<header><span class="logo">▶ Studio</span><div class="search">Tìm kiếm trên kênh của bạn</div></header>
+<div class="layout">
+  <nav>
+    <div class="me"><div class="av"></div><div><b>Kênh của bạn</b></div><div style="color:#aaa">Dark Faith 2nd</div></div>
+    <a href="#">Tổng quan</a><a href="#">Nội dung</a><a href="#">Số liệu phân tích</a><a href="#" class="on">Cộng đồng</a><a href="#">Ngôn ngữ</a><a href="#">Kiếm tiền</a><a href="#">Cài đặt</a><a href="#">Gửi ý kiến phản hồi</a>
+  </nav>
+  <div id="main">
+    <h1>Cộng đồng</h1>
+    <tp-yt-paper-tabs role="tablist">
+      <tp-yt-paper-tab id="comments-tab" role="tab" aria-selected="false"><div class="tab-content">Bình luận</div></tp-yt-paper-tab>
+      <tp-yt-paper-tab id="viewer-posts-tab" role="tab" aria-selected="false"><div class="tab-content">Bài đăng của người xem</div></tp-yt-paper-tab>
+      <tp-yt-paper-tab id="mentions-tab" role="tab" aria-selected="false"><div class="tab-content">Lượt đề cập</div></tp-yt-paper-tab>
+    </tp-yt-paper-tabs>
+    <div id="pane"></div>
+  </div>
+</div>
+<ytcp-toast-manager><tp-yt-paper-toast id="paper-toast" aria-hidden="true"><span id="label"></span></tp-yt-paper-toast></ytcp-toast-manager>
+<script>
+// Du lieu gia: binh luan tren video, Shorts va bai dang. id = comment-id cua Studio (giong commentId cua API).
+const OWN = '@DarkFaith9999'
+const V1 = ['Isaiah 61 Is Happening to Black People RIGHT NOW Most Dont See It', 'https://i.ytimg.com/vi/isa61/default.jpg']
+const V2 = ['Why Black People Survive Everything? Watch This 7 Shocking Biblical Truth', 'https://i.ytimg.com/vi/why7/default.jpg']
+const V3 = ['Why Iran Forms a Prophetic ALLIANCE with Africa in Ezekiel 38? Black People…', 'https://i.ytimg.com/vi/eze38/default.jpg']
+const P1 = ['Hôm nay bạn đọc chương nào? Bình luận bên dưới nhé 🙏', 'https://yt3.ggpht.com/post-image-1=s88']
+const S1 = ['Psalm 91 in 60 seconds #shorts', 'https://i.ytimg.com/vi/ps91/default.jpg']
+let DATA = [
+  { key: 'k1', id: 'UgxEliz01', author: '@ElizabethBade-l7n', ago: '43 phút trước', text: 'Excellent presentation brother! God bless your heart for revealing this information. It is so educational and awareness full. I love it. ❤️ 💜 ✝️', c: V1 },
+  { key: 'k2', id: 'UgxAgnes02', author: '@AgnesToppin', ago: '16 giờ trước', text: 'I am watching from Toronto, interested conversation amen to you ❤️', c: V2 },
+  { key: 'k3', id: 'UgxBrenda03', author: '@brendatucker-boykins3402', ago: '13 giờ trước', text: 'Convenient  wstching from Blackstone, Virginia in the USA.😊 😊 😊 ❤️', c: V3 },
+  { key: 'k4', id: 'UgwSteve04', author: '@SteveWilson9p', ago: '11 giờ trước', text: "I'm here,i heard it and i believe the truth ! Steven Wilson from Washington DC, now residing in Greensboro nc,may God bless you", c: P1 },
+  { key: 'k5', id: 'UgxLaDonna05', author: '@LaDonnaWheeler-i6u', ago: '18 giờ trước', text: 'Divine DNA; watching from Detroit, Michigan', c: V2, stale: true, replies: [{ author: OWN, ago: '2 giờ trước', text: 'Thank you 🙏', owner: true }] },
+  { key: 'k6', id: 'UgxMillie06', author: '@milliecook8852', ago: '20 giờ trước', text: 'Amen 🙏 Thank you for this message', c: S1, vanish: true },
+  { key: 'k7', id: 'UgxRuth07', author: '@ruthann-k2', ago: '1 ngày trước', text: 'Where can I find the full study notes?', c: V1, replies: [{ author: '@Beebo81420', ago: '5 ngày trước', text: 'Peace be with you' }] },
+  { key: 'k8', id: 'UgxJohn08', author: '@johnmiles77', ago: '1 ngày trước', text: 'Great work brother, keep going!', c: V3 },
+  { key: 'k9', id: '', author: '@gracefaith', ago: '2 ngày trước', text: 'Chương 3 ạ ❤️', c: P1 }, // khong co comment-id: tool dung ma bam
+  { key: 'k10', id: 'UgxDavid10', author: '@david.o', ago: '3 ngày trước', text: 'Hello from Lagos 🇳🇬', c: V2 },
+]
+const PAGE = 6
+const store = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch (_) { return d } }, set: (k, v) => localStorage.setItem(k, JSON.stringify(v)) }
+const replied = store.get('mockInbox.replied', {}) // key -> text (giu qua lan tai lai)
+// bo loc lay tu dia chi (?filter=[...ENGAGED_STATUS...NOT_ENGAGED...]) nhu Studio; mockInbox.nofilter=1 de thu khi mat bo loc
+let filterOn = localStorage.getItem('mockInbox.nofilter') !== '1' && /COMMENT_CATEGORY_NOT_ENGAGED/.test(decodeURIComponent(location.search))
+let shown = PAGE
+let loading = false
+const log = (evt) => fetch('/__log', { method: 'POST', body: JSON.stringify(evt) }).catch(() => {})
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const $ = (s, r = document) => r.querySelector(s)
+const btn = (id, label) => `<ytcp-comment-button id="${id}"><ytcp-button><button aria-label="${label}" aria-disabled="false"><div class="ytcpButtonShapeImpl__button-text-content">${label}</div></button></ytcp-button></ytcp-comment-button>`
+
+// "Chua phan hoi": an binh luan da tra loi TRUOC khi tai trang (tra loi trong phien van con hien)
+const hiddenAtLoad = new Set(Object.keys(replied))
+const visibleData = () => DATA.filter((d) => !filterOn || d.stale || !hiddenAtLoad.has(d.key))
+
+function metadata(author, ago, owner) {
+  return `<div id="metadata"><a id="name" href="http://www.youtube.com/${esc(author)}"><yt-formatted-string class="author-text">${esc(author)}</yt-formatted-string></a>
+    <div class="comment-badge-container">${owner ? '<ytcp-author-comment-badge is-creator="">✓</ytcp-author-comment-badge>' : ''}</div>
+    <span class="metadata-divider">•</span><yt-formatted-string class="published-time-text" tabindex="0">${esc(ago)}</yt-formatted-string></div>`
+}
+const actions = (top, n) => `<div id="comment-actions"><ytcp-comment-action-buttons id="action-buttons"><div id="toolbar">${btn('reply-button', 'Phản hồi')}
+  ${top ? `<ytcp-button id="show-replies-button" class="${n ? 'open' : ''}"><button aria-label="0 phản hồi">0 phản hồi ${n ? '˄' : '˅'}</button></ytcp-button>` : ''}
+  <button class="icon" aria-label="Thích">👍</button><button class="icon" aria-label="Không thích">👎</button><button class="icon" aria-label="Trái tim">♡</button><button class="icon" aria-label="Tác vụ khác">⋮</button></div></ytcp-comment-action-buttons></div>`
+
+function replyHtml(r, parent) {
+  return `<ytcp-comment class="expanded-replies" is-reply="" comment-id="${parent}.r${Math.random().toString(36).slice(2, 8)}"><div id="row-container"><div id="comment-row"><div id="body">
+    <div id="author-thumbnail">${esc(r.author[1].toUpperCase())}</div>
+    <div id="content">${metadata(r.author, r.ago, r.owner)}<span id="expander-container"><span id="expander"><yt-formatted-string id="content-text">${esc(r.text)}</yt-formatted-string><div role="button" id="more" aria-label="...Đọc thêm">...Đọc thêm</div></span></span>
+    ${actions(false, 0)}</div></div></div></div></ytcp-comment>`
+}
+
+function threadHtml(d) {
+  const replies = (d.replies || []).concat(replied[d.key] && !(d.replies || []).some((r) => r.mine) ? [{ author: OWN, ago: '0 giây trước', text: replied[d.key], owner: true }] : [])
+  return `<ytcp-comment-thread data-key="${d.key}">
+    <ytcp-comment id="comment" ${d.id ? `comment-id="${d.id}"` : ''} enable-batch-actions="" show-checkbox=""><div id="row-container"><div id="comment-row"><div id="body">
+      <div id="author-thumbnail"><a id="avatar" href="http://www.youtube.com/${esc(d.author)}">${esc(d.author[1].toUpperCase())}</a></div>
+      <div id="content">${metadata(d.author, d.ago)}
+        <span id="expander-container"><span id="expander"><yt-formatted-string id="content-text" split-lines="">${esc(d.text)}</yt-formatted-string><div role="button" id="more" aria-label="...Đọc thêm">...Đọc thêm</div></span></span>
+        ${actions(true, replies.length)}
+      </div>
+      <ytcp-comment-video-thumbnail id="video-thumbnail"><a id="body"><img id="img-with-fallback" src="${d.c[1]}" alt=""><div id="video-title"><yt-formatted-string split-lines="">${esc(d.c[0])}</yt-formatted-string></div></a></ytcp-comment-video-thumbnail>
+    </div></div>
+    <div id="reply-dialog-container" is-reply=""></div></div></ytcp-comment>
+    <ytcp-comment-replies id="replies">${replies.map((r) => replyHtml(r, d.id || d.key)).join('')}</ytcp-comment-replies>
+  </ytcp-comment-thread>`
+}
+
+function render() {
+  const list = visibleData()
+  const filters = `<div id="filter-bar"><div id="filter-icon" role="button">☰</div><ytcp-chip-bar id="chip-bar" style="display:flex;gap:8px;align-items:center">
+      <ytcp-chip role="button" aria-label="Đã đăng. Nhấn phím Enter để chỉnh sửa"><span id="chip-text">Đã đăng</span> ˅</ytcp-chip>
+      <ytcp-chip role="button" aria-label="Phù hợp nhất. Nhấn phím Enter để chỉnh sửa"><span id="chip-text">Phù hợp nhất</span> ˅</ytcp-chip>
+      <ytcp-chip role="button" aria-label="Tìm kiếm. Nhấn phím Enter để chỉnh sửa"><span id="chip-text">Tìm kiếm</span> ˅</ytcp-chip>
+      ${filterOn ? '<ytcp-chip role="button" id="status-chip" aria-label="Trạng thái phản hồi: Chưa phản hồi. Nhấn phím Enter để chỉnh sửa"><span id="chip-text">Trạng thái phản hồi: Chưa phản hồi</span><button id="delete-icon" aria-label="Xóa">✕</button></ytcp-chip>' : ''}
+      <ytcp-chip role="button" aria-label="Loại nội dung: Video, Shorts, +1 lựa chọn khác. Nhấn phím Enter để chỉnh sửa"><span id="chip-text">Loại nội dung: Video, Shorts, +1 lựa chọn khác</span><button id="delete-icon" aria-label="Xóa">✕</button></ytcp-chip>
+      <input id="text-input" autocomplete="off"></ytcp-chip-bar></div>`
+  $('#pane').innerHTML = filters + '<div class="cols"><span>Bình luận</span><span>Nội dung</span></div>' +
+    (list.length ? `<div id="threads">${list.slice(0, shown).map(threadHtml).join('')}</div>` : '<div class="empty">Không có bình luận nào phù hợp với bộ lọc</div>') +
+    `<div id="more-rows" style="height:60px">${loading ? '<div class="spinner"></div>' : ''}</div>`
+  bind()
+}
+
+function bind() {
+  $('#filter-icon').onclick = () => openMenu()
+  if ($('#status-chip')) {
+    $('#status-chip #chip-text').onclick = () => openStatusDialog()
+    $('#status-chip #delete-icon').onclick = () => { filterOn = false; render() }
+  }
+  for (const b of document.querySelectorAll('ytcp-comment#comment #reply-button button')) b.onclick = () => openBox(b.closest('ytcp-comment-thread'))
+}
+
+function openMenu() {
+  const m = document.createElement('div')
+  m.setAttribute('role', 'menu')
+  m.innerHTML = ['Trạng thái phản hồi', 'Loại nội dung', 'Có câu hỏi', 'Người đăng ký'].map((t) => `<button role="menuitem">${t}</button>`).join('')
+  $('#filter-bar').appendChild(m)
+  m.firstChild.onclick = () => { m.remove(); setTimeout(openStatusDialog, 150) }
+}
+
+function openStatusDialog() {
+  const d = document.createElement('div')
+  d.setAttribute('role', 'dialog')
+  d.innerHTML = `<div><b>Trạng thái phản hồi</b></div>
+    <label><input type="radio" name="st" value="done"> Đã phản hồi</label>
+    <label><input type="radio" name="st" value="none"> Chưa phản hồi</label>
+    <div class="btns"><button id="dlg-cancel">Hủy</button><button id="dlg-apply">Áp dụng</button></div>`
+  $('#filter-bar').appendChild(d)
+  $('#dlg-cancel').onclick = () => d.remove()
+  $('#dlg-apply').onclick = () => {
+    const v = (d.querySelector('input:checked') || {}).value
+    d.remove()
+    if (v === 'none') { filterOn = true; render() }
+  }
+}
+
+// O tra loi (ytcp-commentbox trong #reply-dialog-container): chi mot o mo mot luc.
+// Co ca nut cua tien ich vidIQ ("Template", "Generate Reply") chen truoc "Huy" nhu may anh.
+function openBox(th) {
+  for (const b of document.querySelectorAll('#reply-dialog-container')) b.innerHTML = ''
+  const slot = th.querySelector('#reply-dialog-container')
+  slot.innerHTML = `<ytcp-commentbox id="reply-dialog-id" is-reply=""><div id="body" style="display:flex;gap:10px"><div style="width:32px;height:32px;border-radius:50%;background:#6b4f2a;flex:none"></div>
+    <div id="main" style="flex:1"><ytcp-form-input-container id="input-container"><div id="outer"><div id="label"><span id="label-text">Phản hồi</span></div>
+      <div id="child-input"><tp-yt-iron-autogrow-textarea id="textarea" aria-label="Phản hồi..."><textarea id="textarea" rows="1" maxlength="10000" placeholder="Phản hồi..."></textarea></tp-yt-iron-autogrow-textarea></div></div></ytcp-form-input-container>
+    <div id="footer"><div id="buttons"><div class="vidiq-scope"><button type="button" aria-label="Template">Template</button><button type="button" aria-label="Generate Reply">Generate Reply</button></div>
+      ${btn('cancel-button', 'Hủy')}${btn('submit-button', 'Phản hồi')}</div></div></div></div></ytcp-commentbox>`
+  const ta = slot.querySelector('textarea')
+  const sub = slot.querySelector('#submit-button button')
+  const sync = () => sub.setAttribute('aria-disabled', ta.value.trim() ? 'false' : 'true')
+  sync()
+  ta.oninput = sync
+  slot.querySelector('#cancel-button button').onclick = () => { slot.innerHTML = '' }
+  sub.onclick = () => { if (ta.value.trim()) submit(th, ta.value.trim()) }
+  setTimeout(() => ta.focus(), 50)
+}
+
+function submit(th, text) {
+  const key = th.dataset.key
+  const d = DATA.find((x) => x.key === key)
+  const slot = th.querySelector('#reply-dialog-container')
+  slot.innerHTML = '<div class="spinner"></div>'
+  log({ type: 'reply', key, id: d.id, author: d.author, text })
+  setTimeout(() => {
+    slot.innerHTML = ''
+    replied[key] = text
+    store.set('mockInbox.replied', replied)
+    th.querySelector('ytcp-comment-replies').insertAdjacentHTML('beforeend', replyHtml({ author: OWN, ago: '0 giây trước', text, owner: true }, d.id || key))
+    d.replies = (d.replies || []).concat([{ author: OWN, ago: '0 giây trước', text, owner: true, mine: true }])
+    const t = th.querySelector('#show-replies-button')
+    t.classList.add('open'); t.querySelector('button').textContent = '0 phản hồi ˄' // bo dem van la 0 nhu Studio that
+    toast('Đã thêm phản hồi')
+    // hang nay bien mat ngay vi bo loc "Chua phan hoi"
+    if (d.vanish) setTimeout(() => { DATA = DATA.filter((x) => x !== d); render() }, 200)
+  }, 700)
+}
+
+function toast(text) {
+  const t = $('#paper-toast')
+  $('#label', t).textContent = text
+  t.classList.add('open'); t.setAttribute('aria-hidden', 'false')
+  setTimeout(() => { t.classList.remove('open'); t.setAttribute('aria-hidden', 'true'); $('#label', t).textContent = '' }, 2500)
+}
+
+// Tai them khi cuon gan het danh sach (chi them hang moi; o tra loi dang mo giu nguyen)
+$('#main').addEventListener('scroll', () => {
+  const m = $('#main')
+  if (loading || shown >= visibleData().length || m.scrollTop + m.clientHeight < m.scrollHeight - 150) return
+  loading = true
+  $('#more-rows').innerHTML = '<div class="spinner"></div>'
+  setTimeout(() => {
+    loading = false
+    const more = visibleData().slice(shown, shown + PAGE)
+    shown += PAGE
+    $('#threads').insertAdjacentHTML('beforeend', more.map(threadHtml).join(''))
+    $('#more-rows').innerHTML = ''
+    bind()
+  }, 500)
+})
+
+$('#comments-tab').onclick = () => { $('#comments-tab').setAttribute('aria-selected', 'true'); $('#comments-tab').classList.add('iron-selected') }
+// Studio hien danh sach tre (sau khi tai du lieu)
+setTimeout(() => { $('#comments-tab').setAttribute('aria-selected', 'true'); render() }, 400)
+
+// Moc cho bai kiem: danh sach thay doi giua luc doc va luc tra loi
+window.__mock = {
+  prepend(d) { DATA.unshift(d); shown++; render() },
+  reverse() { DATA.reverse(); render() },
+  replied: () => replied,
+}
+</script>
+</body>
+</html>
