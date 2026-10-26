@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { isDemo, type PostItem } from '../api'
-import { Button, Card, EmptyState, PageBody, PageHeader, Pill, Select, cn, type Tone } from '../kit'
+import { ActionBar, Button, Card, EmptyState, PageBody, PageHeader, Pill, Select, cn, type Tone } from '../kit'
 import type { PageProps } from './index'
 
 type PostType = NonNullable<PostItem['type']>
@@ -259,24 +259,20 @@ export function PostsPage({ state, send, go }: PageProps) {
           <PostCard key={p.id} p={p} job={s.jobs[p.id]} checked={picked.has(p.id) && canPick(p)} canPick={canPick(p)} onCheck={(v) => toggle(p.id, v)} onOpen={() => send('open_path', p.folder)} />
         ))}
       </PageBody>
-      <footer className="shrink-0">
-        <hr className="gradient-divider" />
-        <div className="flex items-center gap-3 px-4 py-3">
-          <Button
-            variant="gradient"
-            size="xl"
-            className="flex-1"
-            disabled={!chosen.length || s.busy || noChannel}
-            onClick={() => { send('posts_run', { ids: chosen.map((p) => p.id), channelKey: s.channelKey }); setPicked(new Set()) }}
-          >
-            {s.busy ? <><LoaderCircle className="animate-spin" /> Đang đăng ({running} bài còn lại)</> : <><Send /> Đăng đã chọn{chosen.length ? ` (${chosen.length})` : ''}</>}
-          </Button>
-          {s.busy && <Button variant="outline" size="xl" onClick={() => send('stop')}>Dừng</Button>}
-          <Button variant="subtle" size="icon-xl" aria-label="Quét lại" title="Quét lại thư mục" disabled={!state.scan.root || s.busy} onClick={() => send('scan')}>
-            <RefreshCw />
-          </Button>
-        </div>
-      </footer>
+      <ActionBar>
+        <Button
+          variant="gradient"
+          size="sm"
+          disabled={!chosen.length || s.busy || noChannel}
+          onClick={() => { send('posts_run', { ids: chosen.map((p) => p.id), channelKey: s.channelKey }); setPicked(new Set()) }}
+        >
+          {s.busy ? <><LoaderCircle className="animate-spin" /> Đang đăng ({running} bài còn lại)</> : <><Send /> Đăng đã chọn{chosen.length ? ` (${chosen.length})` : ''}</>}
+        </Button>
+        {s.busy && <Button variant="outline" size="sm" onClick={() => send('stop')}>Dừng</Button>}
+        <Button variant="subtle" size="icon-sm" aria-label="Quét lại" title="Quét lại thư mục" disabled={!state.scan.root || s.busy} onClick={() => send('scan')}>
+          <RefreshCw />
+        </Button>
+      </ActionBar>
     </>
   )
 }

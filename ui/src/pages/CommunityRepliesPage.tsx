@@ -88,9 +88,9 @@ export function CommunityRepliesPage({ state, send, go }: PageProps) {
       </PageBody>
       <ActionBar>
         {s.busy ? (
-          <Button variant="danger" size="xl" className="flex-1" onClick={() => send('inbox_stop')}><Square /> Dừng{s.current ? ` (đang đọc "${s.current}")` : ''}</Button>
+          <Button variant="danger" size="sm" className="max-w-full" onClick={() => send('inbox_stop')}><Square /> <span className="truncate">Dừng{s.current ? ` (đang đọc "${s.current}")` : ''}</span></Button>
         ) : (
-          <Button variant="gradient" size="xl" className="flex-1" disabled={!s.channels.length} onClick={() => send('inbox_fetch')}>
+          <Button variant="gradient" size="sm" disabled={!s.channels.length} onClick={() => send('inbox_fetch')}>
             <RefreshCw /> {s.channels.length > 1 ? `Lấy bình luận mới (${s.channels.length} kênh)` : 'Lấy bình luận mới'}
           </Button>
         )}

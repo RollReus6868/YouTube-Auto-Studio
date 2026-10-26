@@ -3,24 +3,19 @@ import {
   ImageIcon, KeyRound, LayoutTemplate, MessageSquareReply, Palette, Plus, RefreshCw, Save, ScrollText, Settings, Sparkles,
   SquarePlay, Square, Subtitles, Trash2, Upload, LogIn, LogOut,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { call, demoState, emptyState, isDemo, newPreset, type Job, type Level, type Preset, type Settings as SettingsT, type State, type VideoItem } from './api'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { call, demoState, emptyState, isDemo, newPreset, type Job, type Preset, type Settings as SettingsT, type State, type VideoItem } from './api'
 import {
-  ActionBar, AppShell, BrowserPane, Button, Card, Choice, Dialog, EmptyState, Field, GradientProgress, LevelTag, PageBody, PageHeader, Pill, Select,
-  Sidebar, TextArea, TextInput, ThemeGrid, ToggleRow, cn, type Tone,
+  ActionBar, AppShell, BrowserPane, Button, Card, Choice, Dialog, EmptyState, Field, GradientProgress, PageBody, PageHeader, Pill, Select,
+  Sidebar, TextArea, TextInput, ThemeGrid, ToggleRow, cn, useStickToBottom, type Tone,
 } from './kit'
+import { LogDock, LogLine } from './LogDock'
 import { GuidePage } from './GuidePage'
 import { CommentCard, FILTERS, isPending } from './CommentCard'
 import { FEATURE_PAGES } from './pages'
 import { StudioPicker, type AccountsState } from './pages/AccountsPage'
 import { PresetOptimizeCard, defaultOptimizeTemplate } from './pages/OptimizeTemplateEditor'
 
-const LEVELS: Record<Level, { tone: Tone; label: string }> = {
-  info: { tone: 'info', label: 'TIN' },
-  ok: { tone: 'success', label: 'XONG' },
-  warn: { tone: 'warning', label: 'LƯU Ý' },
-  error: { tone: 'error', label: 'LỖI' },
-}
 const PRIVACY: Record<Preset['privacy'], string> = { public: 'Công khai', unlisted: 'Không công khai', private: 'Riêng tư' }
 const LANGS: [string, string][] = [['vi', 'Tiếng Việt'], ['en', 'Tiếng Anh'], ['ja', 'Tiếng Nhật'], ['ko', 'Tiếng Hàn'], ['zh', 'Tiếng Trung'], ['th', 'Tiếng Thái'], ['fr', 'Tiếng Pháp'], ['es', 'Tiếng Tây Ban Nha']]
 const MODELS: [string, string][] = [['gemini-2.5-flash', 'Gemini 2.5 Flash (nhanh, rẻ)'], ['gemini-2.5-pro', 'Gemini 2.5 Pro (kỹ hơn)'], ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash-Lite (rẻ nhất)']]
@@ -258,13 +253,13 @@ function VideosPage({ state, send, go }: Backend & { go: (p: string) => void }) 
       </PageBody>
       <ActionBar>
         {busy ? (
-          <Button variant="danger" size="xl" className="flex-1" onClick={() => send('stop')}><Square /> Dừng sau video đang tải</Button>
+          <Button variant="danger" size="sm" onClick={() => send('stop')}><Square /> Dừng sau video đang tải</Button>
         ) : (
-          <Button variant="gradient" size="xl" className="flex-1" disabled={!connected || !ready.length} title={connected ? '' : 'Đăng nhập kênh YouTube trong Cài đặt trước'} onClick={() => send('upload')}>
+          <Button variant="gradient" size="sm" disabled={!connected || !ready.length} title={connected ? '' : 'Đăng nhập kênh YouTube trong Cài đặt trước'} onClick={() => send('upload')}>
             <Upload /> {ready.length ? `Đăng ${ready.length} video` : 'Đăng video'}
           </Button>
         )}
-        <Button variant="subtle" size="icon-xl" aria-label="Sửa mẫu mặc định" title="Sửa mẫu mặc định" onClick={() => go('presets')}>
+        <Button variant="subtle" size="icon-sm" aria-label="Sửa mẫu mặc định" title="Sửa mẫu mặc định" onClick={() => go('presets')}>
           <LayoutTemplate />
         </Button>
       </ActionBar>
@@ -551,7 +546,7 @@ function CommentsPage({ state, send, go }: Backend & { go: (p: string) => void }
         <p className="text-[11px] text-muted-foreground">Bình luận dưới bài đăng (và mọi kênh đã tick) có ở trang Cộng đồng, qua hộp thư YouTube Studio. Hai trang dùng chung mã bình luận và giới hạn mỗi giờ nên không trả lời trùng. Tool tự kiểm tra bình luận mới mỗi 10 phút khi đang mở.</p>
       </PageBody>
       <ActionBar>
-        <Button variant="gradient" size="xl" className="flex-1" disabled={!connected || state.comments.busy} onClick={() => send('comments_fetch')}>
+        <Button variant="gradient" size="sm" disabled={!connected || state.comments.busy} onClick={() => send('comments_fetch')}>
           <RefreshCw className={cn(state.comments.busy && 'animate-spin')} /> {state.comments.busy ? 'Đang lấy và soạn trả lời…' : 'Lấy bình luận mới'}
         </Button>
       </ActionBar>
@@ -561,30 +556,20 @@ function CommentsPage({ state, send, go }: Backend & { go: (p: string) => void }
 
 /* ================= Nhat ky ================= */
 function LogsPage({ state, send }: Backend) {
-  const end = useRef<HTMLDivElement>(null)
-  // Phai co ngoac nhon: Chrome moi tra ve Promise tu scrollIntoView
-  useEffect(() => {
-    end.current?.scrollIntoView({ block: 'nearest' })
-  }, [state.logs.length])
+  // dong moi nhat o cuoi, tu cuon xuong tru khi dang cuon len xem dong cu
+  const { ref, onScroll } = useStickToBottom(state.logs)
   return (
     <>
       <PageHeader icon={ScrollText} title="Nhật ký" description="Mọi việc tool đã làm, mới nhất ở cuối." />
-      <PageBody>
+      <div ref={ref} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
         {state.logs.length === 0 ? <EmptyState icon={ScrollText} text="Chưa có gì. Chọn thư mục gốc để bắt đầu." /> : (
           <ul className="space-y-1.5">
-            {state.logs.map((l, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm">
-                <LevelTag tone={LEVELS[l.level].tone}>{LEVELS[l.level].label}</LevelTag>
-                <span className="shrink-0 pt-0.5 text-[11px] tabular-nums text-muted-foreground">{l.t}</span>
-                <span className="min-w-0 break-words">{l.msg}</span>
-              </li>
-            ))}
+            {state.logs.map((l, i) => <LogLine key={i} l={l} />)}
           </ul>
         )}
-        <div ref={end} />
-      </PageBody>
+      </div>
       <ActionBar>
-        <Button variant="subtle" size="xl" className="flex-1" onClick={() => send('clear')}><Eraser /> Xóa nhật ký</Button>
+        <Button variant="subtle" size="sm" disabled={!state.logs.length} onClick={() => send('clear')}><Eraser /> Xóa nhật ký</Button>
       </ActionBar>
     </>
   )
@@ -722,8 +707,8 @@ function SettingsPage({ state, send }: Backend) {
         </div>
       </PageBody>
       <ActionBar>
-        <Button variant="gradient" size="xl" className="flex-1" disabled={!dirty} onClick={() => send('settings_save', d)}><Save /> Lưu cài đặt</Button>
-        <Button variant="subtle" size="icon-xl" aria-label="Bỏ thay đổi" title="Bỏ thay đổi" disabled={!dirty} onClick={() => setD(savedDraft)}><RefreshCw /></Button>
+        <Button variant="gradient" size="sm" disabled={!dirty} onClick={() => send('settings_save', d)}><Save /> Lưu cài đặt</Button>
+        <Button variant="subtle" size="icon-sm" aria-label="Bỏ thay đổi" title="Bỏ thay đổi" disabled={!dirty} onClick={() => setD(savedDraft)}><RefreshCw /></Button>
       </ActionBar>
     </>
   )
@@ -759,19 +744,19 @@ function UpdatePage({ state, send }: Backend) {
           ) : u.status === 'none' ? (
             <EmptyState icon={ArrowUpCircle} text="Bạn đang dùng bản mới nhất." />
           ) : (
-            <EmptyState icon={RefreshCw} text={u.status === 'checking' ? 'Đang kiểm tra bản mới…' : 'Bấm nút bên dưới để kiểm tra bản mới.'} />
+            <EmptyState icon={RefreshCw} text={u.status === 'checking' ? 'Đang kiểm tra bản mới…' : 'Bấm nút kiểm tra lại ở góc trên để tìm bản mới.'} />
           )}
         </Card>
       </PageBody>
       <ActionBar>
         {u.status === 'available' && u.manual ? (
-          <Button variant="gradient" size="xl" className="flex-1" onClick={() => send('update_open')}><ExternalLink /> Mở trang tải về</Button>
+          <Button variant="gradient" size="sm" onClick={() => send('update_open')}><ExternalLink /> Mở trang tải về</Button>
         ) : (
-          <Button variant="gradient" size="xl" className="flex-1" disabled={busy || u.status !== 'available'} onClick={() => send('update_install')}>
+          <Button variant="gradient" size="sm" disabled={busy || u.status !== 'available'} onClick={() => send('update_install')}>
             <Download /> {u.status === 'available' ? `Tải và cài bản ${u.latest}` : 'Tải và cài bản mới'}
           </Button>
         )}
-        <Button variant="subtle" size="icon-xl" aria-label="Kiểm tra lại" title="Kiểm tra lại" disabled={busy || u.status === 'checking'} onClick={() => send('update_check')}><RefreshCw /></Button>
+        <Button variant="subtle" size="icon-sm" aria-label="Kiểm tra lại" title="Kiểm tra lại" disabled={busy || u.status === 'checking'} onClick={() => send('update_check')}><RefreshCw /></Button>
       </ActionBar>
     </>
   )
@@ -802,6 +787,7 @@ export default function App() {
   return (
     <AppShell
       browser={WITH_BROWSER.has(page) || feature?.browser ? <Browser {...backend} /> : undefined}
+      dock={page === 'logs' ? undefined : <LogDock logs={backend.state.logs} onOpen={() => go('logs')} />}
       sidebar={
         <Sidebar
           brand="YT Auto Studio"

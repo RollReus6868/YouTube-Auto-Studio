@@ -176,7 +176,7 @@ export function AccountsPage({ state, send }: PageProps) {
         icon={Users}
         title="Tài khoản"
         description="Bước 1: đăng nhập tài khoản Google và chọn kênh tool được làm việc."
-        actions={<Button variant="gradient" className="h-9 px-3" onClick={() => setAsk({ kind: 'add' })}><UserPlus /> Thêm tài khoản</Button>}
+        actions={<Button variant="gradient" size="sm" onClick={() => setAsk({ kind: 'add' })}><UserPlus /> Thêm tài khoản</Button>}
       />
       <PageBody>
         {!s ? (
