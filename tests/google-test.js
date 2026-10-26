@@ -33,6 +33,8 @@ test('dang nhap OAuth (loopback + PKCE) va lam moi token', async () => {
     assert.match(m.lastAuth.redirect_uri, /^http:\/\/127\.0\.0\.1:\d+\/$/)
     assert.equal(m.lastAuth.access_type, 'offline')
     assert.match(m.lastAuth.scope, /youtube\.force-ssl/)
+    assert.equal(m.lastAuth.prompt, 'consent')
+    assert.equal(m.lastAuth.login_hint, undefined)
     assert.equal(saved.refresh_token, 'ref-1')
     assert.deepEqual(await g.myChannel(), { id: 'UCmock000000000000000000', title: 'Kênh Giả Lập', thumb: '' })
     // token het han -> tu lam moi bang refresh token
@@ -43,6 +45,9 @@ test('dang nhap OAuth (loopback + PKCE) va lam moi token', async () => {
     // token bi thu hoi
     const bad = new Google({ client, ep: endpoints(m.url), tokens: { refresh_token: 'cu' } })
     await assert.rejects(bad.myChannel(), /hết hạn hoặc bị thu hồi/)
+    // goi y tai khoan (email cua tai khoan Google chua kenh)
+    await new Google({ client, ep: endpoints(m.url) }).login(browser, { loginHint: 'athang@versee.net' })
+    assert.equal(m.lastAuth.login_hint, 'athang@versee.net')
     // nguoi dung tu choi
     m.opts.deny = true
     await assert.rejects(new Google({ client, ep: endpoints(m.url) }).login(browser), /từ chối cấp quyền/)

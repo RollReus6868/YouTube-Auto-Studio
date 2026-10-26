@@ -11,6 +11,7 @@ import {
 } from './kit'
 import { GuidePage } from './GuidePage'
 import { FEATURE_PAGES } from './pages'
+import { StudioPicker, type AccountsState } from './pages/AccountsPage'
 
 const LEVELS: Record<Level, { tone: Tone; label: string }> = {
   info: { tone: 'info', label: 'TIN' },
@@ -40,7 +41,7 @@ function withFeatures(items: NavItem[], bottom: boolean) {
   const out = [...items]
   for (const p of FEATURE_PAGES.filter((x) => !!x.bottom === bottom)) {
     const i = p.after ? out.findIndex((x) => x.id === p.after) : -1
-    out.splice(i >= 0 ? i + 1 : out.length, 0, { id: p.id, label: p.label, icon: p.icon })
+    out.splice(p.first ? 0 : i >= 0 ? i + 1 : out.length, 0, { id: p.id, label: p.label, icon: p.icon })
   }
   return out
 }
@@ -492,7 +493,11 @@ function Browser({ state, send }: Backend) {
     <>
       <header className="flex h-11 shrink-0 items-center gap-2 px-3">
         <Globe className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold">YouTube Studio{state.studio.channelId ? ` · ${state.studio.channelId}` : ' · chưa đăng nhập'}</span>
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold" title={state.studio.channelId}>
+          YouTube Studio{state.studio.channelName ? ` · ${state.studio.channelName}` : state.studio.channelId ? ` · ${state.studio.channelId}` : ' · chưa vào kênh'}
+          {state.studio.channelId && !state.studio.channelName && (state.f.accounts as AccountsState | undefined)?.list.some((a) => a.channels.length) && <span className="font-normal text-muted-foreground"> (kênh chưa có trong danh sách)</span>}
+        </span>
+        <StudioPicker state={state} send={send} />
         <Button variant="subtle" className="h-7 rounded-md px-2 text-xs" onClick={() => send('studio_home')} title="Về trang chủ YouTube Studio">
           <Home /> Về Studio
         </Button>
@@ -688,6 +693,37 @@ const pickDraft = (s: SettingsT | null): Draft => ({
   replyMode: s?.replyMode ?? 'review', replyPerHour: s?.replyPerHour ?? 20, skipWords: s?.skipWords ?? '',
 })
 
+// Token API theo tung kenh: chon kenh (biet ma UC o trang Tai khoan) -> dang nhap tren trinh duyet ->
+// tool chi nhan khi Google tra ve dung kenh do. Kenh dang video = kenh dung cho Dang video / Binh luan.
+function ApiChannels({ state, send }: Pick<Backend, 'state' | 'send'>) {
+  const [want, setWant] = useState('')
+  const accs = (state.f.accounts as AccountsState | undefined)?.list ?? []
+  const opts: [string, string][] = [['', 'Kênh bất kỳ (chọn trên Google)'], ...accs.flatMap((a) => a.channels.filter((c) => c.ucId).map((c) => [c.ucId, `${c.name} · ${a.label}`] as [string, string]))]
+  const connected = state.settings?.apiChannels ?? []
+  const active = state.youtube.channel
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {active ? <Pill tone="success" className="max-w-full">Kênh {active.title}</Pill> : <Pill tone="muted">Chưa đăng nhập kênh</Pill>}
+        {active && <span className="text-[11px] text-muted-foreground">kênh đăng video</span>}
+      </div>
+      {connected.filter((c) => c.id !== active?.id).map((c) => (
+        <div key={c.id} className="flex items-center gap-2 text-xs">
+          <span className="min-w-0 flex-1 truncate font-semibold">{c.title}</span>
+          <Button variant="outline" className="h-7 px-2 text-xs" disabled={state.status !== 'idle'} onClick={() => send('yt_use', c.id)}>Dùng để đăng video</Button>
+          <Button variant="subtle" className="h-7 px-2 text-xs" disabled={state.status !== 'idle'} onClick={() => send('yt_logout', c.id)}><LogOut /> Ngắt</Button>
+        </div>
+      ))}
+      <div className="flex flex-wrap items-center gap-2">
+        <Select label="Kênh cần kết nối API" className="h-8 min-w-0 flex-1 basis-48 text-xs" value={want} onChange={setWant} options={opts} />
+        <Button variant="default" className="h-8 px-3" disabled={!state.secrets.oauth || state.youtube.busy} onClick={() => send('yt_login', want ? { ucId: want } : undefined)}><LogIn /> {state.youtube.busy ? 'Đang chờ bạn đăng nhập…' : 'Đăng nhập kênh'}</Button>
+        {active && <Button variant="subtle" className="h-8 px-3" disabled={state.status !== 'idle'} onClick={() => send('yt_logout', active.id)}><LogOut /> Ngắt kết nối</Button>}
+      </div>
+      <p className="text-[11px] text-muted-foreground">Mỗi kênh một lần đăng nhập. Chọn kênh ở trên (danh sách lấy từ trang Tài khoản), trên trang Google chọn đúng kênh đó. Tool từ chối nếu bạn chọn nhầm kênh.</p>
+    </div>
+  )
+}
+
 function SettingsPage({ state, send }: Backend) {
   // so sanh theo noi dung: backend gui state moi lien tuc, khong duoc xoa chu dang go
   const savedKey = JSON.stringify(pickDraft(state.settings))
@@ -730,13 +766,7 @@ function SettingsPage({ state, send }: Backend) {
                 </div>
                 <Button variant="subtle" className="h-8 px-3 text-xs" onClick={() => send('open_url', 'https://console.cloud.google.com/apis/credentials')}><ExternalLink /> Mở Google Cloud Console</Button>
                 <hr className="gradient-divider" />
-                <div className="flex flex-wrap items-center gap-2">
-                  {state.youtube.channel ? <Pill tone="success" className="max-w-full">Kênh {state.youtube.channel.title}</Pill> : <Pill tone="muted">Chưa đăng nhập kênh</Pill>}
-                  <span className="flex-1" />
-                  {state.youtube.channel
-                    ? <Button variant="subtle" className="h-8 px-3" disabled={state.status !== 'idle'} onClick={() => send('yt_logout')}><LogOut /> Ngắt kết nối</Button>
-                    : <Button variant="default" className="h-8 px-3" disabled={!state.secrets.oauth || state.youtube.busy} onClick={() => send('yt_login')}><LogIn /> {state.youtube.busy ? 'Đang chờ bạn đăng nhập…' : 'Đăng nhập kênh'}</Button>}
-                </div>
+                <ApiChannels state={state} send={send} />
                 <p className="text-[11px] text-muted-foreground">Đăng nhập mở trong trình duyệt mặc định. Google có thể cảnh báo “ứng dụng chưa được xác minh”: bấm Nâng cao → Đi tới (không an toàn) vì đây là app của chính bạn.</p>
               </div>
             </Card>

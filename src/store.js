@@ -15,7 +15,6 @@ const DEFAULTS = {
   replyMode: 'review', // review | auto | off
   replyPerHour: 20,
   skipWords: '',
-  loginMode: '',
   youtubeChannel: null, // { id, title } kenh da dang nhap qua OAuth
 }
 

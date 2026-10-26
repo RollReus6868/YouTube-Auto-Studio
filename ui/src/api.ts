@@ -38,6 +38,7 @@ export type Settings = {
   replyPerHour: number
   skipWords: string
   youtubeChannel: { id: string; title: string } | null
+  apiChannels?: { id: string; title: string }[] // cac kenh da ket noi API (moi kenh mot token)
 }
 export type VideoMeta = {
   title: string
@@ -86,7 +87,7 @@ export type State = {
   settings: Settings | null
   secrets: { gemini: boolean; geminiEncrypted: boolean; oauth: { project_id: string; client_id: string } | null }
   scan: { root: string; videos: VideoItem[]; posts: PostItem[]; errors: string[]; at: string }
-  studio: { channelId: string; url: string; visible: boolean }
+  studio: { channelId: string; channelName?: string; url: string; visible: boolean }
   youtube: { channel: { id: string; title: string; thumb?: string } | null; busy: boolean }
   jobs: Record<string, Job>
   draft: Draft | null
@@ -132,6 +133,7 @@ const demoSettings: Settings = {
   defaultPreset: 'mac-dinh', geminiModel: 'gemini-2.5-flash',
   replyStyle: 'Trả lời thân thiện, ngắn gọn (1–2 câu), xưng "mình", gọi khán giả là "bạn".',
   replyMode: 'review', replyPerHour: 20, skipWords: '', youtubeChannel: { id: 'UCxxxxxxxxxxxxxxxxxxxxxx', title: 'Kênh Của Tôi' },
+  apiChannels: [{ id: 'UCxxxxxxxxxxxxxxxxxxxxxx', title: 'Kênh Của Tôi' }, { id: 'UCC0AJ_NoUOq5718yK4_ehBw', title: 'Dark Bible Stories' }],
 }
 
 const meta = (title: string, publishAt: string | null): VideoMeta => ({

@@ -1,6 +1,6 @@
 // YT Auto Studio - cua so chinh: thanh ben | cot dieu khien | (tuy trang) YouTube Studio
 // nhung ngay ben phai (WebContentsView) cho cac viec API cua YouTube khong ho tro.
-const { app, BrowserWindow, WebContentsView, ipcMain, session, shell, net, dialog, safeStorage } = require('electron')
+const { app, BrowserWindow, WebContentsView, ipcMain, shell, net, dialog, safeStorage } = require('electron')
 const fs = require('fs')
 const path = require('path')
 const { pathToFileURL } = require('url')
@@ -12,6 +12,8 @@ const { Store, parseOAuthClient } = require('./store')
 const { Google, endpoints, gemini, descriptionPrompt, replyPrompt, parseReply } = require('./google')
 const { CommentDesk } = require('./comments')
 const { uploadOne } = require('./uploader')
+const { googleSession, REJECTED, REJECTED_TEXT } = require('./studio/session')
+const { tokenName, migrateApiToken, checkApiChannel } = require('./accounts')
 
 const MAX_LOGS = 300
 const STUDIO_URL = process.env.YA_STUDIO_URL || 'https://studio.youtube.com/'
@@ -40,7 +42,7 @@ const state = {
   settings: null,
   secrets: { gemini: false, geminiEncrypted: false, oauth: null },
   scan: { root: '', videos: [], posts: [], errors: [], at: '' },
-  studio: { channelId: '', url: '', visible: false },
+  studio: { channelId: '', channelName: '', url: '', visible: false },
   youtube: { channel: null, busy: false },
   jobs: {}, // id video -> { status: queued|run|done|error|stopped, step, progress, error, url }
   draft: null, // { id, text, loading, error } mo ta Gemini dang soan
@@ -121,81 +123,54 @@ function runScan(quiet = false) {
   push()
 }
 
-// ---- kieu trinh duyet khi dang nhap Google ------------------------------------------
-// (lay tu Gmail Cleaner) Google tu choi dang nhap ("This browser or app may not be
-// secure") tuy User-Agent cua trinh duyet nhung. App tu thu lan luot cac kieu duoi day
-// moi khi Google tu choi, va nho kieu nao dang nhap duoc.
-const LOGIN_MODES = ['app', 'electron', 'firefox']
-const REJECTED = /signin\/rejected|deniedsigninrejected/
-const REJECTED_TEXT = /may not be secure|có thể không an toàn/i
-let loginMode = 'app'
-let triedModes = new Set()
-let defaultUA = ''
-
-function userAgentFor(mode) {
-  if (mode === 'electron') return defaultUA
-  if (mode === 'firefox') {
-    const os = process.platform === 'darwin' ? 'Macintosh; Intel Mac OS X 10.15'
-      : process.platform === 'win32' ? 'Windows NT 10.0; Win64; x64' : 'X11; Linux x86_64'
-    return `Mozilla/5.0 (${os}; rv:140.0) Gecko/20100101 Firefox/140.0`
-  }
-  return defaultUA.replace(/\s(Electron|YTAutoStudio|yt-auto-studio)\/\S+/gi, '')
-}
-
-function applyLoginMode() {
-  const ua = userAgentFor(loginMode)
-  studio.webContents.session.setUserAgent(ua)
-  studio.webContents.setUserAgent(ua)
-}
-
-let rotating = false
-async function nextLoginMode() {
-  if (rotating) return
-  rotating = true
-  try {
-    triedModes.add(loginMode)
-    const next = LOGIN_MODES.find((m) => !triedModes.has(m))
-    if (!next) {
-      if (!triedModes.has('het')) {
-        triedModes.add('het')
-        log('error', 'Google từ chối đăng nhập với cả 3 kiểu trình duyệt của tool. Bấm "Về Studio" để thử lại, hoặc báo lại kèm ảnh chụp.')
-      }
-      return
-    }
-    log('warn', `Google từ chối đăng nhập (kiểu "${loginMode}"). Tool tự thử lại với kiểu "${next}"…`)
-    loginMode = next
-    await studio.webContents.session.clearStorageData().catch(() => {})
-    applyLoginMode()
-    await studio.webContents.loadURL(STUDIO_URL).catch(() => {})
-  } finally { rotating = false }
+// ---- dang nhap Google trong app --------------------------------------------------------
+// Nhu AI Automation Studio: moi tai khoan Google mot phien rieng, giu user agent THAT cua app
+// (src/studio/session.js). Google tu choi thi chi bao lai, khong doi UA, khong xoa phien.
+let rejectedAt = ''
+function reportRejected(url) {
+  if (rejectedAt === url) return
+  rejectedAt = url
+  log('error', 'Google từ chối đăng nhập trong tool ("trình duyệt hoặc ứng dụng có thể không an toàn"). Hãy chụp màn hình khung Studio gửi cho người hỗ trợ tool; tool không tự đổi cách đăng nhập.')
 }
 
 // ---- khung YouTube Studio -----------------------------------------------------------
-function createStudioView() {
-  const ses = session.fromPartition('persist:youtube')
-  defaultUA = ses.getUserAgent()
-  if (LOGIN_MODES.includes(store.settings.loginMode)) loginMode = store.settings.loginMode
-  ses.webRequest.onBeforeSendHeaders((details, done) => {
-    const headers = details.requestHeaders
-    if (loginMode === 'firefox') for (const h of Object.keys(headers)) if (/^sec-ch-ua/i.test(h)) delete headers[h]
-    done({ requestHeaders: headers })
-  })
-  studio = new WebContentsView({ webPreferences: { session: ses, backgroundThrottling: false } })
-  applyLoginMode()
+// Khung hien Studio cua MOT tai khoan (phien); doi tai khoan = tao lai khung tren phien khac.
+let studioPartition = ''
+let lastPane = null
+function createStudioView(partition, url = STUDIO_URL) {
+  studioPartition = partition
+  studio = new WebContentsView({ webPreferences: { session: googleSession(partition), backgroundThrottling: false } })
   const wc = studio.webContents
-  wc.setWindowOpenHandler(({ url }) => {
-    if (/^https:\/\/([\w-]+\.)*(google|youtube)\.com\//.test(url)) wc.loadURL(url)
-    else if (/^https?:/.test(url)) shell.openExternal(url)
+  wc.setWindowOpenHandler(({ url: u }) => {
+    if (/^https:\/\/([\w-]+\.)*(google|youtube)\.com\//.test(u)) wc.loadURL(u)
+    else if (/^https?:/.test(u)) shell.openExternal(u)
     return { action: 'deny' }
   })
   if (studio.setBorderRadius) studio.setBorderRadius(10)
   studio.setVisible(false) // chi hien khi trang hien tai co khung trinh duyet
   win.contentView.addChildView(studio)
-  wc.loadURL(STUDIO_URL).catch(() => {})
+  wc.loadURL(url).catch(() => {})
+}
+
+function useStudio(partition, url) {
+  if (!win) return
+  if (studio && studioPartition === partition) {
+    if (url) studio.webContents.loadURL(url).catch(() => {})
+    return
+  }
+  if (studio) {
+    try { win.contentView.removeChildView(studio) } catch (_) { /* da go */ }
+    try { studio.webContents.close() } catch (_) { /* da dong */ }
+  }
+  Object.assign(state.studio, { channelId: '', channelName: '', url: '' })
+  createStudioView(partition, url)
+  if (lastPane) setPane(lastPane)
+  push()
 }
 
 // Giao dien bao vi tri khung (px cua cua so); null = trang nay khong co khung.
 function setPane(r) {
+  lastPane = r
   if (!studio) return
   state.studio.visible = !!(r && r.width >= 50 && r.height >= 50)
   if (!state.studio.visible) return studio.setVisible(false)
@@ -208,17 +183,18 @@ async function refreshStudio() {
   if (!studio || studio.webContents.isDestroyed() || busy) return
   const wc = studio.webContents
   const url = wc.getURL()
-  if (REJECTED.test(url)) return nextLoginMode()
-  if (/^https:\/\/accounts\.google\.com\//.test(url) && !wc.isLoading()) {
+  if (REJECTED.test(url)) reportRejected(url)
+  else if (/^https:\/\/accounts\.google\.com\//.test(url) && !wc.isLoading()) {
     const text = await wc.executeJavaScript('document.body ? document.body.innerText.slice(0, 2000) : ""').catch(() => '')
-    if (REJECTED_TEXT.test(text)) return nextLoginMode()
+    if (REJECTED_TEXT.test(text)) reportRejected(url)
   }
   const channelId = (/\/channel\/(UC[\w-]{10,})/.exec(url) || [])[1] || ''
   if (channelId !== state.studio.channelId) {
     state.studio.channelId = channelId
+    state.studio.channelName = ''
     if (channelId) {
       log('ok', `Đã vào YouTube Studio của kênh ${channelId}.`)
-      if (store.settings.loginMode !== loginMode) { store.save({ loginMode }); refreshSettings() }
+      if (ctx.onStudioChannel) await ctx.onStudioChannel(channelId, wc).catch(() => {})
     }
   }
   if (url !== state.studio.url) {
@@ -266,12 +242,14 @@ async function updateInstall() {
 function oauthClient() {
   try { return store.hasSecret('oauthClient') ? JSON.parse(store.getSecret('oauthClient')) : null } catch (_) { return null }
 }
-function google() {
+// Token API cua kenh `ch` (mac dinh: kenh dang video chon o Cai dat), luu o khoa 'ytToken:<UC>'
+function google(ch = state.youtube.channel) {
   const client = oauthClient()
   if (!client) throw new Error('Chưa nhập OAuth client (Cài đặt → Kết nối YouTube API).')
+  const name = ch ? tokenName(ch.id) : ''
   let tokens = null
-  try { tokens = store.hasSecret('youtubeToken') ? JSON.parse(store.getSecret('youtubeToken')) : null } catch (_) { /* hong */ }
-  return new Google({ client, tokens, fetchFn: net.fetch, ep: endpoints(), onTokens: (t) => store.setSecret('youtubeToken', JSON.stringify(t)) })
+  try { tokens = name && store.hasSecret(name) ? JSON.parse(store.getSecret(name)) : null } catch (_) { /* hong */ }
+  return new Google({ client, tokens, fetchFn: net.fetch, ep: endpoints(), onTokens: (t) => name && store.setSecret(name, JSON.stringify(t)) })
 }
 // Trong kiem thu (YA_GOOGLE_MOCK) "trinh duyet" chi la mot lan fetch di theo chuyen huong
 async function openLogin(url) {
@@ -281,17 +259,28 @@ async function openLogin(url) {
   } else await shell.openExternal(url)
 }
 
-async function ytLogin() {
+// p.ucId: kenh nguoi dung chon o Cai dat (de trong = kenh bat ky chon tren trang Google).
+// Token chi duoc luu khi Google tra ve DUNG kenh do.
+async function ytLogin(p) {
   state.youtube.busy = true
   push()
   try {
-    const g = google()
-    log('info', 'Đã mở trang đăng nhập Google trong trình duyệt. Chọn tài khoản có kênh và bấm Cho phép.')
-    await g.login(openLogin)
-    state.youtube.channel = await g.myChannel()
-    store.save({ youtubeChannel: state.youtube.channel })
+    const want = p && p.ucId ? (ctx.accounts && ctx.accounts.find(p.ucId)) || { ucId: p.ucId, name: p.ucId } : null
+    const hint = want && want.accountId ? ctx.accounts.email(want.accountId) : ''
+    const client = oauthClient()
+    if (!client) throw new Error('Chưa nhập OAuth client (Cài đặt → Kết nối YouTube API).')
+    const g = new Google({ client, fetchFn: net.fetch, ep: endpoints() })
+    log('info', `Đã mở trang đăng nhập Google trong trình duyệt. ${want ? `Chọn kênh "${want.name}"` : 'Chọn tài khoản có kênh'} và bấm Cho phép.`)
+    await g.login(openLogin, { loginHint: hint })
+    const ch = await g.myChannel()
+    const bad = checkApiChannel(ch, want)
+    if (bad) return log('error', bad) // bo token vua nhan
+    store.setSecret(tokenName(ch.id), JSON.stringify(g.tokens))
+    const list = (store.settings.apiChannels || []).filter((c) => c.id !== ch.id).concat([{ id: ch.id, title: ch.title }])
+    store.save({ apiChannels: list, youtubeChannel: ch })
+    state.youtube.channel = ch
     refreshSettings()
-    log('ok', `Đã kết nối kênh "${state.youtube.channel.title}".`)
+    log('ok', `Đã kết nối API kênh "${ch.title}".`)
   } catch (e) {
     log('error', `Không đăng nhập được kênh: ${e.message}`)
   } finally {
@@ -300,11 +289,26 @@ async function ytLogin() {
   }
 }
 
-function ytLogout() {
-  store.setSecret('youtubeToken', '')
-  store.save({ youtubeChannel: null })
-  state.youtube.channel = null
-  log('info', 'Đã ngắt kết nối kênh YouTube.')
+// Chon kenh dang video trong cac kenh da ket noi API
+function ytUse(ucId) {
+  const ch = (store.settings.apiChannels || []).find((c) => c.id === ucId)
+  if (!ch || !store.hasSecret(tokenName(ucId))) return
+  store.save({ youtubeChannel: ch })
+  state.youtube.channel = ch
+  refreshSettings()
+  log('ok', `Kênh đăng video: "${ch.title}".`)
+}
+
+function ytLogout(ucId) {
+  const id = ucId || (state.youtube.channel && state.youtube.channel.id)
+  if (!id) return
+  store.setSecret(tokenName(id), '')
+  const list = (store.settings.apiChannels || []).filter((c) => c.id !== id)
+  const active = state.youtube.channel && state.youtube.channel.id !== id ? state.youtube.channel : list[0] || null
+  store.save({ apiChannels: list, youtubeChannel: active })
+  state.youtube.channel = active
+  refreshSettings()
+  log('info', 'Đã ngắt kết nối API của kênh.')
 }
 
 function setJob(id, patch) {
@@ -502,8 +506,9 @@ async function importOAuth(file) {
 const commands = {
   hello: () => {},
   stop: () => { stop = true },
-  yt_login: () => !busy && !state.youtube.busy && ytLogin(),
-  yt_logout: () => !busy && ytLogout(),
+  yt_login: (p) => !busy && !state.youtube.busy && ytLogin(p),
+  yt_logout: (ucId) => !busy && ytLogout(ucId),
+  yt_use: (ucId) => !busy && ytUse(ucId),
   upload: (ids) => !busy && runUploads(ids),
   describe: (id) => describe(id),
   draft_close: () => { state.draft = null },
@@ -547,7 +552,7 @@ const commands = {
     log('ok', state.secrets.geminiEncrypted ? 'Đã lưu Gemini API key (mã hóa bằng kho khóa của hệ điều hành).' : 'Đã lưu Gemini API key (hệ điều hành không có kho khóa, lưu dạng mã hóa đơn giản).')
   },
   gemini_clear: () => { store.setSecret('gemini', ''); refreshSettings(); log('info', 'Đã xóa Gemini API key.') },
-  studio_home: () => { triedModes = new Set(); studio.webContents.loadURL(STUDIO_URL).catch(() => {}) },
+  studio_home: () => { rejectedAt = ''; studio.webContents.loadURL(STUDIO_URL).catch(() => {}) },
   update_open: () => shell.openExternal(release ? release.url : updater.RELEASES_PAGE),
   update_check: () => !busy && updateCheck(),
   update_install: () => !busy && updateInstall(),
@@ -567,8 +572,11 @@ const ctx = {
   gemini: (opts) => gemini({ key: store.getSecret('gemini'), model: store.settings.geminiModel, ...opts }),
   // dat boi tinh nang accounts: chay fn(page) tren kenh da chon (tu chuyen kenh, kiem UC ID)
   withChannel: null,
+  accounts: null,
+  // khung Studio hien ben phai: doi sang phien cua tai khoan khac
+  studio: { use: (partition, url) => useStudio(partition, url), wc: () => studio && studio.webContents, home: STUDIO_URL },
 }
-const FEATURES = ['optimize']
+const FEATURES = ['accounts', 'optimize']
 const started = []
 for (const name of FEATURES) {
   const f = require(`./features/${name}`)(ctx)
@@ -593,7 +601,7 @@ function createWindow() {
   })
   win.setMenuBarVisibility(false)
   win.loadFile(path.join(__dirname, '..', 'ui_dist', 'index.html'))
-  createStudioView()
+  createStudioView((ctx.accounts && ctx.accounts.panePartition()) || 'persist:youtube')
   win.on('closed', () => { win = null })
 }
 
@@ -613,7 +621,10 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     store = new Store(app.getPath('userData'), safeStorage)
     refreshSettings()
-    if (store.hasSecret('youtubeToken')) state.youtube.channel = store.settings.youtubeChannel || null
+    migrateApiToken(store)
+    refreshSettings() // token 0.3 -> token cua kenh
+    const ch = store.settings.youtubeChannel
+    if (ch && store.hasSecret(tokenName(ch.id))) state.youtube.channel = ch
     desk = new CommentDesk(app.getPath('userData'))
     state.comments.items = desk.items.slice(0, 200)
     setInterval(() => commentsRound(false), COMMENT_POLL_MS)
