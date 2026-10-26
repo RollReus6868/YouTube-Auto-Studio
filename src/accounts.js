@@ -22,12 +22,19 @@ function nameKey(account, ch) {
 }
 const channelKey = (account, ch) => ch.ucId || nameKey(account, ch)
 
+// Anh dai dien kenh: dia chi https (yt3.ggpht.com...); http chi cho Studio gia tren may (bai kiem)
+const cleanAvatar = (s) => {
+  const u = String(s || '').trim()
+  return u.length <= 2000 && /^(https:\/\/|http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/)\S+$/.test(u) ? u : ''
+}
+
 function cleanChannel(c) {
   return {
     name: String(c.name || '').trim(),
     handle: /^@/.test(String(c.handle || '').trim()) ? String(c.handle).trim() : '',
     subs: String(c.subs || '').trim(),
     ucId: isUc(c.ucId) ? c.ucId : '',
+    avatar: cleanAvatar(c.avatar),
     enabled: !!c.enabled,
     active: !!c.active,
   }
@@ -129,7 +136,7 @@ class Accounts {
     const old = a.channels
     a.channels = found.map(cleanChannel).filter((c) => c.name).map((c) => {
       const prev = old.find((o) => sameChannel(o, c))
-      return { ...c, enabled: prev ? prev.enabled : false, ucId: c.ucId || (prev && prev.ucId) || '', handle: c.handle || (prev && prev.handle) || '' }
+      return { ...c, enabled: prev ? prev.enabled : false, ucId: c.ucId || (prev && prev.ucId) || '', handle: c.handle || (prev && prev.handle) || '', avatar: c.avatar || (prev && prev.avatar) || '' }
     })
     if (a.channels.length === 1 && !old.length) a.channels[0].enabled = true
     this.save()
@@ -170,18 +177,18 @@ class Accounts {
     return null
   }
 
-  // Kenh theo khoa (UC ID, hoac '<accountId>:<ten>'): { key, accountId, ucId, name, handle, enabled }
+  // Kenh theo khoa (UC ID, hoac '<accountId>:<ten>'): { key, accountId, ucId, name, handle, subs, avatar, enabled }
   find(key) {
     const f = this.findRaw(key)
     if (!f) return null
     const c = f.channel
-    return { key: channelKey(f.account, c), accountId: f.account.id, ucId: c.ucId, name: c.name, handle: c.handle, subs: c.subs, enabled: c.enabled }
+    return { key: channelKey(f.account, c), accountId: f.account.id, ucId: c.ucId, name: c.name, handle: c.handle, subs: c.subs, avatar: c.avatar, enabled: c.enabled }
   }
 
   // Cac kenh nguoi dung da tick, cua moi tai khoan
   channels() {
     const out = []
-    for (const a of this.list_) for (const c of a.channels) if (c.enabled) out.push({ key: channelKey(a, c), accountId: a.id, ucId: c.ucId, name: c.name, handle: c.handle })
+    for (const a of this.list_) for (const c of a.channels) if (c.enabled) out.push({ key: channelKey(a, c), accountId: a.id, ucId: c.ucId, name: c.name, handle: c.handle, avatar: c.avatar })
     return out
   }
 
@@ -213,4 +220,4 @@ function checkApiChannel(got, want) {
   return `Bạn đã chọn kênh "${got.title}" trên trang Google, không phải kênh "${want.name}" (${want.ucId}). Hãy bấm "Đăng nhập kênh" lại và chọn đúng kênh "${want.name}".`
 }
 
-module.exports = { Accounts, slugId, isUc, channelKey, sameChannel, LEGACY_PARTITION, KEY, tokenName, migrateApiToken, checkApiChannel }
+module.exports = { Accounts, slugId, isUc, channelKey, sameChannel, cleanAvatar, LEGACY_PARTITION, KEY, tokenName, migrateApiToken, checkApiChannel }

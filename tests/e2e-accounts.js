@@ -77,6 +77,10 @@ const waitFor = async (fn, what, ms = 30000) => {
     assert.equal(a.channels.find((c) => c.active).name, 'Dark Faith 2nd')
     assert.equal(a.channels.find((c) => c.name === 'Dark Faith 2nd').ucId, 'UCDarkFaith9999000000000')
     await ui.getByText('athang@versee.net · 7 kênh, dùng 0').waitFor()
+    // anh dai dien kenh doc tu "Chuyen doi tai khoan", hien canh ten kenh; kenh khong co anh -> chu cai
+    assert.equal(a.channels.find((c) => c.name === 'Dark Faith 2nd').avatar, `${yt.base}/yt3/UCDarkFaith9999000000000=s48-c-k-c0x00ffffff-no-rj`)
+    assert.equal(a.channels.find((c) => c.name === '28k s').avatar, '')
+    await waitFor(() => ui.evaluate(() => [...document.querySelectorAll('img[referrerpolicy="no-referrer"]')].filter((i) => i.complete && i.naturalWidth > 0).length >= 6), 'anh dai dien kenh tren trang Tai khoan')
 
     // 4) tick kenh
     await ui.getByLabel('Dùng kênh Dark Bible Stories').click()

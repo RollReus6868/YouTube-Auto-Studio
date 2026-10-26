@@ -103,6 +103,30 @@ test('hai kenh trung ten (khac @handle): khoa rieng, tick rieng', () => {
   assert.equal(m.find(keys[0]).handle, '@ThắngNguyễn-d3i1l')
 })
 
+test('anh dai dien kenh: luu, giu khi lam moi khong co anh, du lieu cu khong co anh van doc duoc', () => {
+  const dir = tmp()
+  const s = new Store(dir)
+  // du lieu ban truoc: kenh chua co truong avatar
+  s.save({ googleAccounts: [{ id: 'tk-1', label: 'Tài khoản 1', channels: [{ name: 'Dark Faith 2nd', handle: '@DarkFaith9999', subs: '1', enabled: true }] }] })
+  const m = new A.Accounts(new Store(dir))
+  assert.equal(m.list()[0].channels[0].avatar, '')
+  const img = 'https://yt3.ggpht.com/Niz-Imk-TW8E=s88-c-k-c0x00ffffff-no-rj'
+  m.setChannels('tk-1', [{ ...found[1], avatar: img }, { ...found[0], avatar: 'javascript:alert(1)' }, { ...found[2], avatar: 'data:image/png;base64,AAAA' }])
+  assert.deepEqual(m.list()[0].channels.map((c) => c.avatar), [img, '', ''])
+  assert(m.list()[0].channels[0].enabled, 'giu tick')
+  assert.equal(m.find('tk-1:Dark Faith 2nd').avatar, img)
+  assert.equal(m.channels()[0].avatar, img)
+  // lam moi lan sau khong doc duoc anh (Studio nap cham): giu anh cu
+  m.setChannels('tk-1', [found[1]])
+  assert.equal(m.list()[0].channels[0].avatar, img)
+  const again = new A.Accounts(new Store(dir))
+  assert.equal(again.list()[0].channels[0].avatar, img)
+  // Studio gia tren may (bai kiem) dung http://127.0.0.1
+  assert.equal(A.cleanAvatar('http://127.0.0.1:5123/yt3/a=s48'), 'http://127.0.0.1:5123/yt3/a=s48')
+  assert.equal(A.cleanAvatar('http://example.com/a.jpg'), '')
+  assert.equal(require('../src/flows/channels').bigAvatar('https://yt3.ggpht.com/ytc/AIdro_k=s48-c-k-c0x00ffffff-no-rj'), 'https://yt3.ggpht.com/ytc/AIdro_k=s88-c-k-c0x00ffffff-no-rj')
+})
+
 test('tai khoan chi co mot kenh: tu tick', () => {
   const m = new A.Accounts(new Store(tmp()))
   m.setChannels('tk-1', [found[1]])

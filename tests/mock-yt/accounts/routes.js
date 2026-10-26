@@ -13,7 +13,8 @@ const ACCOUNTS = {
     channels: [
       { name: 'Dark Bible Room', handle: '@DarkRoom6868', subs: '415 người đăng ký', uc: uc('DarkRoom6868') },
       { name: 'Dark Bible - in a Nutshell', handle: '@Bible-inaNutshell999', subs: '220 người đăng ký', uc: uc('Nutshell999') },
-      { name: '28k s', handle: '@28ks-p5n', subs: 'Không có người đăng ký', uc: uc('28ksp5n') },
+      // kenh khong co anh dai dien (chi chu cai): tool luu avatar ''
+      { name: '28k s', handle: '@28ks-p5n', subs: 'Không có người đăng ký', uc: uc('28ksp5n'), noImg: true },
       { name: 'Dark Faith 2nd', handle: '@DarkFaith9999', subs: '49.300 người đăng ký', uc: uc('DarkFaith9999') },
       { name: 'Dark Bible Study', handle: '@DarkBibleStudy999', subs: '362 người đăng ký', uc: uc('DarkBibleStudy999') },
       // kenh nay co token API trong google-mock (UCmock...)
@@ -45,6 +46,15 @@ const session = (req) => {
   const active = acc.channels.find((x) => x.uc === c.MOCK_CH) || acc.channels.find((x) => x.name === acc.def)
   return { email: c.MOCK_SID, acc, active, plain: c.MOCK_PLAIN === '1' }
 }
+// anh dai dien gia, dia chi giong yt3.ggpht.com: /yt3/<UC>=s48-c-k-c0x00ffffff-no-rj (khong ra mang)
+const avatarUrl = (c) => (c.noImg ? '' : `/yt3/${c.uc}=s48-c-k-c0x00ffffff-no-rj`)
+const avatarSvg = (res, ucId) => {
+  const c = Object.values(ACCOUNTS).flatMap((a) => a.channels).find((x) => x.uc === ucId)
+  const name = c ? c.name : ucId // anh cua real-switcher.html: mau theo id
+  const hue = [...name].reduce((a, ch) => a + ch.charCodeAt(0), 0) % 360
+  res.setHeader('content-type', 'image/svg+xml')
+  res.end(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" fill="hsl(${hue},60%,35%)"/><circle cx="24" cy="19" r="9" fill="hsl(${hue},70%,75%)"/><path d="M8 46c2-11 9-16 16-16s14 5 16 16z" fill="hsl(${hue},70%,75%)"/></svg>`)
+}
 const redirect = (res, to) => { res.statusCode = 302; res.setHeader('location', to); res.end() }
 const html = (res, file, data) => {
   res.setHeader('content-type', 'text/html; charset=utf-8')
@@ -54,6 +64,7 @@ const html = (res, file, data) => {
 }
 
 module.exports = [
+  [/^\/yt3\/([\w/-]+)=s\d+/, (req, res, m) => avatarSvg(res, m[1])],
   // doan HTML that (khung "Chuyen doi tai khoan" dang mo) de kiem cach doc dong kenh
   [/^\/studio\/real-switcher/, 'real-switcher.html'],
   // trang dang nhap Google gia: nhap email -> cookie MOCK_SID
@@ -93,9 +104,10 @@ module.exports = [
       plain: s.plain,
       account: { name: s.acc.name, email: s.email, personal: s.acc.personal || '' },
       active: s.active,
-      channels: s.acc.channels,
-      others: other ? { email: other[0], channels: other[1].channels.map((c) => ({ name: c.name, subs: c.subs })) } : null,
+      channels: s.acc.channels.map((c) => ({ ...c, avatar: avatarUrl(c) })),
+      others: other ? { email: other[0], channels: other[1].channels.map((c) => ({ name: c.name, subs: c.subs, avatar: avatarUrl(c) })) } : null,
     })
   }],
 ]
 module.exports.ACCOUNTS = ACCOUNTS
+module.exports.avatarUrl = avatarUrl

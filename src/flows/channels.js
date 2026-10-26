@@ -29,6 +29,8 @@ const LABELS = {
 //    <yt-formatted-string respect-lang-dir secondary dir="auto">@handle</yt-formatted-string>
 //    <yt-formatted-string secondary>31.500 người đăng ký</yt-formatted-string>
 //    </tp-yt-paper-item-body><yt-icon id="selected" icon="yt-icons:check" [hidden]>
+//  anh dai dien: <div id="contentIcon"><yt-img-shadow><img id="img" src="https://yt3.ggpht.com/...=s48-c-k-c0x00ffffff-no-rj">
+//    (src nap muon: luc dau <img> chua co src)
 //  dau tai khoan: <ytd-google-account-header-renderer> #name, #email
 //  "Cac tai khoan khac": <ytd-accounts-dialog-header-renderer>; email: <ytd-account-item-section-header-renderer>
 //  thanh ben: <ytcp-navigation-drawer> #entity-type "Kênh của bạn", #entity-name "Ten kenh"
@@ -40,6 +42,7 @@ const SEL = {
   rowHandle: 'yt-formatted-string[secondary][respect-lang-dir], #channel-handle',
   rowSubs: 'yt-formatted-string[secondary]:not([respect-lang-dir]):not([dir])',
   rowActive: '#selected:not([hidden])',
+  rowAvatar: '#contentIcon img, yt-img-shadow img',
   email: 'ytd-google-account-header-renderer #email',
   accountName: 'ytd-google-account-header-renderer #name',
   sidebarName: 'ytcp-navigation-drawer #entity-name, #entity-name',
@@ -102,8 +105,8 @@ async function openSwitcher(page) {
 }
 
 // Chay trong trang: doc cac dong kenh cua tai khoan dang dung (bo "Cac tai khoan khac" va "Khong co kenh").
-// Tra ve null khi chua co dong nao (de until() cho tiep).
-function readRows(sel, L, mark) {
+// Tra ve null khi chua co dong nao (de until() cho tiep). waitImg: tra null khi con <img> chua co src.
+function readRows(sel, L, mark, waitImg) {
   const ya = window.__ya
   const lines = (el) => (el.innerText || '').split('\n').map((s) => s.trim()).filter(Boolean)
   const subsRe = new RegExp(L.subs, 'i')
@@ -139,7 +142,11 @@ function readRows(sel, L, mark) {
     const subs = pick(sel.rowSubs) || ls.find(isSubs) || ''
     if (!name || noRe.test(subs) || delRe.test(subs) || ls.some((l) => delRe.test(l))) continue
     const active = !!row.querySelector(sel.rowActive) || row.getAttribute('aria-selected') === 'true' || ls.includes('✓')
-    out.push({ name, handle: /^@/.test(handle) ? handle : '', subs, active })
+    // anh dai dien: chi lay dia chi http(s) (bo data:, anh trong suot luc chua nap)
+    const img = row.querySelector(sel.rowAvatar) || row.querySelector('img')
+    const src = img ? img.src || '' : ''
+    if (waitImg && img && !/^https?:\/\//.test(src)) return null
+    out.push({ name, handle: /^@/.test(handle) ? handle : '', subs, active, avatar: /^https?:\/\//.test(src) ? src : '' })
     if (mark && mark(name, handle)) row.setAttribute('data-ya-pick', '1')
     if (!header) header = row
   }
@@ -165,18 +172,25 @@ function readRows(sel, L, mark) {
   return { email, account, channels: out }
 }
 
+// Anh 48px cua Studio -> 88px cho net tren man hinh HiDPI (chi anh cua Google: ...=s48-c-k...)
+function bigAvatar(url) {
+  return String(url || '').replace(/^(https:\/\/yt3\.(?:ggpht|googleusercontent)\.com\/[^=\s]+=s)\d+(?=-|$)/, '$188')
+}
+
 async function closeMenu(page) {
   await page.press('Escape').catch(() => {})
 }
 
 // Doc danh sach kenh cua tai khoan Google dang dang nhap.
-// -> { email, account, channels: [{ name, handle, subs, active }], current: { ucId, name } }
+// -> { email, account, channels: [{ name, handle, subs, active, avatar }], current: { ucId, name } }
 async function listChannels(page, { urls, log = () => {} } = {}) {
   const st = await openStudio(page, { urls })
   if (st.signedOut) throw new StepError('Tài khoản Google này chưa đăng nhập (Studio chuyển sang trang đăng nhập).', page.step)
   const current = await currentChannel(page)
   await openSwitcher(page)
-  const r = await page.eval(readRows, SEL, LABELS)
+  // anh dai dien nap muon: cho toi da 3 giay, het gio thi doc nhung gi da co
+  const r = (await page.until(readRows, [SEL, LABELS, null, true], { timeout: 3000, what: 'ảnh đại diện kênh' }).catch(() => null)) || (await page.eval(readRows, SEL, LABELS))
+  for (const c of r.channels) c.avatar = bigAvatar(c.avatar)
   await closeMenu(page)
   log('info', `Đọc được ${r.channels.length} kênh của ${r.email || r.account || 'tài khoản'}.`)
   return { ...r, current }
@@ -240,4 +254,4 @@ async function verify(page, target) {
   })
 }
 
-module.exports = { LABELS, SEL, openStudio, currentChannel, listChannels, switchChannel, verify, readRows, readSidebar, ucOf }
+module.exports = { LABELS, SEL, openStudio, currentChannel, listChannels, switchChannel, verify, readRows, readSidebar, ucOf, bigAvatar }
