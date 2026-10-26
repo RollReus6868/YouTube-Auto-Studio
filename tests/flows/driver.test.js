@@ -21,6 +21,13 @@ module.exports = [
     await page.goto(`${urls.studio}/driver-test`, { wait: 'Lưu' })
     await page.type({ selector: '#i1' }, 'mới')
     assert.equal(await page.value({ selector: '#i1' }), 'mới')
+    for (let i = 0; i < 15; i++) {
+      const v = `https://www.youtube.com/channel/UC4Dzx9CFcLbO9OGWNBJkw${i}`
+      await page.type({ selector: '#i1' }, v)
+      assert.equal(await page.value({ selector: '#i1' }), v, 'go lai nhieu lan khong mat ky tu')
+    }
+    await page.type({ selector: '#i1' }, '')
+    assert.equal(await page.value({ selector: '#i1' }), '')
     await page.type('Thêm bình luận…', 'Chào ❤️')
     assert.equal(await page.text({ selector: '#ce' }), 'Chào ❤️')
     const f = path.join(tmp, 'a.png')

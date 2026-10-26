@@ -180,13 +180,23 @@ class Page {
     await this.waitFor(t, opts)
     await this.click(t, { after: 150 })
     await this.eval((x) => window.__ya.focus(x), t)
+    // Khong dung phim Backspace: sendInputEvent chay bat dong bo, co luc toi SAU insertText
+    // va xoa mat ky tu cuoi. insertText thay the vung dang chon; o trong thi xoa bang execCommand.
     if (clear) {
       await this.eval(() => window.__ya.selectAll())
-      this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' })
-      this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' })
+      if (!text) await this.eval(() => document.execCommand('delete'))
     }
     if (text) await this.wc.insertText(String(text))
-    await sleep(200)
+    // cho o nhan du chu (insertText cung co the den muon)
+    const want = String(text || '')
+    await this.until((w, c) => {
+      let el = document.activeElement
+      while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement
+      if (!el) return true
+      const v = 'value' in el ? el.value : el.textContent
+      return c ? v.replace(/\s+$/, '') === w : v.includes(w)
+    }, [want, clear], { timeout: 3000, what: `ô nhập nhận đủ chữ "${want.slice(0, 40)}"` }).catch(() => {})
+    await sleep(150)
   }
 
   async press(key) {
