@@ -1,10 +1,12 @@
 // Bai kiem cho src/flows/channels.js tren Studio gia (tests/mock-yt/accounts)
 const assert = require('assert')
 const flows = require('../../src/flows/channels')
-const { ACCOUNTS } = require('../mock-yt/accounts/routes')
+const { ACCOUNTS, avatarUrl } = require('../mock-yt/accounts/routes')
 
 const THANG = { ...ACCOUNTS['athang@versee.net'], channels: ACCOUNTS['athang@versee.net'].channels.filter((c) => !c.deleted) }
 const ucOf = (name) => THANG.channels.find((c) => c.name === name).uc
+// anh dai dien tren Studio gia: <base>/yt3/<UC>=s48-... ('' khi kenh khong co anh)
+const avatarOf = (urls, name) => { const c = THANG.channels.find((x) => x.name === name); return c.noImg ? '' : new URL(avatarUrl(c), urls.studio).href }
 
 // dang nhap Google gia trong phien cua bai kiem (nhu nguoi dung go email + "Tiep theo")
 async function signIn(page, urls, email = 'athang@versee.net') {
@@ -28,7 +30,10 @@ module.exports = [
     assert.equal(r.account, 'Thắng A')
     assert.deepEqual(r.channels.map((c) => c.name), THANG.channels.map((c) => c.name))
     const df = r.channels.find((c) => c.name === 'Dark Faith 2nd')
-    assert.deepEqual(df, { name: 'Dark Faith 2nd', handle: '@DarkFaith9999', subs: '49.300 người đăng ký', active: true })
+    assert.deepEqual(df, { name: 'Dark Faith 2nd', handle: '@DarkFaith9999', subs: '49.300 người đăng ký', active: true, avatar: avatarOf(urls, 'Dark Faith 2nd') })
+    // anh nap muon (Studio gia dat src sau 0,4 giay): phai cho doc du; kenh khong co anh -> ''
+    assert.deepEqual(r.channels.map((c) => c.avatar), THANG.channels.map((c) => avatarOf(urls, c.name)))
+    assert.equal(r.channels.find((c) => c.name === '28k s').avatar, '')
     assert.equal(r.channels.filter((c) => c.active).length, 1)
     assert.equal(r.channels.find((c) => c.name === '28k s').subs, 'Không có người đăng ký')
     assert(!r.channels.some((c) => ['Justice Stories', 'Leo Nguyen', 'Thắng A', 'Black America TV'].includes(c.name)))
@@ -71,7 +76,7 @@ module.exports = [
     const r = await flows.listChannels(page, { urls })
     assert.equal(r.channels.length, 7)
     assert.equal(r.email, 'athang@versee.net')
-    assert.deepEqual(r.channels[3], { name: 'Dark Faith 2nd', handle: '@DarkFaith9999', subs: '49.300 người đăng ký', active: true })
+    assert.deepEqual(r.channels[3], { name: 'Dark Faith 2nd', handle: '@DarkFaith9999', subs: '49.300 người đăng ký', active: true, avatar: avatarOf(urls, 'Dark Faith 2nd') })
     assert.equal(r.current.name, 'Dark Faith 2nd')
     const s = await flows.switchChannel(page, { name: 'Dark Bible Study', handle: '@DarkBibleStudy999' }, { urls })
     assert.deepEqual(s, { ucId: ucOf('Dark Bible Study'), name: 'Dark Bible Study' })
@@ -87,6 +92,10 @@ module.exports = [
     ])
     assert.equal(r.channels[1].subs, '31.500 người đăng ký')
     assert.equal(r.channels[0].subs, 'Không có người đăng ký')
+    // anh dai dien: <yt-img-shadow><img id="img" src> trong #contentIcon
+    assert.equal(r.channels[1].avatar, new URL('/yt3/Niz-Imk-TW8EQvjciue1d6VtWSQKCT1wAuIsCI5adgF6VlemE0r5xsaa4pTDNR6RrGycocebxQ=s48-c-k-c0x00ffffff-no-rj', urls.studio).href)
+    assert(r.channels.every((c) => /\/yt3\/[\w/-]+=s48-/.test(c.avatar)))
+    assert.equal(flows.bigAvatar(r.channels[1].avatar.replace(/^http:\/\/[^/]+\/yt3/, 'https://yt3.ggpht.com')), 'https://yt3.ggpht.com/Niz-Imk-TW8EQvjciue1d6VtWSQKCT1wAuIsCI5adgF6VlemE0r5xsaa4pTDNR6RrGycocebxQ=s88-c-k-c0x00ffffff-no-rj')
     assert.equal(await page.eval(flows.readSidebar, flows.SEL, flows.LABELS), 'Dark Bible Movie')
   }],
 ]

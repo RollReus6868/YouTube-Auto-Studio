@@ -91,10 +91,15 @@ setTimeout(() => { document.querySelector('.nm').textContent = D.active.name }, 
 const menu = document.querySelector('.menu')
 // dong kenh nhu ytd-account-item-renderer that: ten #channel-title, @handle va so nguoi dang ky la
 // yt-formatted-string[secondary] (khong co id), dau ✓ la yt-icon#selected (an bang [hidden])
+// anh dai dien nhu Studio that: <div id="contentIcon"><yt-img-shadow><img id="img" src="https://yt3.ggpht.com/...">,
+// src nap muon (luc dau <img> chua co src); kenh khong co anh: chu cai
+const icon = (c) => (c.avatar
+  ? `<${tag('yt-img-shadow', 'yis')} slot="item-icon" item-icon=""><img${id('img')} class="av" draggable="false" alt="" height="48" width="48" data-src="${esc(c.avatar)}"></${end('yt-img-shadow')}>`
+  : avatar(c.name))
 const row = (c, opts = {}) => {
   const on = c.uc === D.active.uc && !opts.other
   return `<${tag('ytd-account-item-renderer', 'row')} thumbnail-size="${opts.other ? 36 : 48}"${on && !P ? ' enable-ring-for-active-account=""' : ''} data-uc="${opts.other || opts.personal || c.deleted ? '' : c.uc}" data-other="${opts.other ? 1 : ''}" data-deleted="${c.deleted ? 1 : ''}">
-  <${tag('tp-yt-paper-icon-item', 'pii')} role="option" tabindex="0"><div${id('contentIcon')}>${avatar(c.name)}</div>
+  <${tag('tp-yt-paper-icon-item', 'pii')} role="option" tabindex="0"><div${id('contentIcon')}>${icon(c)}</div>
   <${tag('tp-yt-paper-item-body', 't')} two-line="">${ys(' id="channel-title"', esc(c.name))}${c.handle && !opts.other ? ys(' respect-lang-dir="" secondary="" dir="auto"', esc(c.handle)) : ys(' respect-lang-dir="" secondary="" is-empty="" dir="auto"', '')}${ys(' secondary=""', esc(c.subs))}</${end('tp-yt-paper-item-body')}>
   ${P ? (on ? '<span class="chk">✓</span>' : '') : `<yt-icon id="selected" class="chk" icon="yt-icons:check"${on ? '' : ' hidden=""'}>✓</yt-icon>`}
   </${end('tp-yt-paper-icon-item')}>
@@ -118,6 +123,7 @@ function loadSections() {
         <div${id('contents')}><${tag('ytd-account-item-section-renderer', 'its')}><div${id('header')}><${tag('ytd-account-item-section-header-renderer', 'acc-hd em')}>${ys('', esc(D.others.email))}</${end('ytd-account-item-section-header-renderer')}></div>
         <div${id('contents')}>${D.others.channels.map((c) => row(c, { other: true })).join('')}</div></${end('ytd-account-item-section-renderer')}></div>
       </${end('ytd-account-section-list-renderer')}>` : ''}`
+    setTimeout(() => { for (const img of box.querySelectorAll('img[data-src]')) img.src = img.dataset.src }, 400)
   }, 600)
 }
 
