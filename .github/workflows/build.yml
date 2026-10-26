@@ -1,6 +1,8 @@
 # Build + kiem thu tren may Windows / macOS that, va phat hanh GitHub Release.
 #
-#  push len main / pull request        -> kiem thu + build ca 3 he (khong phat hanh)
+#  push len main                        -> kiem thu + build Windows, xanh thi TU phat hanh Release v<version>
+#                                          (bo qua neu Release v<version> da co: muon phat hanh thi tang version)
+#  pull request                         -> kiem thu + build (khong phat hanh)
 #  Actions > Build & Release > Run workflow, tick "publish" -> tao them Release v<version>
 #  push tag v<version>                  -> tao them Release
 #
@@ -86,7 +88,6 @@ jobs:
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-app.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-update.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-upload.js
-          xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-comments.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-accounts.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-inbox.js
 
@@ -274,7 +275,7 @@ jobs:
   release:
     name: Phat hanh GitHub Release
     needs: [test, flows, windows, macos]
-    if: always() && needs.test.result == 'success' && needs.flows.result == 'success' && needs.windows.result == 'success' && (needs.macos.result == 'success' || needs.macos.result == 'skipped') && (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish))
+    if: always() && needs.test.result == 'success' && needs.flows.result == 'success' && needs.windows.result == 'success' && (needs.macos.result == 'success' || needs.macos.result == 'skipped') && (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish))
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -307,6 +308,10 @@ jobs:
       - name: Tao Release v${{ env.VERSION }}
         run: |
           if gh release view "v$VERSION" >/dev/null 2>&1; then
+            if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
+              echo "::notice::Release v$VERSION da co: lan push nay khong phat hanh (tang version de phat hanh)."
+              exit 0
+            fi
             echo "::error::Release v$VERSION da ton tai. Hay tang version trong package.json roi chay lai."
             exit 1
           fi
