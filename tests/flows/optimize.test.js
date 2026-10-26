@@ -70,8 +70,8 @@ module.exports = [
     assert.deepEqual([r.changed, r.saved, r.warnings], [[], false, []])
     assert.deepEqual(await events(mock, 'save'), [])
     assert.deepEqual(await events(mock, 'endscreen'), [])
-    assert.equal(await page.text({ selector: '#pl-trigger' }), 'Chọn')
-    assert.equal(await page.text({ selector: '#rec-trigger .val' }), 'Không chọn')
+    assert.equal(await page.text({ selector: '#pl-trigger .dropdown-trigger-text' }), 'Chọn')
+    assert.equal(await page.text({ selector: '#recorded-date .dropdown-trigger-text' }), 'Không chọn')
   }],
 
   ['thich + binh luan + ghim; chay lai khong dang lai', async ({ page, urls, mock }) => {
