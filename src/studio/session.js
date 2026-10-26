@@ -1,5 +1,5 @@
 // Phien (partition) dang nhap Google cua tung tai khoan.
-// Giu NGUYEN user agent that cua app (co chu "Electron/"), chi xin trang tieng Anh, nhu AI
+// Giu NGUYEN user agent that cua app (co chu "Electron/"), xin trang tieng Viet (Studio cua nguoi dung la tieng Viet), nhu AI
 // Automation Studio: bo chu "Electron" hay gia Chrome/Firefox thi Google bao "This browser or app
 // may not be secure". Khong doi UA, khong xoa phien khi Google tu choi.
 const { session } = require('electron')
@@ -9,7 +9,7 @@ function googleSession(partition) {
   const ses = session.fromPartition(partition)
   if (!configured.has(partition)) {
     configured.add(partition)
-    ses.setUserAgent(ses.getUserAgent(), 'en-US,en')
+    ses.setUserAgent(ses.getUserAgent(), 'vi-VN,vi,en-US,en')
   }
   return ses
 }

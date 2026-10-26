@@ -56,11 +56,11 @@ const waitFor = async (fn, what, ms = 30000) => {
     await waitFor(() => (pane = pages().find((p) => p.url().includes('/studio/signin'))), 'khung Studio mo trang dang nhap')
     const box = await ui.locator('[data-pane]').boundingBox()
     await waitFor(async () => Math.abs((await pane.evaluate(() => innerWidth)) - box.width) <= 2, 'khung dung vi tri')
-    // user agent THAT (co "Electron/"), xin trang en-US: khong gia trinh duyet khac
+    // user agent THAT (co "Electron/"), xin trang vi-VN: khong gia trinh duyet khac
     const hit = yt.events.find((e) => e.type === 'studio')
     assert(/Electron\//.test(hit.ua), `UA phai giu chu Electron/: ${hit.ua}`)
     assert(!/Firefox/.test(hit.ua), hit.ua)
-    assert(/^en-US/.test(hit.lang), hit.lang)
+    assert(/^vi-VN/.test(hit.lang), hit.lang)
     assert.equal(await pane.evaluate(() => navigator.userAgent), hit.ua)
     await pane.fill('#identifierId', 'athang@versee.net')
     await pane.click('#next')
