@@ -76,6 +76,14 @@ export type PostItem = {
   images: string[]
   errors: string[]
   warnings: string[]
+  // trang Dang bai (src/features/posts.js)
+  type?: 'text' | 'image' | 'poll' | 'image_poll' | 'quiz' | 'video'
+  when?: string | null // ISO; null = dang ngay
+  channel?: string // dong "Kenh:" trong noidung.txt
+  video?: string
+  options?: { text: string; image: string }[]
+  answers?: { text: string; image: string; correct: boolean }[]
+  explanation?: string
 }
 export type Job = { status: 'queued' | 'run' | 'done' | 'error' | 'stopped'; title?: string; step: string; progress: number; error: string; url: string; warnings?: string[] }
 export type Comment = { id: string; videoId: string; videoTitle: string; author: string; text: string; publishedAt: string; likeCount: number; status: 'new' | 'ready' | 'sent' | 'skipped' | 'error'; kind: string; draft: string; error: string; note: string }

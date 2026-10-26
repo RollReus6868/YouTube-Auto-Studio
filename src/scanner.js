@@ -128,16 +128,223 @@ function scanVideo(root, dir) {
   return item
 }
 
+// ---- bai dang (posts) ------------------------------------------------------------------
+// Loai bai: text | image | poll | image_poll | quiz | video (mot bai chi gan duoc mot loai)
+const POST_TYPES = {
+  van_ban: 'text', chu: 'text', text: 'text',
+  anh: 'image', hinh_anh: 'image', image: 'image', images: 'image',
+  tham_do: 'poll', tham_do_van_ban: 'poll', binh_chon: 'poll', poll: 'poll', text_poll: 'poll',
+  tham_do_anh: 'image_poll', tham_do_hinh_anh: 'image_poll', binh_chon_anh: 'image_poll', image_poll: 'image_poll',
+  do_vui: 'quiz', cau_do: 'quiz', cau_hoi: 'quiz', quiz: 'quiz',
+  video: 'video', chia_se_video: 'video',
+}
+const POST_TYPE_LABEL = { text: 'văn bản', image: 'ảnh', poll: 'thăm dò', image_poll: 'thăm dò ảnh', quiz: 'đố vui', video: 'video' }
+const POST_KEYS = { loai: 'loai', type: 'loai', gio_dang: 'gio_dang', lich: 'gio_dang', video: 'video', kenh: 'kenh', channel: 'kenh', hien_thi: 'hien_thi' }
+const POST_IMAGE_EXT = [...IMAGE_EXT, '.gif', '.webp']
+const POLL = { min: 2, max: 4, textMax: 65, imageMax: 36 }
+const QUIZ = { min: 2, max: 4 }
+const RATIO = { min: 2 / 5, max: 5 / 2 }
+const SIDE_FILES = /^(binh[-_ ]?chon|cau[-_ ]?hoi|ket[-_ ]?qua|huong[-_ ]?dan)\.txt$/i
+
+// "https://youtu.be/ID" | "...watch?v=ID" | "/shorts/ID" | "ID" -> ID (11 ky tu) hoac ''
+function videoId(s) {
+  s = String(s || '').trim()
+  if (/^[\w-]{11}$/.test(s)) return s
+  const m = /(?:youtu\.be\/|[?&]v=|\/(?:shorts|live|embed|v)\/)([\w-]{11})(?![\w-])/.exec(s)
+  return m ? m[1] : ''
+}
+
+// Kich thuoc anh tu phan dau file (PNG, GIF, JPEG, WebP). Khong doc duoc -> null.
+function imageSize(file) {
+  let b
+  try {
+    const fd = fs.openSync(file, 'r')
+    b = Buffer.alloc(Math.min(fs.fstatSync(fd).size, 256 * 1024))
+    fs.readSync(fd, b, 0, b.length, 0)
+    fs.closeSync(fd)
+  } catch (_) { return null }
+  if (b.length >= 24 && b.readUInt32BE(0) === 0x89504e47) return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) }
+  if (b.length >= 10 && b.toString('ascii', 0, 3) === 'GIF') return { w: b.readUInt16LE(6), h: b.readUInt16LE(8) }
+  if (b.length >= 30 && b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WEBP') {
+    const kind = b.toString('ascii', 12, 16)
+    if (kind === 'VP8X') return { w: 1 + b.readUIntLE(24, 3), h: 1 + b.readUIntLE(27, 3) }
+    if (kind === 'VP8L') { const v = b.readUInt32LE(21); return { w: 1 + (v & 0x3fff), h: 1 + ((v >> 14) & 0x3fff) } }
+    if (kind === 'VP8 ') return { w: b.readUInt16LE(26) & 0x3fff, h: b.readUInt16LE(28) & 0x3fff }
+  }
+  if (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8) {
+    let i = 2
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xff) { i++; continue }
+      const marker = b[i + 1]
+      if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) return { w: b.readUInt16BE(i + 7), h: b.readUInt16BE(i + 5) }
+      if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { i += 2; continue }
+      i += 2 + b.readUInt16BE(i + 2)
+    }
+  }
+  return null
+}
+
+// noidung.txt: "Khoa: gia tri" (Loai, Gio dang, Video, Kenh, Hien thi) + "---" + than bai.
+// Khong co "---": chi nhan cac dong dau la khoa hop le, phan con lai la than bai.
+function parsePostText(text) {
+  const head = {}
+  const warnings = []
+  const lines = String(text || '').replace(/^﻿/, '').split(/\r?\n/)
+  const parseLine = (line) => {
+    const m = /^\s*([^:#][^:]{0,20}):\s*(.*)$/.exec(line)
+    const field = m && POST_KEYS[key(m[1])]
+    return field ? { field, v: m[2].replace(/\s+#\s.*$/, '').trim() } : null
+  }
+  const sep = lines.findIndex((l) => /^\s*-{3,}\s*$/.test(l))
+  const before = sep > 0 ? lines.slice(0, sep).filter((l) => l.trim() && !/^\s*#/.test(l)) : null
+  let bodyStart = 0
+  if (before && before.length && before.every(parseLine)) {
+    for (const l of before) { const p = parseLine(l); head[p.field] = p.v }
+    bodyStart = sep + 1
+  } else {
+    // khong co "---": nhan dong dau neu gia tri hop le (tranh nham "Video: tap moi ra lo")
+    for (; bodyStart < lines.length; bodyStart++) {
+      const p = parseLine(lines[bodyStart])
+      const ok = p && (p.field === 'loai' ? POST_TYPES[key(p.v)] : p.field === 'gio_dang' ? parseWhen(p.v) : p.field === 'video' ? videoId(p.v) : p.v)
+      if (!ok) break
+      head[p.field] = p.v
+    }
+  }
+  const out = { body: lines.slice(bodyStart).join('\n').trim(), type: '', when: undefined, video: '', channel: '' }
+  if (head.loai !== undefined && head.loai !== '') {
+    out.type = POST_TYPES[key(head.loai)] || ''
+    if (!out.type) warnings.push(`noidung.txt: không hiểu loại bài "${head.loai}" (văn bản / ảnh / thăm dò / thăm dò ảnh / đố vui / video), tool tự đoán loại.`)
+  }
+  if (head.gio_dang !== undefined) {
+    if (!head.gio_dang) out.when = null // de trong = dang ngay
+    else if (parseWhen(head.gio_dang)) out.when = parseWhen(head.gio_dang)
+    else warnings.push(`noidung.txt: không hiểu giờ đăng "${head.gio_dang}" (viết dạng 2026-10-30 08:00).`)
+  }
+  if (head.video !== undefined) out.video = head.video
+  if (head.kenh) out.channel = head.kenh.replace(/^https?:\/\/(www\.)?youtube\.com\//i, '')
+  return { ...out, warnings }
+}
+
+// Mot dong lua chon: "Bia C" | "anh3.jpg | Bia C" | "Da-vit | 3.jpg"
+function splitOption(line) {
+  const parts = line.split('|').map((x) => x.trim())
+  if (parts.length < 2) return { text: line.trim(), image: '' }
+  const isImg = (s) => POST_IMAGE_EXT.includes(ext(s))
+  if (isImg(parts[0]) && !isImg(parts[1])) return { text: parts.slice(1).join(' | '), image: parts[0] }
+  if (isImg(parts[parts.length - 1])) return { text: parts.slice(0, -1).join(' | '), image: parts[parts.length - 1] }
+  return { text: line.trim(), image: '' }
+}
+// bo dong trong, dong "#..." va chu thich cuoi dong "   # ..." (it nhat 2 dau cach truoc #)
+const optionLines = (text) => String(text).replace(/^\uFEFF/, '').split(/\r?\n/).map((l) => l.replace(/\s{2,}#\s.*$/, '').trim()).filter((l) => l && !l.startsWith('#'))
+
 function scanPost(root, dir) {
   const folder = path.join(root, dir)
   const files = listFiles(folder)
   const { date, time, name } = parseFolderName(dir)
-  const item = { kind: 'post', id: `posts/${dir}`, dir, folder, date, time, name, text: '', images: [], errors: [], warnings: [] }
-  const txt = files.find((f) => /^(noi[-_ ]?dung|post|bai[-_ ]?viet)\.txt$/i.test(f)) || files.find((f) => ext(f) === '.txt')
-  if (txt) item.text = fs.readFileSync(path.join(folder, txt), 'utf8').replace(/^﻿/, '').trim()
-  item.images = files.filter((f) => IMAGE_EXT.includes(ext(f)) || ext(f) === '.gif' || ext(f) === '.webp').map((f) => path.join(folder, f))
-  if (!item.text && !item.images.length) item.errors.push('Thư mục trống: cần noidung.txt hoặc ảnh.')
-  if (item.images.length > POST_IMAGES_MAX) item.errors.push(`Có ${item.images.length} ảnh, bài cộng đồng chỉ cho tối đa ${POST_IMAGES_MAX}.`)
+  const item = {
+    kind: 'post', id: `posts/${dir}`, dir, folder, date, time, name, text: '', images: [], type: 'text', when: null, channel: '', video: '',
+    options: [], answers: [], explanation: '', errors: [], warnings: [],
+  }
+  const find = (re) => files.find((f) => re.test(f))
+  const txt = find(/^(noi[-_ ]?dung|post|bai[-_ ]?viet)\.txt$/i) || files.find((f) => ext(f) === '.txt' && !SIDE_FILES.test(f))
+  const pollFile = find(/^binh[-_ ]?chon\.txt$/i)
+  const quizFile = find(/^cau[-_ ]?hoi\.txt$/i)
+  const head = parsePostText(txt ? fs.readFileSync(path.join(folder, txt), 'utf8') : '')
+  item.text = head.body
+  item.channel = head.channel
+  item.warnings.push(...head.warnings)
+  item.images = files.filter((f) => POST_IMAGE_EXT.includes(ext(f))).map((f) => path.join(folder, f))
+  const imgNames = item.images.map((f) => path.basename(f))
+
+  // loai bai: theo "Loai:", khong co thi tu doan
+  const hasVideo = head.video !== ''
+  const kinds = [hasVideo && 'Video:', pollFile && pollFile, quizFile && quizFile].filter(Boolean)
+  if (kinds.length > 1) item.errors.push(`Một bài chỉ gắn được một loại, nhưng thư mục có cả ${kinds.join(' và ')}.`)
+  const guess = hasVideo ? 'video' : quizFile ? 'quiz' : pollFile ? (item.images.length ? 'image_poll' : 'poll') : item.images.length ? 'image' : 'text'
+  item.type = head.type || guess
+
+  // gio dang: "Gio dang:" > ten thu muc (ngay + gio); chi co ngay = dang ngay
+  let when = head.when !== undefined ? head.when : date && time ? parseWhen(`${date} ${time}`) : null
+  if (when && when.getTime() <= Date.now()) {
+    item.warnings.push(`Giờ đăng ${when.toLocaleString('vi-VN')} đã qua, tool sẽ đăng ngay.`)
+    when = null
+  }
+  // o chon gio cua YouTube chi co cac moc 15 phut: lam tron len
+  if (when && (when.getMinutes() % 15 || when.getSeconds())) {
+    const r = new Date(when)
+    r.setSeconds(0, 0)
+    r.setMinutes(Math.ceil(when.getMinutes() / 15) * 15)
+    item.warnings.push(`YouTube chỉ cho chọn giờ theo mốc 15 phút: ${when.toTimeString().slice(0, 5)} được làm tròn thành ${r.toTimeString().slice(0, 5)}.`)
+    when = r
+  }
+  item.when = when ? when.toISOString() : null
+
+  const fileOf = (n) => { const f = imgNames.find((x) => x.toLowerCase() === n.toLowerCase()); return f ? path.join(folder, f) : '' }
+  const used = new Set()
+  const t = item.type
+  if (t === 'video') {
+    item.video = videoId(head.video)
+    if (!item.video) item.errors.push(head.video ? `Không hiểu video "${head.video}": cần URL YouTube hoặc mã 11 ký tự.` : 'Bài chia sẻ video cần dòng "Video: <URL>" trong noidung.txt.')
+    if (item.images.length) item.errors.push('Bài chia sẻ video không gắn kèm ảnh được, hãy bỏ ảnh ra khỏi thư mục.')
+  } else if (t === 'poll' || t === 'image_poll') {
+    if (!pollFile) item.errors.push(`Bài ${POST_TYPE_LABEL[t]} cần file binhchon.txt (mỗi dòng một lựa chọn).`)
+    else {
+      item.options = optionLines(fs.readFileSync(path.join(folder, pollFile), 'utf8')).map(splitOption)
+      const max = t === 'poll' ? POLL.textMax : POLL.imageMax
+      if (item.options.length < POLL.min) item.errors.push(`Thăm dò cần ít nhất ${POLL.min} lựa chọn (binhchon.txt có ${item.options.length}).`)
+      if (t === 'poll' && item.options.length > POLL.max) item.errors.push(`Thăm dò văn bản chỉ cho tối đa ${POLL.max} lựa chọn (binhchon.txt có ${item.options.length}).`)
+      if (t === 'image_poll' && item.options.length > POLL.max) item.warnings.push(`Có ${item.options.length} lựa chọn, chưa rõ thăm dò ảnh cho tối đa bao nhiêu (đã thấy ${POLL.max}).`)
+      item.options.forEach((o, i) => {
+        if ([...o.text].length > max) item.errors.push(`Lựa chọn ${i + 1} dài ${[...o.text].length} ký tự, tối đa ${max}.`)
+      })
+    }
+    if (t === 'image_poll') {
+      // anh: "anh3.jpg | ..." > so dau ten file (1.jpg -> dong 1) > lan luot cac anh con lai
+      for (const o of item.options) if (o.image) { const f = fileOf(o.image); if (!f) item.errors.push(`Không thấy ảnh "${o.image}" trong thư mục.`); o.image = f; if (f) used.add(f) }
+      item.options.forEach((o, i) => {
+        if (o.image) return
+        const f = item.images.find((x) => !used.has(x) && Number((/^(\d+)/.exec(path.basename(x)) || [])[1]) === i + 1)
+        if (f) { o.image = f; used.add(f) }
+      })
+      const free = item.images.filter((x) => !used.has(x) && !/^\d+/.test(path.basename(x)))
+      for (const o of item.options) if (!o.image && free.length) { o.image = free.shift(); used.add(o.image) }
+      item.options.forEach((o, i) => { if (!o.image) item.warnings.push(`Lựa chọn ${i + 1} ("${o.text}") chưa có ảnh.`) })
+    } else {
+      for (const o of item.options) if (o.image) item.warnings.push(`Thăm dò văn bản không có ảnh, bỏ qua "${o.image}".`)
+      item.options = item.options.map((o) => ({ text: o.text, image: '' }))
+    }
+  } else if (t === 'quiz') {
+    if (!quizFile) item.errors.push('Bài đố vui cần file cauhoi.txt (mỗi dòng một câu trả lời, dấu * trước câu đúng).')
+    else {
+      for (const line of optionLines(fs.readFileSync(path.join(folder, quizFile), 'utf8'))) {
+        const ex = /^(giải thích|giai thich|explanation)\s*:\s*(.*)$/i.exec(line)
+        if (ex) { item.explanation = ex[2].trim(); continue }
+        const correct = /^\*/.test(line)
+        const o = splitOption(line.replace(/^\*\s*/, ''))
+        if (o.image) { const f = fileOf(o.image); if (!f) item.errors.push(`Không thấy ảnh "${o.image}" trong thư mục.`); o.image = f; if (f) used.add(f) }
+        item.answers.push({ ...o, correct })
+      }
+      const n = item.answers.length
+      if (n < QUIZ.min || n > QUIZ.max) item.errors.push(`Đố vui cần ${QUIZ.min}–${QUIZ.max} câu trả lời (cauhoi.txt có ${n}).`)
+      const right = item.answers.filter((a) => a.correct).length
+      if (right !== 1) item.errors.push(right ? `cauhoi.txt có ${right} câu đánh dấu *, chỉ được một câu đúng.` : 'cauhoi.txt chưa đánh dấu * trước câu trả lời đúng.')
+    }
+  } else if (t === 'image') {
+    if (!item.images.length) item.errors.push('Loại "ảnh" nhưng thư mục không có ảnh.')
+  }
+  if (t === 'image' || t === 'image_poll' || t === 'quiz') {
+    for (const f of t === 'image' ? item.images : [...used]) {
+      const s = imageSize(f)
+      if (s && s.h && (s.w / s.h < RATIO.min || s.w / s.h > RATIO.max)) item.warnings.push(`Ảnh "${path.basename(f)}" (${s.w}x${s.h}) ngoài tỷ lệ 2:5 đến 5:2, YouTube có thể từ chối.`)
+    }
+  }
+  if (t !== 'image') {
+    const unused = item.images.filter((f) => !used.has(f))
+    if (unused.length && t !== 'video') item.warnings.push(`Bài ${POST_TYPE_LABEL[t]} không dùng ${unused.length} ảnh: ${unused.map((f) => path.basename(f)).join(', ')}.`)
+  }
+  if ((t === 'poll' || t === 'image_poll' || t === 'quiz') && !item.text) item.warnings.push('Chưa có câu hỏi: viết câu hỏi vào noidung.txt.')
+  if (t === 'text' && !item.text) item.errors.push(item.images.length ? 'Không có chữ để đăng.' : 'Thư mục trống: cần noidung.txt hoặc ảnh.')
+  if (item.images.length > POST_IMAGES_MAX && t === 'image') item.errors.push(`Có ${item.images.length} ảnh, bài cộng đồng chỉ cho tối đa ${POST_IMAGES_MAX}.`)
   return item
 }
 
@@ -178,11 +385,27 @@ function createSkeleton(root) {
       '  ---',
       '  Phần mô tả viết từ đây, nhiều dòng cũng được.',
       '',
-      'Mỗi bài cộng đồng là một thư mục con trong "posts": noidung.txt + ảnh (tối đa 10).',
-      'Tên thư mục bắt đầu bằng ngày (2026-10-28_...) để tool tự xếp lịch.',
+      'Mỗi bài đăng là một thư mục con trong "posts", ví dụ: posts/2026-10-29_19h00_bai-anh/',
+      '  Có giờ trong tên thư mục (19h00) = lên lịch đăng; chỉ có ngày = đăng ngay.',
+      '  noidung.txt    chữ của bài (với thăm dò, đố vui: đây là câu hỏi)',
+      '  1.jpg 2.png    ảnh (tối đa 10, tỷ lệ từ 2:5 đến 5:2)',
+      '  binhchon.txt   thăm dò: mỗi dòng một lựa chọn (2-4 dòng, tối đa 65 ký tự;',
+      '                 có ảnh = thăm dò ảnh, tối đa 36 ký tự, ảnh 1.jpg cho dòng 1...)',
+      '  cauhoi.txt     đố vui: mỗi dòng một câu trả lời (2-4), dấu * trước câu đúng,',
+      '                 "Đáp án | 3.jpg" để gắn ảnh, dòng "Giải thích: ..." (tùy chọn)',
+      '',
+      'Phần đầu noidung.txt (tùy chọn), ngăn với nội dung bằng dòng ---:',
+      '  Loại: thăm dò ảnh        (văn bản / ảnh / thăm dò / thăm dò ảnh / đố vui / video)',
+      '  Giờ đăng: 2026-10-30 08:00',
+      '  Video: https://youtu.be/xxxxxxxxxxx   (bài chia sẻ video)',
+      '  Kênh: @tenkenh          (bỏ trống = kênh chọn trong tool)',
+      '  ---',
+      '  Bạn thích bìa nào cho tập tiếp theo?',
+      '',
+      'Bài đã đăng được chuyển vào "da-dang" kèm file ket-qua.txt.',
       '',
     ].join('\r\n'))
   }
 }
 
-module.exports = { VIDEO_EXT, IMAGE_EXT, DIRS, parseWhen, parseInfo, parseFolderName, scan, scanVideo, scanPost, createSkeleton }
+module.exports = { VIDEO_EXT, IMAGE_EXT, DIRS, POST_TYPE_LABEL, POST_IMAGES_MAX, parseWhen, parseInfo, parseFolderName, parsePostText, videoId, imageSize, scan, scanVideo, scanPost, createSkeleton }

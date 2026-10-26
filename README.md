@@ -33,11 +33,32 @@ YouTube-DangBai/
       info.txt                   tùy chọn, ghi đè mẫu mặc định
       phude.vi.srt               tùy chọn
   posts/
-    2026-10-29_bai-1/
+    2026-10-29_19h00_bai-anh/    có giờ trong tên = lên lịch; chỉ có ngày = đăng ngay
       noidung.txt
-      anh1.jpg ...               tối đa 10 ảnh
+      1.jpg 2.png ...            tối đa 10 ảnh, tỷ lệ 2:5 đến 5:2
+    2026-10-30_tham-do/          noidung.txt + binhchon.txt          -> thăm dò văn bản
+    2026-10-30_tham-do-anh/      noidung.txt + binhchon.txt + 1.jpg 2.jpg -> thăm dò ảnh
+    2026-10-31_do-vui/           noidung.txt + cauhoi.txt            -> đố vui
+    2026-11-01_gioi-thieu/       noidung.txt có dòng "Video: <URL>"  -> chia sẻ video
   da-dang/                       việc đã xong được chuyển vào đây
 ```
+
+### Bài đăng (tab Bài đăng của kênh)
+
+Tool mở `youtube.com/channel/<UC…>/posts` bằng tài khoản Google của kênh và đăng như người dùng. Loại bài tự đoán theo file trong thư mục, hoặc ghi rõ ở phần đầu `noidung.txt`:
+
+```
+Loại: thăm dò ảnh             văn bản | ảnh | thăm dò | thăm dò ảnh | đố vui | video
+Giờ đăng: 2026-10-30 08:00    ghi đè giờ trong tên thư mục; để trống = đăng ngay
+Video: https://youtu.be/xxxxxxxxxxx
+Kênh: @tenkenh                bỏ trống = kênh chọn ở trang Đăng bài
+---
+Bạn thích bìa nào cho tập tiếp theo?
+```
+
+- `binhchon.txt`: mỗi dòng một lựa chọn (2–4). Thăm dò văn bản tối đa 65 ký tự mỗi dòng; thăm dò ảnh tối đa 36 ký tự, ảnh `1.jpg` cho dòng 1, `2.jpg` cho dòng 2 (hoặc viết `anh3.jpg | Bìa C`).
+- `cauhoi.txt` (đố vui): mỗi dòng một câu trả lời (2–4), dấu `*` trước câu đúng duy nhất, `Đa-vít | 3.jpg` để gắn ảnh, dòng `Giải thích: …` tùy chọn. Câu hỏi là nội dung `noidung.txt`.
+- Trước khi đăng, tool xem các bài ĐÃ ĐĂNG / ĐÃ LÊN LỊCH: có bài trùng chữ thì không đăng lại. Đăng xong, thư mục chuyển vào `da-dang/` kèm `ket-qua.txt`.
 
 Ví dụ `info.txt`:
 
