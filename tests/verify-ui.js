@@ -8,7 +8,8 @@ const { chromium } = require('playwright-core')
 
 const URL = `http://localhost:${process.env.YA_PORT || 4173}/`
 const OUT = path.join(__dirname, 'screenshots')
-const PAGES = ['videos', 'presets', 'community', 'comments', 'guide', 'logs', 'update', 'settings']
+const PAGES = ['accounts', 'videos', 'optimize', 'posts', 'presets', 'community', 'comments', 'guide', 'logs', 'update', 'settings']
+const WITH_PANE = new Set(['accounts', 'community'])
 const problems = []
 const overflow = () => {
   const bad = []
@@ -61,7 +62,7 @@ function findBrowser() {
         await page.waitForTimeout(250)
         assert.equal((await page.evaluate(() => document.documentElement.className)).includes('dark'), mode === 'dark')
         const panes = await page.locator('[data-pane]').count()
-        assert.equal(panes, p === 'community' ? 1 : 0, `${tag} ${p}: khung Studio`)
+        assert.equal(panes, WITH_PANE.has(p) ? 1 : 0, `${tag} ${p}: khung Studio`)
         if (panes) {
           const box = await page.locator('[data-pane]').boundingBox()
           assert(box.width >= 380 && box.height >= 400, `${tag}: khung Studio qua nho ${JSON.stringify(box)}`)
@@ -85,10 +86,10 @@ function findBrowser() {
       await check('video-chi-tiet')
       // mau mac dinh: sua -> "Chua luu", xem truoc cap nhat, xoa mau -> hop thoai trong cot
       await page.goto(`${URL}?demo#presets`)
-      await page.getByText('Đã lưu').waitFor()
+      await page.getByText('Đã lưu').first().waitFor()
       const title = page.getByLabel('Tiêu đề (bắt buộc)')
       await title.fill('{ten_video} - {ten_kenh}')
-      await page.getByText('Chưa lưu').waitFor()
+      await page.getByText('Chưa lưu').first().waitFor()
       await page.getByText('Bí ẩn rừng sâu - Kênh Của Tôi', { exact: true }).first().waitFor()
       await page.getByRole('radio', { name: /Cách nhau đều N giờ/ }).click()
       await page.getByLabel('Cách nhau (giờ)').waitFor()
@@ -104,7 +105,7 @@ function findBrowser() {
       // cai dat: doi chu de + luu lai sau khi tai lai
       await page.goto(`${URL}?demo#settings`)
       await page.getByLabel('Tên kênh').fill('Kênh khác')
-      await page.getByText('Chưa lưu').waitFor()
+      await page.getByText('Chưa lưu').first().waitFor()
       await page.locator('[data-theme="ocean"]').click()
       await page.waitForTimeout(200)
       await page.reload()

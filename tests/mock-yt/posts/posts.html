@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><title>Dark Bible Stories - YouTube</title>
+<!--
+  Trang gia tab "Bai dang" cua kenh tren youtube.com. Cau truc (ten the, id, aria-label) chep
+  theo HTML that cua nguoi dung (html/yt-11, yt-12: ytd-backstage-post-dialog-renderer) va
+  3 video quay man hinh (A, B, C = len lich). Phan DOAN (chua co HTML/video): hop chon video,
+  the bai trong danh sach (ytd-backstage-post-thread-renderer), thong bao sau khi "Dang" ngay,
+  loi qua 10 anh / sai ty le (chi biet o #error-message).
+-->
+<style>
+  * { box-sizing: border-box }
+  body { margin: 0; background: #0f0f0f; color: #f1f1f1; font: 14px Roboto, Arial, sans-serif }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer }
+  [hidden] { display: none !important }
+  ytd-backstage-post-dialog-renderer, ytd-commentbox, ytd-backstage-multi-image-select-renderer, ytd-poll-attachment, ytd-backstage-image-poll-editor-renderer,
+  ytd-backstage-quiz-editor-renderer, ytd-backstage-video-link-attachment, ytd-date-time-picker-renderer, ytd-backstage-items, ytd-item-section-renderer,
+  ytd-backstage-post-thread-renderer, ytd-backstage-post-renderer, ytd-post-filter-zero-state-renderer, yt-posts-creation-option-view-model, tp-yt-paper-dialog,
+  tp-yt-paper-listbox, tp-yt-paper-item, ytd-popup-container, ytd-menu-popup-renderer, tp-yt-paper-toast, ytd-backstage-multi-image-thumbnail-renderer { display: block }
+  .top { height: 56px; display: flex; align-items: center; padding: 0 16px; gap: 16px }
+  .page { width: 660px; margin: 0 0 0 260px }
+  .chead { display: flex; gap: 16px; align-items: center; padding: 16px 0 }
+  .chead img { width: 96px; height: 96px; border-radius: 50% }
+  .ctabs { display: flex; gap: 24px; border-bottom: 1px solid #3f3f3f; margin-bottom: 16px }
+  .ctabs a { color: #aaa; padding: 10px 0; text-decoration: none; font-weight: 500 } .ctabs a.on { color: #fff; border-bottom: 2px solid #fff }
+  ytd-backstage-post-dialog-renderer { border: 1px solid #3f3f3f; border-radius: 12px; padding: 16px; position: relative }
+  ytd-backstage-post-dialog-renderer.open { background: #212121 }
+  #dialog-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px }
+  #dialog-header img { width: 32px; height: 32px; border-radius: 50% }
+  #header-channel-name { font-weight: 500; flex: 1 } #header-visibility-label { color: #aaa }
+  #commentbox-placeholder { display: block; color: #aaa; font-size: 16px; cursor: text; padding: 4px 0 16px }
+  #attachments { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center }
+  #attachments button { display: inline-flex; gap: 8px; align-items: center; font-weight: 500; padding: 6px 0 }
+  tp-yt-paper-tooltip { display: none }
+  #post-buttons-wrapper, #buttons { display: flex; align-items: center; gap: 12px; margin-left: auto }
+  #buttons { justify-content: flex-end; margin-top: 8px }
+  #post-button button, #submit-button button { background: #f1f1f1; color: #0f0f0f; border-radius: 18px; padding: 8px 16px; font-weight: 500 }
+  #option-menu button { background: #f1f1f1; color: #0f0f0f; border-radius: 18px; padding: 8px 12px; margin-left: -12px }
+  button[disabled] { background: #272727 !important; color: #717171 !important; cursor: default }
+  #contenteditable-root { outline: none; font-size: 16px; white-space: pre-wrap; min-height: 24px; margin: 4px 0 16px }
+  #contenteditable-root:empty::before { content: attr(aria-label); color: #aaa }
+  .poll-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px }
+  input, textarea { background: none; border: 0; border-bottom: 1px solid #555; color: #fff; padding: 6px 0; font: inherit; flex: 1; resize: none }
+  .counter { color: #aaa; font-size: 12px; width: 40px; text-align: right }
+  .lab { position: absolute; left: 0; top: 6px; color: #aaa; pointer-events: none } .fld { position: relative; flex: 1; display: flex } .fld.filled .lab { visibility: hidden }
+  .fld textarea { height: 32px }
+  .link { color: #3ea6ff; font-weight: 500 }
+  div[role=group] { display: flex; align-items: center; gap: 12px; border: 1px solid #555; border-radius: 12px; padding: 8px 12px; margin-bottom: 8px }
+  button[aria-pressed=true] { color: #2ba640 } .aimg { width: 28px; height: 28px; object-fit: cover; border-radius: 4px }
+  #add-answer { width: 100%; background: #3f3f3f; border-radius: 12px; padding: 8px; text-align: left; margin-bottom: 8px }
+  .ip-row { display: flex; align-items: center; gap: 12px; border: 1px solid #555; margin-bottom: 12px; height: 110px }
+  .ip-thumb { width: 110px; height: 100%; background: #000; display: flex; align-items: center; justify-content: center }
+  .ip-thumb img { width: 100%; height: 100%; object-fit: cover } .ip-up { width: 36px; height: 36px; border-radius: 50%; background: #3ea6ff }
+  .two { display: flex; gap: 16px } .two button { flex: 1; border: 1px solid #555; border-radius: 18px; padding: 8px }
+  #dropzone { border: 1px solid #fff; position: relative; padding: 40px 16px; text-align: center; margin-bottom: 8px }
+  #selection-cancel-button, #preview-cancel-button { position: absolute; right: -16px; top: -16px }
+  #select-button { color: #3ea6ff }
+  .small span { display: block; color: #aaa; font-size: 12px } #error-message { color: #ff4e45 !important }
+  #multi-image-container { border: 1px solid #fff; display: flex; min-height: 240px; margin-bottom: 8px; position: relative }
+  #thumbnail-images-container { width: 110px; background: #212121; padding: 8px }
+  ytd-backstage-multi-image-thumbnail-renderer img { width: 80px; height: 80px; object-fit: cover; margin-bottom: 8px }
+  #add-image-button button { width: 80px; height: 80px; background: #263850 }
+  #preview { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px }
+  #preview img { max-width: 220px; max-height: 160px }
+  #video-link-attachment { display: flex; gap: 12px; align-items: center; border: 1px solid #3f3f3f; border-radius: 12px; padding: 8px; margin-bottom: 8px }
+  #scheduling-panel { border-top: 1px solid #3f3f3f; margin: 16px -16px -16px; padding: 16px; position: relative }
+  #cancel-button-wrapper { position: absolute; right: 16px; top: 12px }
+  #picker-component { display: flex; gap: 16px; margin-top: 16px; position: relative }
+  #picker-component tp-yt-paper-button { display: block; border: 1px solid #3f3f3f; padding: 8px 12px; border-radius: 4px; min-width: 140px; cursor: pointer }
+  .dropdown { position: absolute; background: #282828; border-radius: 12px; padding: 8px 0; z-index: 20; max-height: 300px; overflow-y: auto; bottom: 48px }
+  .dropdown [role=option] { padding: 10px 16px; cursor: pointer; white-space: nowrap } .dropdown [role=option]:hover { background: #3f3f3f }
+  #calendar-dialog { position: absolute; bottom: 48px; left: 0; width: 290px; background: #282828; border-radius: 12px; padding: 12px; z-index: 20 }
+  #calendar-dialog input.bad { border-color: #f44 }
+  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; max-height: 220px; overflow-y: auto }
+  .cal button { padding: 6px 0; border-radius: 50% } .cal button[disabled] { background: none !important } .cal .sel { background: #3ea6ff; color: #000 }
+  .cal .mon { grid-column: 1 / -1; text-align: left; color: #aaa; font-size: 12px; padding-top: 8px }
+  ytd-popup-container ytd-menu-popup-renderer { position: absolute; background: #282828; border-radius: 12px; padding: 8px 0; z-index: 30 }
+  ytd-menu-popup-renderer tp-yt-paper-item { padding: 10px 16px; cursor: pointer; white-space: nowrap }
+  .spinner { height: 76px; display: flex; align-items: center; justify-content: center; color: #aaa }
+  tp-yt-paper-tabs { display: flex; margin: 24px 0 16px; border-bottom: 1px solid #3f3f3f }
+  tp-yt-paper-tab { padding: 14px 32px; color: #aaa; font-weight: 500; font-size: 13px; text-transform: uppercase; cursor: pointer }
+  tp-yt-paper-tab[aria-selected=true] { color: #fff; border-bottom: 2px solid #fff }
+  ytd-backstage-post-renderer { border: 1px solid #3f3f3f; border-radius: 12px; padding: 16px; margin-bottom: 16px; display: flex; gap: 12px }
+  ytd-backstage-post-renderer img { width: 40px; height: 40px; border-radius: 50% }
+  #published-time-text, .sched-line { color: #aaa; font-size: 12px } #published-time-text a { color: #aaa; text-decoration: none }
+  #content-text { font-size: 15px; white-space: pre-wrap; margin-top: 4px } .po { border: 1px solid #555; padding: 8px; margin-top: 6px; border-radius: 4px }
+  ytd-post-filter-zero-state-renderer { text-align: center; padding: 40px; color: #aaa } #title { color: #fff; font-size: 18px; margin: 8px }
+  tp-yt-paper-toast { position: fixed; left: 16px; bottom: 16px; background: #f1f1f1; color: #0f0f0f; padding: 14px 16px; border-radius: 8px; z-index: 50 }
+  .modal-bg { position: fixed; inset: 0; background: #0009; z-index: 40; display: flex; align-items: center; justify-content: center }
+  .modal { width: 700px; max-height: 440px; overflow: auto; background: #e8eef7; color: #0f0f0f; border-radius: 4px }
+  .modal .mh { display: flex; align-items: center; gap: 16px; padding: 16px 24px; position: sticky; top: 0; background: #e8eef7 }
+  .modal .mh input { border: 0; border-radius: 20px; padding: 10px 16px; background: #d6dde8; color: #000 }
+  .vrow { display: flex; gap: 12px; background: #fff; margin: 8px 16px; padding: 8px; cursor: pointer } .vrow .th { width: 120px; height: 68px; background: #555; display: block }
+</style></head>
+<body>
+<div class="top"><b style="color:#f00">▶</b><b>YouTube</b><span style="flex:1"></span><input placeholder="Tìm kiếm" style="max-width:400px"></div>
+<div class="page">
+  <div class="chead"><img alt="" id="av" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10'%3E%3Ccircle cx='5' cy='5' r='5' fill='%23a85'/%3E%3C/svg%3E"><div><h1 style="margin:0">Dark Bible Stories</h1><div style="color:#aaa">@BibleStoriies</div></div></div>
+  <nav class="ctabs"><a href="#">Trang chủ</a><a href="#">Video</a><a href="#">Danh sách phát</a><a href="#" class="on">Bài đăng</a></nav>
+  <div id="composer-slot"><div class="spinner"><tp-yt-paper-spinner-lite aria-label="loading">⟳</tp-yt-paper-spinner-lite></div></div>
+  <ytd-backstage-items>
+    <ytd-post-stream-filter-renderer><div id="filter-container"><tp-yt-paper-tabs role="tablist">
+      <tp-yt-paper-tab role="tab" data-tab="pub"><div>Đã đăng</div></tp-yt-paper-tab><tp-yt-paper-tab role="tab" data-tab="sched"><div>Đã lên lịch</div></tp-yt-paper-tab><tp-yt-paper-tab role="tab" data-tab="arch"><div>Đã lưu trữ</div></tp-yt-paper-tab>
+    </tp-yt-paper-tabs></div></ytd-post-stream-filter-renderer>
+    <ytd-item-section-renderer>
+      <div id="zero-state-message" hidden><ytd-post-filter-zero-state-renderer><div id="icon-container">✎</div><div id="title">Xuất bản bài đăng</div><div id="subtitle">Bài đăng xuất hiện ở đây sau khi bạn xuất bản và sẽ được hiển thị với cộng đồng của bạn</div></ytd-post-filter-zero-state-renderer></div>
+      <div id="scheduling-zero-state-message" hidden><ytd-post-filter-zero-state-renderer><div id="title">Không có bài đăng nào được lên lịch</div></ytd-post-filter-zero-state-renderer></div>
+      <div id="spinner-container" class="spinner" hidden><tp-yt-paper-spinner-lite aria-label="loading">⟳</tp-yt-paper-spinner-lite></div>
+      <div id="contents"></div>
+    </ytd-item-section-renderer>
+  </ytd-backstage-items>
+</div>
+<ytd-popup-container id="popups"></ytd-popup-container>
+<script>
+const $ = (s, r = document) => r.querySelector(s)
+const $$ = (s, r = document) => [...r.querySelectorAll(s)]
+const h = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild }
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+const log = (evt) => fetch('/__log', { method: 'POST', body: JSON.stringify(evt) })
+const AV = $('#av').src
+const owner = !/KHAC/.test(location.pathname) // kenh cua nguoi khac: khong co khung soan
+const PH = ['Gửi lời cảm ơn! Nhập @ để đề cập đến một kênh', 'Bật mí về video tiếp theo của bạn'] // placeholder doi theo lan (video A/B vs C)
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const fmtDate = (d) => `${MON[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
+const fmtTime = (m) => `${(Math.floor(m / 60) % 12) || 12}:${String(m % 60).padStart(2, '0')} ${m < 720 ? 'AM' : 'PM'}`
+const p2 = (n) => String(n).padStart(2, '0')
+const MY_VIDEOS = [
+  ['AbCdEfGhIjK', 'The Faith God Uses to Protect Black America’s Next Generation', '1.595'],
+  ['ZyXwVuTsRqP', 'God Defined Black America’s Worth—No System Can Rewrite It', '3.361'],
+  ['QqWwEeRrTtY', 'David’s Forgotten Psalm: What the Ethiopian Bible Preserve', '2.311'],
+]
+const BTN = (id, label, text, extra = '') => `<span id="${id}"><ytd-button-renderer><yt-button-shape><button title="" aria-label="${label}" ${extra}><div aria-hidden="true">▣</div><div><span role="text">${text}</span></div></button></yt-button-shape><tp-yt-paper-tooltip role="tooltip" aria-label="tooltip"><div id="tooltip">${label}</div></tp-yt-paper-tooltip></ytd-button-renderer></span>`
+const ATTACH = () => BTN('image-button', 'Thêm hình ảnh', 'Hình ảnh') + BTN('image-poll-button', 'Thêm cuộc thăm dò ý kiến dạng hình ảnh', 'Cuộc thăm dò ý kiến dạng hình ảnh')
+  + BTN('poll-button', 'Thêm cuộc thăm dò ý kiến dạng văn bản', 'Cuộc thăm dò ý kiến dạng văn bản') + BTN('quiz-button', 'Thêm câu đố vui', 'Câu hỏi') + BTN('video-link-button', 'Thêm một video YouTube hiện có', 'Video')
+const FIELD = (ph, max, val, cls) => `<div class="fld ${val ? 'filled' : ''}"><label></label><div class="lab" aria-hidden="true">${ph}</div><textarea class="${cls}" placeholder="${ph}" ${max ? `maxlength="${max}"` : ''}>${esc(val)}</textarea></div>`
+
+// ---- trang thai khung soan ----
+let S
+function reset() {
+  S = { open: false, mode: null, images: [], names: [], uploading: 0, error: '', options: ['', ''], answers: [{ t: '' }, { t: '' }], right: 0, expl: '',
+    ip: [{ t: '' }, { t: '' }], video: null, menu: false, sched: false, date: null, time: 0, pop: '', ph: PH[Math.floor(Math.random() * PH.length)] }
+  const t = new Date(); t.setDate(t.getDate() + 1); t.setHours(0, 0, 0, 0); S.date = t // mac dinh (video C): ngay mai, 12:00 AM
+  if (window.CE) window.CE.innerText = ''
+}
+const textOf = () => (window.CE ? window.CE.innerText.replace(/\n$/, '') : '')
+function valid() {
+  const m = S.mode
+  if (S.uploading) return false
+  if (!m) return !!textOf().trim()
+  if (m === 'image') return S.images.length > 0
+  if (m === 'poll') return S.options.every((o) => o.trim())
+  if (m === 'quiz') return S.answers.every((a) => a.t.trim())
+  if (m === 'image_poll') return S.ip.every((o) => o.t.trim())
+  if (m === 'video') return !!S.video
+  return false
+}
+
+// o go chu (#contenteditable-root) giu nguyen mot node suot doi khung soan
+function makeCE() {
+  const ce = h('<div id="contenteditable-root" contenteditable="true" aria-label="Hỏi cộng đồng của bạn..."></div>')
+  ce.addEventListener('input', () => { mention(); updateButtons() })
+  ce.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMention() })
+  return ce
+}
+
+function render() {
+  const slot = $('#composer-slot')
+  if (!owner) { slot.innerHTML = ''; return }
+  window.CE = window.CE || makeCE()
+  const hadFocus = document.activeElement === window.CE
+  const ok = valid()
+  slot.innerHTML = `<ytd-backstage-post-dialog-renderer class="${S.open ? 'open' : ''}"><div>
+    <div id="dialog-header"><yt-img-shadow id="header-author-thumbnail"><img id="img" alt="" src="${AV}"></yt-img-shadow><yt-formatted-string id="header-channel-name" aria-label="Dark Bible Stories">Dark Bible Stories</yt-formatted-string>
+      <div><yt-formatted-string id="header-visibility-label" aria-label="Trạng thái hiển thị:">Trạng thái hiển thị:</yt-formatted-string> <span id="access-restrictions-selector"><tp-yt-paper-button id="label" role="button" aria-label="Công khai">Công khai ⌄</tp-yt-paper-button></span></div></div>
+    <div id="unopened-dialog" ${S.open ? 'hidden' : ''}><div id="main"><div id="placeholder-area"><yt-formatted-string id="commentbox-placeholder" role="button" aria-label="${S.ph}">${S.ph}</yt-formatted-string></div>
+      <div id="attachments" style="display:flex">${ATTACH()}<div id="post-buttons-wrapper"><ytd-button-renderer id="post-button"><yt-button-shape><button title="" disabled="true" aria-label="Đăng" aria-disabled="true"><div><span role="text">Đăng</span></div></button></yt-button-shape></ytd-button-renderer>
+        <div id="option-menu"><ytd-menu-renderer><yt-icon-button id="button" hidden><button id="button" aria-label="Menu tác vụ"></button></yt-icon-button><yt-button-shape id="button-shape"><button title="" aria-disabled="true" disabled aria-label="Menu tác vụ">⌄</button></yt-button-shape></ytd-menu-renderer></div></div></div></div></div>
+    <ytd-commentbox id="commentbox" ${S.open ? '' : 'hidden'}><div id="creation-box"><span id="ce-slot"></span>
+      <div id="attachment-area"></div>
+      <div id="footer"><div id="attachments" ${S.mode || S.sched ? 'hidden' : ''}>${ATTACH()}</div>
+        <div id="buttons"><ytd-button-renderer id="cancel-button"><yt-button-shape><button title="" aria-label="Hủy"><div><span role="text">Hủy</span></div></button></yt-button-shape></ytd-button-renderer>
+          <ytd-button-renderer id="submit-button"><yt-button-shape><button title="" aria-label="${S.sched ? 'Lên lịch' : 'Đăng'}" ${ok ? 'aria-disabled="false"' : 'disabled="true" aria-disabled="true"'}><div><span role="text">${S.sched ? 'Lên lịch' : 'Đăng'}</span></div></button></yt-button-shape></ytd-button-renderer>
+          <div id="option-menu" ${S.sched ? 'hidden' : ''}><ytd-menu-renderer><yt-icon-button id="button" hidden><button id="button" aria-label="Menu tác vụ"></button></yt-icon-button><yt-button-shape id="button-shape"><button title="" aria-label="Menu tác vụ" ${ok ? 'aria-disabled="false"' : 'disabled aria-disabled="true"'}>⌄</button></yt-button-shape></ytd-menu-renderer></div></div></div>
+      <div id="scheduling-panel"></div></div></ytd-commentbox>
+  </div></ytd-backstage-post-dialog-renderer>`
+  $('#ce-slot').replaceWith(window.CE)
+  if (hadFocus) { window.CE.focus(); caretEnd() }
+  if (S.mode) $('#attachment-area').appendChild(editor())
+  if (S.sched) $('#scheduling-panel').appendChild(schedPanel())
+  $('#commentbox-placeholder').onclick = () => { S.open = true; render(); window.CE.focus() }
+  for (const id of ['image-button', 'image-poll-button', 'poll-button', 'quiz-button', 'video-link-button']) {
+    for (const b of $$(`#${id} button`)) b.onclick = () => pick({ 'image-button': 'image', 'image-poll-button': 'image_poll', 'poll-button': 'poll', 'quiz-button': 'quiz', 'video-link-button': 'video' }[id])
+  }
+  $('#cancel-button button').onclick = () => { reset(); render() }
+  $('#submit-button button').onclick = () => {
+    if (!valid()) return
+    if (!S.sched) return submit(null)
+    const at = new Date(S.date); at.setHours(0, S.time, 0, 0)
+    if (at <= new Date()) return
+    submit(at)
+  }
+  $('#commentbox #option-menu yt-button-shape button').onclick = () => { if (!valid()) return; S.menu = !S.menu; popups() }
+  popups()
+}
+function updateButtons() {
+  if (!S.open && textOf()) S.open = true
+  const ok = valid()
+  for (const b of $$('#commentbox #submit-button button, #commentbox #option-menu yt-button-shape button')) {
+    b.disabled = !ok
+    b.setAttribute('aria-disabled', String(!ok))
+  }
+}
+function caretEnd() { const r = document.createRange(); r.selectNodeContents(window.CE); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r) }
+function mention() {
+  closeMention()
+  const m = /(^|\s)@(\w*)$/.exec(textOf())
+  if (!m) return
+  document.body.appendChild(h(`<yt-user-mention-suggestions-dropdown id="mention" role="listbox" aria-label="Mention suggestions" style="position:absolute;left:300px;top:${window.CE.getBoundingClientRect().bottom + scrollY}px;background:#282828;padding:8px"><div role="option">@BibleStoriies</div></yt-user-mention-suggestions-dropdown>`))
+}
+function closeMention() { const m = $('#mention'); if (m) m.remove() }
+function pick(m) {
+  S.open = true
+  if (m === 'video') { render(); return openVideo() }
+  S.mode = m
+  render()
+}
+// o chon file tao ra khi bam (trang that: tham do anh / anh cau tra loi khong co <input type=file> san)
+function chooseFile(cb) {
+  const f = document.createElement('input'); f.type = 'file'; f.accept = 'image/*'
+  f.onchange = () => cb(f.files[0])
+  f.click()
+}
+
+// ---- trinh soan theo loai (theo html/yt-11) ----
+function editor() {
+  const m = S.mode
+  const wrap = document.createElement('div')
+  if (m === 'image') {
+    const sel = S.images[S.images.length - 1]
+    wrap.appendChild(h(`<div id="image-select"><ytd-backstage-multi-image-select-renderer>
+      <div id="dropzone" ${S.images.length || S.uploading ? 'hidden' : ''}><div id="selection-cancel-button">${BTN('x1', 'Hủy đăng hình ảnh', '✕')}</div>
+        <span id="prompt">Kéo tối đa 10 bức ảnh/GIF vào đây, hoặc</span> <button id="select-button" type="button">chọn ảnh trong máy tính của bạn</button>
+        <input type="file" name="Filedata" multiple accept="image/*" aria-hidden="true" style="display:none">
+        <div class="small"><span id="aspect-ratio-message">Vui lòng tải ảnh có tỷ lệ trong khoảng từ 2:5 đến 5:2 lên.</span><span id="license-text">Chỉ chọn hình ảnh hoặc ảnh GIF mà bạn có quyền sử dụng</span><span id="error-message" ${S.error ? '' : 'hidden'}>${esc(S.error)}</span></div></div>
+      <div id="multi-image-container" ${S.images.length || S.uploading ? '' : 'hidden'}><div id="preview-cancel-button">${BTN('x2', 'Hủy đăng hình ảnh', '✕')}</div>
+        <div id="thumbnail-images-container"><div id="thumbnail-drag-drop-area">${S.images.map((src) => `<ytd-backstage-multi-image-thumbnail-renderer><div role="button"><img alt="" src="${src}"></div></ytd-backstage-multi-image-thumbnail-renderer>`).join('')}
+          ${S.uploading ? `<tp-yt-paper-spinner-lite aria-label="loading">⟳ ${S.uploading}</tp-yt-paper-spinner-lite>` : ''}</div>
+          <div id="add-image-button-container" ${S.images.length >= 10 ? 'hidden' : ''}><div id="add-image-button"><ytd-button-renderer><yt-button-shape><button title="" aria-label="">＋</button></yt-button-shape></ytd-button-renderer></div><input type="file" name="Filedata" accept="image/*" aria-hidden="true" style="display:none"></div></div>
+        <div id="preview">${sel ? `<img id="image-in-preview-clipper" alt="" src="${sel}">` : ''}<div><yt-button-renderer id="delete-button"><button aria-label="Xóa"><span role="text">Xóa</span></button></yt-button-renderer>
+          <yt-button-renderer id="edit-button"><button class="link" aria-label="Chỉnh sửa bản xem trước"><span role="text">Chỉnh sửa bản xem trước</span></button></yt-button-renderer></div></div></div>
+      ${S.images.length && S.error ? `<span id="error-message" style="color:#ff4e45">${esc(S.error)}</span>` : ''}
+    </ytd-backstage-multi-image-select-renderer></div>`))
+    setTimeout(() => {
+      for (const b of $$('[aria-label="Hủy đăng hình ảnh"]')) b.onclick = () => { S.mode = null; S.images = []; S.names = []; S.error = ''; render() }
+      for (const f of $$('#image-select input[type=file]')) f.onchange = () => addImages([...f.files])
+      $('#select-button').onclick = () => $('#dropzone input[type=file]').click()
+      const add = $('#add-image-button button'); if (add) add.onclick = () => $('#add-image-button-container input').click()
+      $('#delete-button button').onclick = () => { S.images.pop(); S.names.pop(); render() }
+    })
+  } else if (m === 'poll') {
+    wrap.appendChild(h(`<ytd-poll-attachment id="poll-attachment"><div id="poll-options">${S.options.map((o, i) => `<div class="poll-row"><yt-icon-button><button id="button" aria-label="Xóa tùy chọn" data-i="${i}">✕</button></yt-icon-button>
+      <tp-yt-paper-input maxlength="65" style="flex:1;display:flex"><tp-yt-iron-input style="flex:1;display:flex"><input placeholder="Thêm lựa chọn" maxlength="65" data-i="${i}" value="${esc(o)}"></tp-yt-iron-input><tp-yt-paper-input-char-counter class="counter"><span>${[...o].length}/65</span></tp-yt-paper-input-char-counter></tp-yt-paper-input></div>`).join('')}</div>
+      <div id="add-option" ${S.options.length >= 4 ? 'hidden' : ''}><ytd-button-renderer><button class="link" aria-label="Thêm lựa chọn khác"><span role="text">Thêm lựa chọn khác</span></button></ytd-button-renderer></div></ytd-poll-attachment>`))
+    setTimeout(() => {
+      for (const inp of $$('#poll-options input')) inp.oninput = () => { S.options[inp.dataset.i] = inp.value; inp.closest('.poll-row').querySelector('.counter span').textContent = `${[...inp.value].length}/65`; updateButtons() }
+      for (const b of $$('#poll-options [aria-label="Xóa tùy chọn"]')) b.onclick = () => { if (S.options.length > 2) { S.options.splice(b.dataset.i, 1); render() } }
+      $('#add-option button').onclick = () => { S.options.push(''); render() }
+    })
+  } else if (m === 'quiz') {
+    wrap.appendChild(h(`<ytd-backstage-quiz-editor-renderer id="quiz-attachment"><yt-posts-creation-options-editor-view-model><yt-posts-creation-options-view-model>
+      ${S.answers.map((a, i) => `<yt-posts-creation-option-view-model><div role="group"><button-view-model><button title="" aria-pressed="${S.right === i}" aria-label="${S.right === i ? 'Đã đánh dấu là chính xác' : 'Đánh dấu là câu trả lời đúng'}" data-i="${i}" class="chk">${S.right === i ? '●' : '○'}</button></button-view-model>
+        <text-field-view-model style="flex:1;display:flex"><textarea-shape style="flex:1;display:flex">${FIELD(`Câu trả lời ${i + 1}`, 0, a.t, 'ans')}</textarea-shape></text-field-view-model>${a.img ? `<img class="aimg" alt="" src="${a.img}">` : ''}
+        <button-view-model><button title="" aria-label="Thêm ảnh vào câu đố" data-i="${i}" class="ai">▣</button></button-view-model><button-view-model><button title="" aria-label="Xóa tùy chọn" data-i="${i}" class="del">🗑</button></button-view-model></div></yt-posts-creation-option-view-model>`).join('')}
+      ${S.answers.length < 4 ? '<button type="button" id="add-answer"><span><span>＋</span></span><span role="text"><span>Thêm câu trả lời</span></span></button>' : ''}
+      <div><text-field-view-model><textarea-shape>${FIELD('Thêm phần giải thích (không bắt buộc)', 0, S.expl, 'expl')}</textarea-shape></text-field-view-model></div>
+    </yt-posts-creation-options-view-model></yt-posts-creation-options-editor-view-model></ytd-backstage-quiz-editor-renderer>`))
+    setTimeout(() => {
+      for (const t of $$('#quiz-attachment textarea.ans')) t.oninput = () => { const i = $$('#quiz-attachment textarea.ans').indexOf(t); S.answers[i].t = t.value; t.parentElement.classList.toggle('filled', !!t.value); updateButtons() }
+      for (const b of $$('#quiz-attachment .chk')) b.onclick = () => { S.right = +b.dataset.i; render() }
+      for (const b of $$('#quiz-attachment .del')) b.onclick = () => { if (S.answers.length > 2) { S.answers.splice(b.dataset.i, 1); if (S.right >= S.answers.length) S.right = 0; render() } }
+      for (const b of $$('#quiz-attachment .ai')) b.onclick = () => chooseFile((file) => { S.answers[b.dataset.i].img = URL.createObjectURL(file); S.answers[b.dataset.i].name = file.name; render() })
+      if ($('#add-answer')) $('#add-answer').onclick = () => { S.answers.push({ t: '' }); render() }
+      $('#quiz-attachment textarea.expl').oninput = (e) => { S.expl = e.target.value; e.target.parentElement.classList.toggle('filled', !!e.target.value) }
+    })
+  } else if (m === 'image_poll') {
+    wrap.appendChild(h(`<ytd-backstage-image-poll-editor-renderer id="image-poll-attachment"><div>${S.ip.map((o, i) => `<div class="ip-row"><div class="ip-thumb">
+        <div ${o.img ? '' : 'hidden'}><ytd-backstage-multi-image-thumbnail-renderer><div role="button">${o.img ? `<img alt="" src="${o.img}">` : '<img alt="">'}</div></ytd-backstage-multi-image-thumbnail-renderer></div>
+        <div ${o.img ? 'hidden' : ''}><yt-icon-button><button id="button" class="ip-up" data-i="${i}">▣</button></yt-icon-button></div></div>
+      <tp-yt-paper-input-container style="flex:1;display:flex"><div id="labelAndInputContainer" style="flex:1;display:flex"><tp-yt-iron-autogrow-textarea maxlength="36" placeholder="Lựa chọn ${i + 1}" style="flex:1;display:flex"><div id="mirror" aria-hidden="true" hidden></div><textarea id="textarea" maxlength="36" placeholder="Lựa chọn ${i + 1}" data-i="${i}">${esc(o.t)}</textarea></tp-yt-iron-autogrow-textarea></div>
+        <tp-yt-paper-input-char-counter class="counter"><span>${[...o.t].length}/36</span></tp-yt-paper-input-char-counter></tp-yt-paper-input-container>
+      <yt-icon-button><button id="button" aria-label="Xóa tùy chọn" data-i="${i}" class="del">🗑</button></yt-icon-button></div>`).join('')}
+      <div class="two">${S.ip.length < 4 ? '<yt-button-renderer><button title="" class="link add" aria-label="Thêm lựa chọn" aria-disabled="false"><span role="text">Thêm lựa chọn</span></button></yt-button-renderer>' : ''}
+        <yt-button-renderer><button title="" aria-label="Đổi vị trí hình ảnh" ${S.ip.some((o) => o.img) ? '' : 'disabled="true" aria-disabled="true"'}><span role="text">Đổi vị trí hình ảnh</span></button></yt-button-renderer></div></div></ytd-backstage-image-poll-editor-renderer>`))
+    setTimeout(() => {
+      for (const t of $$('#image-poll-attachment textarea')) t.oninput = () => { S.ip[t.dataset.i].t = t.value; t.closest('tp-yt-paper-input-container').querySelector('.counter span').textContent = `${[...t.value].length}/36`; updateButtons() }
+      for (const b of $$('#image-poll-attachment .ip-up')) b.onclick = () => chooseFile((file) => setTimeout(() => { S.ip[b.dataset.i].img = URL.createObjectURL(file); S.ip[b.dataset.i].name = file.name; render() }, 200))
+      for (const b of $$('#image-poll-attachment .del')) b.onclick = () => { if (S.ip.length > 2) { S.ip.splice(b.dataset.i, 1); render() } }
+      const add = $('#image-poll-attachment .add'); if (add) add.onclick = () => { S.ip.push({ t: '' }); render() }
+    })
+  } else if (m === 'video' && S.video) {
+    wrap.appendChild(h(`<ytd-backstage-video-link-attachment id="video-link-attachment"><div id="video-preview" style="flex:1"><a href="/watch?v=${S.video[0]}" style="color:#fff">${esc(S.video[1])}</a><div style="color:#aaa">Dark Bible Stories</div></div>
+      <div id="cancel-button"><button aria-label="Xóa video">✕</button></div></ytd-backstage-video-link-attachment>`))
+    setTimeout(() => { $('#video-link-attachment #cancel-button button').onclick = () => { S.video = null; S.mode = null; render() } })
+  }
+  return wrap
+}
+function addImages(files) {
+  S.error = ''
+  if (S.images.length + files.length > 10) { S.error = 'Bạn chỉ có thể thêm tối đa 10 hình ảnh.'; files = files.slice(0, 10 - S.images.length) } // DOAN
+  S.uploading += files.length
+  render()
+  files.forEach((file, i) => setTimeout(() => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = img.onerror = () => {
+      S.uploading--
+      const r = img.naturalWidth / img.naturalHeight
+      if (!img.naturalWidth || r < 0.4 || r > 2.5) S.error = `Không tải được "${file.name}": tỷ lệ ảnh phải trong khoảng từ 2:5 đến 5:2.` // DOAN
+      else { S.images.push(url); S.names.push(file.name) }
+      render()
+    }
+    img.src = url
+  }, 250 + i * 120)) // tai len cham, tung anh mot
+}
+
+// ---- hop chon video (DOAN: chua co HTML; chu theo video B) ----
+function openVideo() {
+  const bg = h(`<div class="modal-bg"><tp-yt-paper-dialog class="modal" role="dialog" aria-label="Thêm một video YouTube hiện có">
+    <div class="mh"><span style="color:#f00">▶</span><h2 style="margin:0;font-size:20px;font-weight:400">Thêm một video YouTube hiện có</h2><input id="vsearch" placeholder="Tìm kiếm trên toàn bộ YouTube hoặc dán URL"><button aria-label="Đóng" id="vclose">✕</button></div>
+    <div id="vbody"></div></tp-yt-paper-dialog></div>`)
+  document.body.appendChild(bg)
+  const list = (title, rows) => {
+    $('#vbody').innerHTML = `<div style="padding:0 24px;font-size:12px">${title}</div>` + rows.map(([id, t, v]) => `<div class="vrow" data-id="${id}"><a href="/watch?v=${id}" tabindex="-1" class="th"></a><div><div style="font-weight:500">${esc(t)}</div><div style="font-size:12px">Dark Bible Stories • ${v} lượt xem</div><div style="font-size:12px;color:#555">Donate to Us: https://ko-fi.com/dark_team_official</div></div></div>`).join('')
+    for (const r of $$('.vrow')) r.onclick = (e) => { e.preventDefault(); S.video = rows.find((x) => x[0] === r.dataset.id); S.mode = 'video'; bg.remove(); log({ type: 'video-picked', id: S.video[0] }); render() }
+  }
+  setTimeout(() => list('Kênh của tôi', MY_VIDEOS), 300)
+  $('#vclose').onclick = () => { bg.remove(); render() }
+  $('#vsearch').onkeydown = (e) => {
+    if (e.key !== 'Enter') return
+    const q = e.target.value.trim()
+    $('#vbody').innerHTML = '<div style="padding:24px">⟳</div>'
+    const id = (/(?:v=|youtu\.be\/|shorts\/)([\w-]{11})/.exec(q) || [])[1] || (/^[\w-]{11}$/.test(q) ? q : '')
+    setTimeout(() => {
+      const mine = MY_VIDEOS.find((v) => v[0] === id)
+      list('Kết quả tìm kiếm', id ? [mine || [id, `Video ${id}`, '12']] : MY_VIDEOS.filter((v) => v[1].toLowerCase().includes(q.toLowerCase())))
+    }, 500)
+  }
+}
+
+// ---- len lich (html/yt-12 + video C): #scheduling-panel > ytd-date-time-picker-renderer ----
+function schedPanel() {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  let grid = ''
+  for (let k = 0; k < 3; k++) {
+    const first = new Date(today.getFullYear(), today.getMonth() + k, 1)
+    grid += `<div class="mon">${MON[first.getMonth()].toUpperCase()} ${first.getFullYear()}</div>` + '<span></span>'.repeat(first.getDay())
+    for (let d = new Date(first); d.getMonth() === first.getMonth(); d.setDate(d.getDate() + 1)) {
+      grid += `<button data-d="${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}" ${d < today ? 'disabled' : ''} class="${+d === +S.date ? 'sel' : ''}">${d.getDate()}</button>`
+    }
+  }
+  let times = ''
+  for (let m = 0; m < 1440; m += 15) times += `<tp-yt-paper-item role="option" aria-selected="${m === S.time}" data-m="${m}">${fmtTime(m)}</tp-yt-paper-item>`
+  const p = h(`<ytd-date-time-picker-renderer><div id="cancel-button-wrapper"><ytd-button-renderer><yt-button-shape><button title="" aria-label="Hủy">✕</button></yt-button-shape></ytd-button-renderer></div>
+    <div id="hint" role="heading"><yt-formatted-string>Chọn ngày và giờ để xuất bản bài đăng này</yt-formatted-string></div>
+    <div id="picker-component">
+      <ytd-calendar-date-picker style="position:relative"><tp-yt-paper-menu-button role="group"><div id="trigger"><tp-yt-paper-button id="date-picker" role="button" tabindex="0"><div id="date-label-text">${fmtDate(S.date)}</div></tp-yt-paper-button></div></tp-yt-paper-menu-button>
+        <tp-yt-paper-dialog id="calendar-dialog" role="dialog" ${S.pop === 'date' ? '' : 'hidden aria-hidden="true"'}><div id="control-area"><form id="date-input" onsubmit="return false"><tp-yt-paper-input-container aria-label="Enter date"><tp-yt-iron-input><input id="textbox" value="${fmtDate(S.date)}"></tp-yt-iron-input></tp-yt-paper-input-container></form>
+          <div id="month-controller"><yt-icon-button id="prev-month"><button id="button" aria-label="Tháng trước">‹</button></yt-icon-button><yt-icon-button id="next-month"><button id="button" aria-label="Tháng tiếp theo">›</button></yt-icon-button></div></div>
+          <div class="cal"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>${grid}</div></tp-yt-paper-dialog></ytd-calendar-date-picker>
+      <div style="position:relative"><tp-yt-paper-menu-button role="group"><div id="trigger"><tp-yt-paper-button id="time-picker" role="button" tabindex="0"><div id="time-label-text">${fmtTime(S.time)}</div></tp-yt-paper-button></div>
+        <tp-yt-iron-dropdown id="dropdown" ${S.pop === 'time' ? '' : 'hidden aria-hidden="true"'}><div id="contentWrapper"><tp-yt-paper-listbox id="time-listbox" role="listbox" class="dropdown" style="width:130px">${times}</tp-yt-paper-listbox></div></tp-yt-iron-dropdown></tp-yt-paper-menu-button></div>
+      <div style="position:relative"><tp-yt-paper-menu-button role="group"><div id="trigger"><tp-yt-paper-button id="timezone-picker" role="button" tabindex="0" style="min-width:220px"><div id="timezone-label-text">(GMT+0700) Giờ địa phương</div></tp-yt-paper-button></div>
+        <tp-yt-iron-dropdown id="dropdown" ${S.pop === 'tz' ? '' : 'hidden aria-hidden="true"'}><div id="contentWrapper"><tp-yt-paper-listbox id="timezone-listbox" role="listbox" class="dropdown">${['(GMT+0700) Giờ địa phương', 'Phoenix (GMT-7)', 'Chicago (GMT-5)', 'London (GMT+0)', 'Tokyo (GMT+9)'].map((t) => `<tp-yt-paper-item role="option">${t}</tp-yt-paper-item>`).join('')}</tp-yt-paper-listbox></div></tp-yt-iron-dropdown></tp-yt-paper-menu-button></div>
+    </div></ytd-date-time-picker-renderer>`)
+  setTimeout(() => {
+    $('#cancel-button-wrapper button').onclick = () => { S.sched = false; S.pop = ''; render() }
+    $('#date-picker').onclick = () => { S.pop = S.pop === 'date' ? '' : 'date'; render(); if (S.pop === 'date') { const i = $('#textbox'); i.focus(); i.select() } }
+    $('#time-picker').onclick = () => { S.pop = S.pop === 'time' ? '' : 'time'; render() }
+    $('#timezone-picker').onclick = () => { S.pop = S.pop === 'tz' ? '' : 'tz'; render() }
+    const inp = $('#textbox')
+    inp.onkeydown = (e) => {
+      if (e.key !== 'Enter') return
+      e.preventDefault()
+      const m = /^([A-Za-z]{3})\w*\s+(\d{1,2}),?\s+(\d{4})$/.exec(inp.value.trim())
+      const mi = m ? MON.findIndex((x) => x.toLowerCase() === m[1].toLowerCase()) : -1
+      const d = mi >= 0 ? new Date(+m[3], mi, +m[2]) : null
+      if (!d || d.getDate() !== +m[2] || d < today) { inp.classList.add('bad'); return }
+      S.date = d; S.pop = ''; render()
+    }
+    for (const b of $$('.cal [data-d]')) b.onclick = () => { const [y, mo, d] = b.dataset.d.split('-'); S.date = new Date(+y, mo - 1, +d); S.pop = ''; render() }
+    for (const o of $$('#time-listbox [role=option]')) o.onclick = () => { S.time = +o.dataset.m; S.pop = ''; render() }
+    for (const o of $$('#timezone-listbox [role=option]')) o.onclick = () => { S.pop = ''; render() }
+  })
+  return p
+}
+// menu mui ten (ytd-popup-container > ytd-menu-popup-renderer, html/yt-12)
+function popups() {
+  const L = $('#popups')
+  L.innerHTML = ''
+  const more = $('#commentbox #option-menu yt-button-shape button')
+  if (!S.menu || !more) return
+  const r = more.getBoundingClientRect()
+  L.appendChild(h(`<tp-yt-iron-dropdown><div id="contentWrapper"><ytd-menu-popup-renderer role="menu" aria-label="Danh sách các hành động trong menu" style="left:${r.left - 60 + scrollX}px;top:${r.bottom + 8 + scrollY}px">
+    <tp-yt-paper-listbox id="items" role="none"><ytd-menu-service-item-renderer role="menuitem"><tp-yt-paper-item role="menuitem">🕒 <div><yt-formatted-string>Lên lịch đăng bài</yt-formatted-string></div></tp-yt-paper-item></ytd-menu-service-item-renderer></tp-yt-paper-listbox></ytd-menu-popup-renderer></div></tp-yt-iron-dropdown>`))
+  $('#popups tp-yt-paper-item').onclick = () => { S.menu = false; S.sched = true; render() }
+}
+
+// ---- dang / len lich ----
+async function submit(at) {
+  const payload = {
+    type: S.mode || 'text', text: textOf(), images: S.names, options: S.mode === 'poll' ? S.options : S.mode === 'image_poll' ? S.ip.map((o) => ({ text: o.t, image: o.name || '' })) : [],
+    answers: S.mode === 'quiz' ? S.answers.map((a, i) => ({ text: a.t, image: a.name || '', correct: i === S.right })) : [], explanation: S.mode === 'quiz' ? S.expl : '',
+    video: S.video ? S.video[0] : '', scheduledAt: at ? `${at.getFullYear()}-${p2(at.getMonth() + 1)}-${p2(at.getDate())}T${p2(at.getHours())}:${p2(at.getMinutes())}` : null,
+  }
+  S.menu = false; popups()
+  $('#composer-slot').innerHTML = '<div class="spinner"><tp-yt-paper-spinner-lite aria-label="loading">⟳</tp-yt-paper-spinner-lite></div>' // video C: vong xoay ~3 giay
+  window.CE = null
+  await fetch('/yt/__posts/add', { method: 'POST', body: JSON.stringify(payload) })
+  setTimeout(() => {
+    reset(); render()
+    toast(at ? 'Đã lên lịch đăng bài của bạn' : 'Đã đăng bài đăng') // lich: theo video C; dang ngay: DOAN
+    loadList()
+  }, 900)
+}
+function toast(t) { const el = h(`<tp-yt-paper-toast role="alert"><yt-notification-action-renderer><span id="text">${t}</span></yt-notification-action-renderer></tp-yt-paper-toast>`); document.body.appendChild(el); setTimeout(() => el.remove(), 4000) }
+
+// ---- tab DA DANG / DA LEN LICH (html/yt-11: tp-yt-paper-tab; URL ?pvf=CAE%253D theo video C) ----
+const tabOf = () => (/pvf=CAE/.test(location.search) ? 'sched' : /pvf=CAI/.test(location.search) ? 'arch' : 'pub')
+function fmtSched(s) { const [d, t] = s.split('T'); const [y, mo, da] = d.split('-'); return `${t} ${+da} thg ${+mo}, ${y}` }
+async function loadList() {
+  const tab = tabOf()
+  for (const t of $$('tp-yt-paper-tab')) t.setAttribute('aria-selected', String(t.dataset.tab === tab))
+  $('#contents').innerHTML = ''
+  $('#zero-state-message').hidden = true
+  $('#scheduling-zero-state-message').hidden = true
+  $('#spinner-container').hidden = false
+  const rows = tab === 'arch' ? [] : await (await fetch(`/yt/__posts/list?tab=${tab}`)).json()
+  await new Promise((r) => setTimeout(r, 350)) // danh sach hien cham
+  $('#spinner-container').hidden = true
+  if (!rows.length) { $(tab === 'sched' ? '#scheduling-zero-state-message' : '#zero-state-message').hidden = false; return }
+  $('#contents').innerHTML = rows.map((p) => `<ytd-backstage-post-thread-renderer><ytd-backstage-post-renderer><img alt="" src="${AV}"><div style="flex:1">
+    <div id="header"><a id="author-text" style="color:#fff;font-weight:500">Dark Bible Stories</a> &nbsp;${p.scheduledAt ? `<span class="sched-line">Đã lên lịch đăng vào ${fmtSched(p.scheduledAt)} (giờ địa phương)</span>` : `<yt-formatted-string id="published-time-text"><a href="/yt/post/${p.id}">vừa xong</a></yt-formatted-string>`}</div>
+    <yt-formatted-string id="content-text">${esc(p.text)}</yt-formatted-string>
+    ${(p.options || []).map((o, i) => `<div class="po">${String.fromCharCode(65 + i)}. ${esc(o.text || o)}</div>`).join('')}
+    ${(p.answers || []).map((o, i) => `<div class="po">${String.fromCharCode(65 + i)}. ${esc(o.text)}</div>`).join('')}
+    ${p.images && p.images.length ? `<div class="sched-line">${p.images.length} ảnh</div>` : ''}
+    ${p.video ? `<a class="sched-line" href="/watch?v=${p.video}">youtube.com/watch?v=${p.video}</a>` : ''}
+  </div><button aria-label="Menu tác vụ">⋮</button></ytd-backstage-post-renderer></ytd-backstage-post-thread-renderer>`).join('')
+}
+for (const t of $$('tp-yt-paper-tab')) t.onclick = () => {
+  history.pushState(null, '', location.pathname + ({ pub: '', sched: '?pvf=CAE%253D', arch: '?pvf=CAI%253D' })[t.dataset.tab])
+  loadList()
+}
+addEventListener('popstate', loadList)
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMention(); if (S.menu) { S.menu = false; popups() } } })
+document.addEventListener('mousedown', (e) => { if (S.menu && !e.target.closest('#popups, #option-menu')) { S.menu = false; popups() } })
+
+reset()
+setTimeout(render, 400) // khung soan hien cham
+loadList()
+</script>
+</body></html>

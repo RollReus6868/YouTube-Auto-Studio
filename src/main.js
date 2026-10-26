@@ -114,7 +114,12 @@ function runScan(quiet = false) {
         errors: problems, warnings: v.warnings.concat(p.warning ? [p.warning] : []),
       }
     }),
-    posts: r.posts.map((p) => ({ id: p.id, dir: p.dir, folder: p.folder, name: p.name, date: p.date, time: p.time, text: p.text, images: p.images.map(fileUrl), errors: p.errors, warnings: p.warnings })),
+    posts: r.posts.map((p) => ({
+      id: p.id, dir: p.dir, folder: p.folder, name: p.name, date: p.date, time: p.time, text: p.text, images: p.images.map(fileUrl), errors: p.errors, warnings: p.warnings,
+      type: p.type, when: p.when, channel: p.channel, video: p.video, explanation: p.explanation,
+      options: p.options.map((o) => ({ text: o.text, image: o.image ? fileUrl(o.image) : '' })),
+      answers: p.answers.map((a) => ({ text: a.text, image: a.image ? fileUrl(a.image) : '', correct: a.correct })),
+    })),
   }
   if (!quiet) {
     if (r.errors.length) log('warn', r.errors[0])
@@ -577,7 +582,7 @@ const ctx = {
   studio: { use: (partition, url) => useStudio(partition, url), wc: () => studio && studio.webContents, home: STUDIO_URL },
   get desk() { return desk }, // CommentDesk chung (binh luan API + hop thu Studio), co sau app.whenReady
 }
-const FEATURES = ['accounts', 'inbox', 'optimize']
+const FEATURES = ['accounts', 'inbox', 'optimize', 'posts']
 const started = []
 for (const name of FEATURES) {
   const f = require(`./features/${name}`)(ctx)

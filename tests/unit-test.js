@@ -73,6 +73,122 @@ test('quet thu muc', () => {
   assert.deepEqual(r.posts.map((p) => [p.name, p.text, p.images.length, p.errors.length]), [['bai', 'Xin chào mọi người', 1, 0], ['trong', '', 0, 1]])
 })
 
+// dau file PNG gia: chi can 24 byte dau de doc kich thuoc
+const png = (w, h) => { const b = Buffer.alloc(33); b.writeUInt32BE(0x89504e47, 0); b.writeUInt32BE(0x0d0a1a0a, 4); b.writeUInt32BE(13, 8); b.write('IHDR', 12); b.writeUInt32BE(w, 16); b.writeUInt32BE(h, 20); return b }
+
+test('bai dang: phan dau noidung.txt', () => {
+  const a = sc.parsePostText('﻿Loại: thăm dò ảnh   # chu thich\r\nGiờ đăng: 2030-10-30 08:00\r\nKênh: @DarkGrace6868\r\n---\r\nBạn thích bìa nào?\r\nDòng 2: có dấu hai chấm')
+  assert.deepEqual([a.type, +a.when, a.channel, a.body, a.warnings], ['image_poll', +new Date(2030, 9, 30, 8), '@DarkGrace6868', 'Bạn thích bìa nào?\nDòng 2: có dấu hai chấm', []])
+  // khong co phan dau: ca file la than bai (ke ca dong "---" va "Lich: ...")
+  const b = sc.parsePostText('Lịch tuần này: thứ 3\n---\nhết')
+  assert.deepEqual([b.type, b.when, b.body], ['', undefined, 'Lịch tuần này: thứ 3\n---\nhết'])
+  // khong co "---": chi nhan dong dau hop le
+  const c = sc.parsePostText('Video: https://youtu.be/AbCdEfGhIjK\nXem tập mới nhé')
+  assert.deepEqual([c.video, c.body], ['https://youtu.be/AbCdEfGhIjK', 'Xem tập mới nhé'])
+  assert.equal(sc.parsePostText('Video: tập mới ra lò!\nhay lắm').body, 'Video: tập mới ra lò!\nhay lắm')
+  const d = sc.parsePostText('Loại: bài hát\nGiờ đăng:\n---\nx')
+  assert.equal(d.when, null, 'gio dang trong = dang ngay')
+  assert.match(d.warnings[0], /không hiểu loại bài/)
+  assert.deepEqual(['https://www.youtube.com/watch?v=AbCdEfGhIjK&t=3', 'youtu.be/AbCdEfGhIjK?si=x', 'https://youtube.com/shorts/AbCdEfGhIjK', 'AbCdEfGhIjK', 'abc'].map(sc.videoId), ['AbCdEfGhIjK', 'AbCdEfGhIjK', 'AbCdEfGhIjK', 'AbCdEfGhIjK', ''])
+})
+
+test('bai dang: kich thuoc anh', () => {
+  const dir = tmp()
+  write(path.join(dir, 'a.png'), png(1280, 720))
+  const gif = Buffer.alloc(16); gif.write('GIF89a'); gif.writeUInt16LE(300, 6); gif.writeUInt16LE(200, 8)
+  write(path.join(dir, 'b.gif'), gif)
+  // JPEG: SOI, APP0 (16 byte), SOF0 (cao 600, rong 800)
+  const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, ...Array(14).fill(0), 0xff, 0xc0, 0, 17, 8, 0x02, 0x58, 0x03, 0x20, 3, ...Array(12).fill(0)])
+  write(path.join(dir, 'c.jpg'), jpg)
+  write(path.join(dir, 'd.jpg'), 'khong phai anh')
+  assert.deepEqual(['a.png', 'b.gif', 'c.jpg', 'd.jpg'].map((f) => sc.imageSize(path.join(dir, f))), [{ w: 1280, h: 720 }, { w: 300, h: 200 }, { w: 800, h: 600 }, null])
+})
+
+test('bai dang: 6 loai trong thu muc posts', () => {
+  const root = tmp()
+  const P = (dir, f, data) => write(path.join(root, 'posts', dir, f), data)
+  P('2030-10-29_19h00_bai-anh', 'noidung.txt', 'Ảnh mới')
+  P('2030-10-29_19h00_bai-anh', '1.jpg', png(1000, 1000))
+  P('2030-10-29_19h00_bai-anh', '2.png', png(3000, 500)) // 6:1 -> canh bao ty le
+  P('2030-10-29_bai-chu', 'noidung.txt', 'Chỉ có chữ')
+  P('2030-10-30_08h00_tham-do', 'noidung.txt', 'Bạn thích bìa nào?')
+  P('2030-10-30_08h00_tham-do', 'binhchon.txt', '# lua chon\nBìa A\n\nBìa B   # chu thich\nBìa C\n')
+  P('2030-10-30_tham-do-anh', 'noidung.txt', 'Chọn ảnh')
+  P('2030-10-30_tham-do-anh', 'binhchon.txt', 'Bìa A\nBìa B\nanh-c.jpg | Bìa C')
+  P('2030-10-30_tham-do-anh', '2.jpg', png(500, 500))
+  P('2030-10-30_tham-do-anh', '1.jpg', png(500, 500))
+  P('2030-10-30_tham-do-anh', 'anh-c.jpg', png(500, 500))
+  P('2030-10-31_do-vui', 'noidung.txt', 'Ai dẫn dân ra khỏi Ai Cập?')
+  P('2030-10-31_do-vui', 'cauhoi.txt', '* Môi-se\nÁp-ra-ham\nĐa-vít | 3.jpg\nGiải thích: Môi-se dẫn dân Israel.\n')
+  P('2030-10-31_do-vui', '3.jpg', png(400, 400))
+  P('2030-11-01_gioi-thieu-video', 'noidung.txt', 'Loại: video\nVideo: https://youtu.be/AbCdEfGhIjK\nKênh: Dark Grace\n---\nXem tập mới!')
+  const r = sc.scan(root)
+  const by = Object.fromEntries(r.posts.map((p) => [p.dir.replace(/^[\d-]+_(\d+h\d+_)?/, ''), p]))
+  assert.deepEqual(Object.keys(by).sort(), ['bai-anh', 'bai-chu', 'do-vui', 'gioi-thieu-video', 'tham-do', 'tham-do-anh'])
+  const img = by['bai-anh']
+  assert.deepEqual([img.type, img.when, img.images.length, img.errors], ['image', new Date(2030, 9, 29, 19).toISOString(), 2, []])
+  assert.match(img.warnings.join(), /2\.png.*3000x500.*2:5 đến 5:2/)
+  assert.deepEqual([by['bai-chu'].type, by['bai-chu'].when, by['bai-chu'].text], ['text', null, 'Chỉ có chữ'])
+  const poll = by['tham-do']
+  assert.deepEqual([poll.type, poll.text, poll.options.map((o) => o.text), poll.errors, poll.warnings], ['poll', 'Bạn thích bìa nào?', ['Bìa A', 'Bìa B', 'Bìa C'], [], []])
+  const ip = by['tham-do-anh']
+  assert.equal(ip.type, 'image_poll')
+  assert.deepEqual(ip.options.map((o) => [o.text, path.basename(o.image)]), [['Bìa A', '1.jpg'], ['Bìa B', '2.jpg'], ['Bìa C', 'anh-c.jpg']])
+  assert.deepEqual([ip.errors, ip.warnings], [[], []])
+  const quiz = by['do-vui']
+  assert.equal(quiz.type, 'quiz')
+  assert.equal(quiz.text, 'Ai dẫn dân ra khỏi Ai Cập?', 'cauhoi.txt khong bi doc lam than bai')
+  assert.deepEqual(quiz.answers.map((a) => [a.text, a.correct, path.basename(a.image || '')]), [['Môi-se', true, ''], ['Áp-ra-ham', false, ''], ['Đa-vít', false, '3.jpg']])
+  assert.deepEqual([quiz.explanation, quiz.errors, quiz.warnings], ['Môi-se dẫn dân Israel.', [], []])
+  const vid = by['gioi-thieu-video']
+  assert.deepEqual([vid.type, vid.video, vid.channel, vid.text, vid.errors], ['video', 'AbCdEfGhIjK', 'Dark Grace', 'Xem tập mới!', []])
+})
+
+test('bai dang: loi va canh bao', () => {
+  const root = tmp()
+  const P = (dir, f, data = 'x') => write(path.join(root, 'posts', dir, f), data)
+  for (let i = 1; i <= 11; i++) P('qua-nhieu-anh', `${i}.jpg`)
+  P('chi-co-binhchon', 'binhchon.txt', 'A\nB') // khong co noidung.txt: binhchon khong thanh than bai
+  P('thieu-lua-chon', 'noidung.txt', 'Hỏi?')
+  P('thieu-lua-chon', 'binhchon.txt', 'Chỉ một')
+  P('nam-lua-chon', 'binhchon.txt', 'a\nb\nc\nd\ne')
+  P('lua-chon-dai', 'binhchon.txt', `${'x'.repeat(66)}\nngắn`)
+  P('anh-dai', 'binhchon.txt', `${'y'.repeat(37)}\nngắn`)
+  P('anh-dai', '1.jpg'); P('anh-dai', '2.jpg')
+  P('hai-dap-an', 'cauhoi.txt', '* a\n* b')
+  P('khong-dap-an', 'cauhoi.txt', 'a\nb')
+  P('tron-loai', 'noidung.txt', 'Video: https://youtu.be/AbCdEfGhIjK\n---\nx')
+  P('tron-loai', 'binhchon.txt', 'a\nb')
+  P('video-sai', 'noidung.txt', 'Loại: video\nVideo: abc\n---\nx')
+  P('anh-thieu', 'noidung.txt', 'x')
+  P('anh-thieu', 'cauhoi.txt', '* a | khong-co.jpg\nb')
+  P('2020-01-01_08h00_da-qua', 'noidung.txt', 'Cũ')
+  P('loai-anh-khong-anh', 'noidung.txt', 'Loại: ảnh\n---\nx')
+  P('2030-01-01_19h50_lam-tron', 'noidung.txt', 'x')
+  const r = sc.scan(root)
+  const by = Object.fromEntries(r.posts.map((p) => [p.name.replace(/ /g, '-'), p]))
+  assert.match(by['qua-nhieu-anh'].errors.join(), /11 ảnh.*tối đa 10/)
+  assert.deepEqual([by['chi-co-binhchon'].type, by['chi-co-binhchon'].text, by['chi-co-binhchon'].errors], ['poll', '', []])
+  assert.match(by['chi-co-binhchon'].warnings.join(), /Chưa có câu hỏi/)
+  assert.match(by['thieu-lua-chon'].errors.join(), /ít nhất 2/)
+  assert.match(by['nam-lua-chon'].errors.join(), /tối đa 4/)
+  assert.match(by['lua-chon-dai'].errors.join(), /66 ký tự, tối đa 65/)
+  assert.match(by['anh-dai'].errors.join(), /37 ký tự, tối đa 36/)
+  assert.match(by['hai-dap-an'].errors.join(), /2 câu đánh dấu \*/)
+  assert.match(by['khong-dap-an'].errors.join(), /chưa đánh dấu \*/)
+  assert.match(by['tron-loai'].errors.join(), /một loại.*Video: và binhchon\.txt/)
+  assert.match(by['video-sai'].errors.join(), /Không hiểu video "abc"/)
+  assert.match(by['anh-thieu'].errors.join(), /Không thấy ảnh "khong-co\.jpg"/)
+  assert.deepEqual([by['da-qua'].when, by['da-qua'].errors], [null, []])
+  assert.match(by['da-qua'].warnings.join(), /đã qua, tool sẽ đăng ngay/)
+  assert.match(by['loai-anh-khong-anh'].errors.join(), /không có ảnh/)
+  assert.equal(by['lam-tron'].when, new Date(2030, 0, 1, 20, 0).toISOString())
+  assert.match(by['lam-tron'].warnings.join(), /19:50 được làm tròn thành 20:00/)
+  // HUONG-DAN.txt co phan bai dang
+  sc.createSkeleton(root)
+  assert.match(fs.readFileSync(path.join(root, 'HUONG-DAN.txt'), 'utf8'), /cauhoi\.txt[\s\S]*Kênh: @tenkenh/)
+})
+
 test('mau tieu de / mo ta', () => {
   const preset = { ...md.defaultPreset(), title: '{ten_video} | Tập {so_tap}', description: '{tieu_de}\nNgày {ngay}\n{hashtag}\n{khach_moi}', tags: ['phim hay', 'review'] }
   const item = { name: 'Bí ẩn rừng sâu', episode: '3', info: { vars: { khach_moi: 'Lan' } }, thumbnail: '/t.jpg' }
