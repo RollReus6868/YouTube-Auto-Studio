@@ -1,0 +1,141 @@
+<!doctype html><meta charset="utf-8"><title>YouTube</title>
+<!-- Gia lap trang xem video (frame f039-f047): nut Thich, phan binh luan chi tai khi cuon xuong,
+     o "Them binh luan…", menu ⋮ cua binh luan (Ghim / Chinh sua / Xoa), hop thoai "Ghim binh luan nay?",
+     thong bao "Da ghim binh luan". Binh luan + luot thich luu o localStorage (lan mo sau van con).
+     localStorage 'opt-nopin' = '1': menu khong co "Ghim" (de thu truong hop ghim loi). -->
+<style>
+  body { margin: 0; font: 14px Roboto, Arial, sans-serif; background: #0f0f0f; color: #f1f1f1 }
+  header { height: 56px; display: flex; align-items: center; padding: 0 16px; gap: 16px }
+  main { display: grid; grid-template-columns: 860px 360px; gap: 24px; padding: 0 24px }
+  .player { height: 480px; background: #222 }
+  h1 { font-size: 20px }
+  .bar { display: flex; align-items: center; gap: 12px }
+  button { background: #272727; color: #f1f1f1; border: 0; border-radius: 18px; padding: 8px 14px; cursor: pointer }
+  button[aria-pressed=true] { background: #f1f1f1; color: #0f0f0f }
+  button[aria-disabled=true] { opacity: .4 }
+  .side div { height: 120px; background: #222; margin-bottom: 8px }
+  #simplebox-placeholder { border-bottom: 1px solid #555; padding: 6px 0; color: #aaa; cursor: text }
+  #contenteditable-root { border-bottom: 2px solid #fff; padding: 6px 0; min-height: 20px }
+  ytd-comment-thread-renderer { display: block; margin: 16px 0; position: relative }
+  #author-text { background: #333; border-radius: 10px; padding: 1px 6px; font-size: 12px }
+  [role=menu] { position: absolute; right: 0; top: 30px; background: #282828; border-radius: 8px; padding: 8px 0; z-index: 10 }
+  [role=menuitem] { padding: 8px 24px; cursor: pointer }
+  .bg { position: fixed; inset: 0; background: #0008; z-index: 20 }
+  [role=dialog] { position: fixed; left: 440px; top: 330px; width: 380px; background: #212121; padding: 16px; border-radius: 12px; z-index: 30 }
+  .toast { position: fixed; left: 12px; bottom: 24px; background: #f1f1f1; color: #0f0f0f; padding: 12px 16px; border-radius: 6px; z-index: 40 }
+</style>
+<script src="/__file/optimize/data.js"></script>
+<header><b>▶ YouTube</b><input placeholder="Tìm kiếm" style="width:480px"></header>
+<main>
+  <div>
+    <div class="player"></div>
+    <h1><span id="video-title"></span></h1>
+    <div class="bar"><b>Dark Bible Study</b><button>Số liệu phân tích</button><button>Chỉnh sửa video</button><span style="flex:1"></span>
+      <button id="like" aria-pressed="false"></button><button aria-label="Không thích video này">👎</button><button>Chia sẻ</button></div>
+    <p class="desc"></p>
+    <div id="comments" style="min-height:900px"></div>
+  </div>
+  <div class="side"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div>
+</main>
+<script>
+const id = new URLSearchParams(location.search).get('v')
+const video = OPT.videoOf(id)
+const CK = 'opt-comments-' + id, LK = 'opt-like-' + id
+const me = OPT.channel.handle
+let comments = OPT.load(CK, [])
+let liked = OPT.load(LK, false)
+const $ = (s, r = document) => r.querySelector(s)
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+$('#video-title').textContent = video.title
+$('.desc').textContent = `${video.views} lượt xem · ${video.title}`
+
+function paintLike() {
+  const n = 2 + (liked ? 1 : 0)
+  const b = $('#like')
+  b.setAttribute('aria-pressed', String(liked))
+  b.setAttribute('aria-label', `Thích video này cùng với ${liked ? 2 : n} người khác`)
+  b.textContent = `👍 ${n}`
+}
+$('#like').onclick = () => { liked = !liked; OPT.save(LK, liked); OPT.log({ type: 'like', id, liked }); paintLike() }
+paintLike()
+
+function closeMenus() { for (const m of document.querySelectorAll('[role=menu]')) m.remove() }
+function renderComments() {
+  const box = $('#comments')
+  const list = [...comments].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0))
+  box.innerHTML = `<div class="bar"><b>${comments.length} bình luận</b><span>Sắp xếp theo</span></div>
+    <div id="simplebox"><div id="simplebox-placeholder" role="button">Thêm bình luận…</div></div>` +
+    list.map((c) => `<ytd-comment-thread-renderer data-i="${comments.indexOf(c)}">
+      ${c.pinned ? `<div id="pinned-comment-badge">📌 ${esc(me)} đã ghim</div>` : ''}
+      <a id="author-text">${esc(c.author)}</a> <span class="sub">${c.at || '1 ngày trước'}</span>
+      <div id="content-text">${esc(c.text)}</div>
+      <div><button aria-label="Thích">👍</button> <button>Phản hồi</button></div>
+      <button class="menu" aria-label="Tác vụ" style="position:absolute;right:0;top:0">⋮</button></ytd-comment-thread-renderer>`).join('')
+  $('#simplebox-placeholder').onclick = openBox
+  for (const t of box.querySelectorAll('ytd-comment-thread-renderer')) t.querySelector('.menu').onclick = (e) => { e.stopPropagation(); menu(t, +t.dataset.i) }
+}
+
+function openBox() {
+  const sb = $('#simplebox')
+  sb.innerHTML = `<div id="contenteditable-root" contenteditable="true" aria-label="Thêm bình luận…"></div>
+    <div class="bar" style="justify-content:flex-end"><button id="cancel-button">Hủy</button><button id="submit-button" aria-disabled="true">Bình luận</button></div>`
+  const ed = $('#contenteditable-root')
+  ed.focus()
+  ed.addEventListener('input', () => $('#submit-button').setAttribute('aria-disabled', String(!ed.innerText.trim())))
+  $('#cancel-button').onclick = renderComments
+  $('#submit-button').onclick = () => {
+    if ($('#submit-button').getAttribute('aria-disabled') === 'true') return
+    const text = ed.innerText.trim()
+    $('#submit-button').setAttribute('aria-disabled', 'true')
+    setTimeout(() => {
+      comments.unshift({ author: me, text, at: '0 giây trước', pinned: false })
+      OPT.save(CK, comments)
+      OPT.log({ type: 'comment', id, text })
+      renderComments()
+    }, 800) // binh luan hien tre
+  }
+}
+
+function menu(thread, i) {
+  closeMenus()
+  const m = document.createElement('div')
+  m.setAttribute('role', 'menu')
+  const items = (OPT.load('opt-nopin', false) ? [] : [comments[i].pinned ? 'Bỏ ghim' : 'Ghim']).concat(['Chỉnh sửa', 'Xóa'])
+  m.innerHTML = items.map((x) => `<div role="menuitem">${x}</div>`).join('')
+  m.addEventListener('click', (e) => {
+    const t = e.target.closest('[role=menuitem]')
+    if (!t) return
+    closeMenus()
+    if (t.textContent === 'Ghim') confirmPin(i)
+  })
+  setTimeout(() => thread.appendChild(m), 200)
+}
+
+function confirmPin(i) {
+  const bg = document.createElement('div'); bg.className = 'bg'
+  const d = document.createElement('div')
+  d.setAttribute('role', 'dialog')
+  d.innerHTML = `<h3>Ghim bình luận này?</h3><p>Nếu bạn đã ghim một bình luận, thì bình luận này sẽ thay thế bình luận đã ghim trước đó.</p>
+    <div class="bar" style="justify-content:flex-end"><button id="no">Hủy</button><button id="yes">Ghim</button></div>`
+  const close = () => { d.remove(); bg.remove() }
+  d.querySelector('#no').onclick = close
+  d.querySelector('#yes').onclick = () => {
+    close()
+    comments.forEach((c, k) => { c.pinned = k === i })
+    OPT.save(CK, comments)
+    OPT.log({ type: 'pin', id, text: comments[i].text })
+    renderComments()
+    OPT.toast('Đã ghim bình luận')
+  }
+  setTimeout(() => document.body.append(bg, d), 200)
+}
+
+document.addEventListener('click', (e) => { if (!e.target.closest('[role=menu]')) closeMenus() })
+// phan binh luan chi tai khi cuon xuong (giong YouTube that)
+let loaded = false
+addEventListener('scroll', () => {
+  if (loaded || scrollY < 150) return
+  loaded = true
+  setTimeout(renderComments, 400)
+})
+</script>

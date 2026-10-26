@@ -28,6 +28,7 @@ function defaultPreset(id = 'mac-dinh', name = 'Mặc định') {
     publicStatsViewable: true,
     privacy: 'private', // public | unlisted | private (khi len lich: luon private toi gio dang)
     schedule: { mode: 'now', times: ['19:00'], intervalHours: 24 }, // now | times | interval
+    optimizeAfterUpload: false, // sau khi dang: tu toi uu trong Studio bang mau toi uu cua kenh (src/features/optimize.js)
   }
 }
 
@@ -39,6 +40,7 @@ function normalizePreset(p) {
   out.tags = Array.isArray(out.tags) ? out.tags.map((t) => String(t).trim()).filter(Boolean) : splitTags(out.tags)
   out.schedule.times = (out.schedule.times || []).filter((t) => /^\d{1,2}:\d{2}$/.test(t))
   if (!out.schedule.times.length) out.schedule.times = ['19:00']
+  out.optimizeAfterUpload = out.optimizeAfterUpload === true
   return out
 }
 

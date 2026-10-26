@@ -1,0 +1,62 @@
+<!doctype html><meta charset="utf-8"><title>Nội dung của kênh - YouTube Studio</title>
+<!-- Gia lap Studio: Noi dung cua kenh -> tab Video (frame f001). Hang hien tre 500ms, phan trang phia trinh duyet. -->
+<style>
+  body { margin: 0; font: 13px Roboto, Arial, sans-serif; background: #282828; color: #fff }
+  header { height: 56px; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid #3e3e3e }
+  nav { position: fixed; top: 57px; left: 0; width: 240px; padding: 12px }
+  nav div { padding: 8px 12px; color: #ddd }
+  main { margin-left: 260px; padding: 16px }
+  h1 { font-size: 26px; margin: 8px 0 16px }
+  .tabs { display: flex; gap: 28px; border-bottom: 1px solid #3e3e3e; margin-bottom: 8px }
+  .tabs span { padding: 10px 0; color: #aaa } .tabs .on { color: #fff; border-bottom: 2px solid #fff }
+  ytcp-video-row, .head { display: grid; grid-template-columns: 32px 440px 150px 140px 130px 80px 90px; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #3e3e3e }
+  .head { color: #aaa; font-size: 12px }
+  .thumb { display: inline-block; width: 120px; height: 68px; background: #555; margin-right: 8px; vertical-align: middle; color: #fff; font-size: 11px }
+  #video-title { color: #fff; text-decoration: none; font-weight: 500 }
+  .actions { display: none } ytcp-video-row:hover .actions { display: inline }
+  .pager { display: flex; justify-content: flex-end; gap: 12px; padding: 12px; color: #aaa }
+  button[aria-disabled="true"] { opacity: .3 }
+</style>
+<script src="/__file/optimize/data.js"></script>
+<header><b>▶ Studio</b><input placeholder="Tìm kiếm trên kênh của bạn" style="width:420px"></header>
+<nav><div>Tổng quan</div><div><b>Nội dung</b></div><div>Số liệu phân tích</div><div>Cộng đồng</div><div>Bình luận</div></nav>
+<main>
+  <h1>Nội dung của kênh</h1>
+  <div class="tabs"><span class="on">Video</span><span>Shorts</span><span>Sự kiện phát trực tiếp</span><span>Bài đăng</span><span>Danh sách phát</span><span>Podcast</span></div>
+  <div class="head"><span></span><span>Video</span><span>Thông báo</span><span>Chế độ hiển thị</span><span>Ngày ↓</span><span>Lượt xem</span><span>Số bình luận</span></div>
+  <div id="rows"><div id="spinner">Đang tải…</div></div>
+  <div class="pager">Số hàng mỗi trang: <span id="pp"></span> <span id="range"></span>
+    <button aria-label="Trang trước" id="prev">‹</button><button aria-label="Trang tiếp theo" id="next">›</button></div>
+</main>
+<script>
+const uc = (/\/channel\/([\w-]+)\//.exec(location.pathname) || [])[1]
+const size = Number(OPT.load('opt-pp', 30))
+let page = 0
+function render() {
+  const list = OPT.videos
+  const rows = document.getElementById('rows')
+  rows.innerHTML = ''
+  for (const v of list.slice(page * size, page * size + size)) {
+    const r = document.createElement('ytcp-video-row')
+    r.innerHTML = `<span><input type="checkbox" aria-label="Chọn"></span>
+      <span class="tablecell-video"><a id="thumbnail-anchor" href="/studio/video/${v.id}/edit"><span class="thumb">${v.len}</span></a>
+        <a id="video-title" href="/studio/video/${v.id}/edit"></a>
+        <span class="actions"><a aria-label="Chi tiết" href="/studio/video/${v.id}/edit">✎</a> <a aria-label="Số liệu phân tích">▥</a></span></span>
+      <span class="tablecell-restrictions">Có thể bị hạn chế thu nh…</span>
+      <span class="tablecell-visibility">${v.vis}</span>
+      <span class="tablecell-date"><div>${v.date}</div><div style="color:#aaa">${v.note}</div></span>
+      <span class="tablecell-views">${v.views}</span>
+      <span class="tablecell-comments">${v.comments}</span>`
+    r.querySelector('#video-title').textContent = v.title
+    rows.appendChild(r)
+  }
+  document.getElementById('pp').textContent = size
+  document.getElementById('range').textContent = `${page * size + 1} – ${Math.min(list.length, page * size + size)}/${list.length}`
+  document.getElementById('next').setAttribute('aria-disabled', String((page + 1) * size >= list.length))
+  document.getElementById('prev').setAttribute('aria-disabled', String(page === 0))
+}
+document.getElementById('next').onclick = () => { if ((page + 1) * size < OPT.videos.length) { page++; document.getElementById('rows').innerHTML = 'Đang tải…'; setTimeout(render, 300) } }
+document.getElementById('prev').onclick = () => { if (page) { page--; render() } }
+if (uc !== OPT.channel.uc) document.getElementById('rows').textContent = 'Không có nội dung nào'
+else setTimeout(render, 500)
+</script>

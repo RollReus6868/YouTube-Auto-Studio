@@ -336,6 +336,7 @@ async function runUploads(ids) {
         })
         addHistory({ folder: item.folder, movedTo: r.folder, id: r.id, url: r.url, title: item.meta.title, at: new Date().toISOString() })
         setJob(id, { status: 'done', step: '', progress: 100, url: r.url, warnings: r.warnings })
+        if (ctx.afterUpload) ctx.afterUpload({ videoId: r.id, title: item.meta.title, publishAt: item.meta.publishAt, preset: store.presetFor({ info: item.info }), channelId: state.youtube.channel.id })
         ok++
       } catch (e) {
         setJob(id, { status: e.reason === 'stopped' ? 'stopped' : 'error', error: e.message })
@@ -567,7 +568,7 @@ const ctx = {
   // dat boi tinh nang accounts: chay fn(page) tren kenh da chon (tu chuyen kenh, kiem UC ID)
   withChannel: null,
 }
-const FEATURES = []
+const FEATURES = ['optimize']
 const started = []
 for (const name of FEATURES) {
   const f = require(`./features/${name}`)(ctx)
