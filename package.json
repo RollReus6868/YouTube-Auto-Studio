@@ -6,7 +6,7 @@
   "main": "src/main.js",
   "author": "RollReus6868",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/RollReus6868/youtube-auto-studio.git" },
+  "repository": { "type": "git", "url": "https://github.com/RollReus6868/YouTube-Auto-Studio.git" },
   "scripts": {
     "start": "electron .",
     "test": "node tests/unit-test.js && node tests/google-test.js && node tests/updater-test.js",

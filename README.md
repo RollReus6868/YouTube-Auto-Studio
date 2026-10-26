@@ -8,7 +8,7 @@ Tool desktop (Windows / macOS) giúp đăng video YouTube theo mẫu mặc đị
 
 ## Cài đặt
 
-Tải file ở trang [Releases](https://github.com/RollReus6868/youtube-auto-studio/releases/latest):
+Tải file ở trang [Releases](https://github.com/RollReus6868/YouTube-Auto-Studio/releases/latest):
 
 | Máy | File |
 |---|---|
