@@ -111,12 +111,12 @@ export function OptimizePage({ state, send, go }: PageProps) {
               value={s.channelKey}
               disabled={s.busy || !s.channels.length}
               onChange={(e) => send('optimize_select', e.target.value)}
-              className="h-9 max-w-[240px] truncate rounded-md border border-input bg-background/50 px-2 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="h-8 max-w-[240px] truncate rounded-md border border-input bg-background/50 px-2 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {!s.channels.length && <option value="">Chưa có kênh</option>}
               {s.channels.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}
             </select>
-            <Button variant="outline" className="h-9 px-3" disabled={s.busy || !s.channelKey} onClick={() => send('optimize_list', s.channelKey)}>
+            <Button variant="outline" size="sm" disabled={s.busy || !s.channelKey} onClick={() => send('optimize_list', s.channelKey)}>
               {s.busy && !videos.some((v) => v.status === 'run') ? <LoaderCircle className="animate-spin" /> : <ScanSearch />} Quét video
             </Button>
           </div>
@@ -127,7 +127,7 @@ export function OptimizePage({ state, send, go }: PageProps) {
           <Card>
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <p className="flex-1">Chưa có kênh nào được tick. Đăng nhập tài khoản Google và chọn kênh ở trang Tài khoản trước.</p>
-              <Button variant="outline" className="h-9" onClick={() => go('accounts')}>Mở trang Tài khoản</Button>
+              <Button variant="outline" size="sm" onClick={() => go('accounts')}>Mở trang Tài khoản</Button>
             </div>
           </Card>
         )}
@@ -153,13 +153,13 @@ export function OptimizePage({ state, send, go }: PageProps) {
       </PageBody>
       <ActionBar>
         {s.busy && videos.some((v) => v.status === 'run') ? (
-          <Button variant="danger" size="xl" className="flex-1" onClick={() => send('stop')}><Square /> Dừng sau video đang tối ưu</Button>
+          <Button variant="danger" size="sm" onClick={() => send('stop')}><Square /> Dừng sau video đang tối ưu</Button>
         ) : (
           <>
-            <Button variant="gradient" size="xl" className="flex-1" disabled={s.busy || !chosen.length} onClick={() => send('optimize_run', { channelKey: s.channelKey, ids: chosen.map((v) => v.id) })}>
+            <Button variant="gradient" size="sm" disabled={s.busy || !chosen.length} onClick={() => send('optimize_run', { channelKey: s.channelKey, ids: chosen.map((v) => v.id) })}>
               <Sparkles /> Tối ưu đã chọn ({chosen.length})
             </Button>
-            <Button variant="outline" size="xl" disabled={s.busy || !todo.length} onClick={() => send('optimize_run', { channelKey: s.channelKey, ids: todo.map((v) => v.id) })}>
+            <Button variant="outline" size="sm" disabled={s.busy || !todo.length} onClick={() => send('optimize_run', { channelKey: s.channelKey, ids: todo.map((v) => v.id) })}>
               <CheckCheck /> Tối ưu tất cả chưa tối ưu ({todo.length})
             </Button>
           </>

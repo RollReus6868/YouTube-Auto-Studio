@@ -1,6 +1,7 @@
 // Bo khung giao dien kieu Youwee, ban toi gian cho tool nay.
 import { ChevronLeft, ChevronRight, Moon, Sun, type LucideIcon } from 'lucide-react'
-import { createContext, useContext, useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react'
+import { createPortal } from 'react-dom'
 import { themes, themeVars, type Theme } from './themes'
 
 export const STORAGE_KEY = 'yt-auto-studio'
@@ -93,19 +94,34 @@ const variants = {
 }
 const sizes = {
   default: 'h-9 px-4 text-sm [&_svg]:size-4',
+  sm: 'h-8 px-3 text-xs [&_svg]:size-3.5',
+  'icon-sm': 'h-8 w-8 shrink-0 [&_svg]:size-4',
   xl: 'h-12 px-6 text-base [&_svg]:size-5',
   'icon-xl': 'h-12 w-12 shrink-0 [&_svg]:size-5',
 }
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: keyof typeof variants; size?: keyof typeof sizes }
+// nut nam trong ActionBar (goc tren ben phai): co lon tu thu nho lai
+const InBar = createContext(false)
+const BAR_SIZE: Partial<Record<keyof typeof sizes, keyof typeof sizes>> = { default: 'sm', xl: 'sm', 'icon-xl': 'icon-sm' }
+
+// Lop rieng (className) thang lop co san cung nhom: vd "h-8 px-3 text-xs" phai thuc su nho hon h-9.
+// Khong co buoc nay thi CSS cua Tailwind quyet theo thu tu sinh ra, h-9 luon thang h-8.
+const GROUPS = [/^h-/, /^w-/, /^p[xy]?-/, /^rounded(-|$)/, /^text-(xs|sm|base|lg|\d?xl|\[)/]
+function own(base: string, mine?: string) {
+  const taken = GROUPS.filter((g) => mine?.split(/\s+/).some((c) => g.test(c)))
+  return base.split(' ').filter((c) => !taken.some((g) => g.test(c))).join(' ')
+}
 
 export function Button({ variant = 'default', size = 'default', className, ...p }: ButtonProps) {
+  const inBar = useContext(InBar)
+  if (inBar) size = BAR_SIZE[size] ?? size
   return (
     <button
       className={cn(
-        'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md font-semibold transition-all',
+        own('inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md font-semibold transition-all', className),
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         'disabled:pointer-events-none disabled:opacity-50 [&_svg]:shrink-0',
-        variants[variant], sizes[size], className,
+        own(`${variants[variant]} ${sizes[size]}`, className), className,
       )}
       {...p}
     />
@@ -164,14 +180,25 @@ export function IconTile({ icon: Icon }: { icon: LucideIcon }) {
 /* ---------- Khung cua so ---------- */
 export type NavItem = { id: string; label: string; icon: LucideIcon; dot?: boolean }
 
-// Thanh ben | cot dieu khien | khung YouTube Studio (chi o trang can trinh duyet).
-export function AppShell({ sidebar, children, browser }: { sidebar: ReactNode; children: ReactNode; browser?: ReactNode }) {
+// Cho dat nut cua ActionBar: PageHeader tao o trong goc tren ben phai, ActionBar ve vao do.
+const Slot = createContext<{ el: HTMLElement | null; set: (el: HTMLElement | null) => void } | null>(null)
+
+// Thanh ben | cot dieu khien | khung YouTube Studio (chi o trang can trinh duyet), nhat ky o duoi cung.
+export function AppShell({ sidebar, children, browser, dock }: { sidebar: ReactNode; children: ReactNode; browser?: ReactNode; dock?: ReactNode }) {
+  const [el, set] = useState<HTMLElement | null>(null)
   return (
     <div className="relative flex h-full gap-3 p-3">
       <div className="app-bg-glow" />
       {sidebar}
-      <main className={cn('glass-panel relative flex flex-col overflow-hidden', browser ? 'w-[440px] shrink-0' : 'min-w-0 flex-1')}>{children}</main>
-      {browser && <section className="glass-panel relative flex min-w-0 flex-1 flex-col overflow-hidden">{browser}</section>}
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        <div className="flex min-h-0 flex-1 gap-3">
+          <main className={cn('glass-panel relative flex flex-col overflow-hidden', browser ? 'w-[440px] shrink-0' : 'min-w-0 flex-1')}>
+            <Slot.Provider value={{ el, set }}>{children}</Slot.Provider>
+          </main>
+          {browser && <section className="glass-panel relative flex min-w-0 flex-1 flex-col overflow-hidden">{browser}</section>}
+        </div>
+        {dock}
+      </div>
     </div>
   )
 }
@@ -252,14 +279,19 @@ export function Sidebar({ brand, items, bottomItems, activeId, onSelect }: {
 }
 
 export function PageHeader({ icon, title, description, actions }: { icon: LucideIcon; title: string; description: string; actions?: ReactNode }) {
+  const slot = useContext(Slot)
   return (
-    <header className="flex shrink-0 flex-wrap items-center gap-3 px-4 pb-3 pt-4">
+    <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 px-4 pb-3 pt-4">
       <IconTile icon={icon} />
-      <div className="min-w-0 flex-1 basis-40">
+      <div className="min-w-0 flex-1 basis-48">
         <h1 className="truncate text-lg font-extrabold">{title}</h1>
         <p className="line-clamp-2 text-xs text-muted-foreground">{description}</p>
       </div>
-      {actions}
+      {/* trang thai cua trang + nut thao tac (ActionBar ve vao o data-actions) */}
+      <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
+        {actions}
+        <div ref={slot?.set} data-actions className="flex max-w-full flex-wrap items-center justify-end gap-2 empty:hidden [&>*]:flex-none" />
+      </div>
     </header>
   )
 }
@@ -268,12 +300,32 @@ export const PageBody = ({ children }: { children: ReactNode }) => (
   <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-4">{children}</div>
 )
 
-export const ActionBar = ({ children }: { children: ReactNode }) => (
-  <footer className="shrink-0">
-    <hr className="gradient-divider" />
-    <div className="flex items-center gap-3 px-4 py-3">{children}</div>
-  </footer>
-)
+// Nut thao tac chinh cua trang: ve nho gon o goc tren ben phai (trong PageHeader).
+// Trang khong co PageHeader thi hien mot hang nho canh phai ngay tai cho.
+export function ActionBar({ children }: { children: ReactNode }) {
+  const slot = useContext(Slot)
+  const body = <InBar.Provider value>{children}</InBar.Provider>
+  if (slot?.el) return createPortal(body, slot.el)
+  return <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 px-4 py-2 [&>*]:flex-none">{body}</div>
+}
+
+// Giu cuon o cuoi danh sach (dong moi nhat), tru khi nguoi dung da cuon len xem dong cu.
+export function useStickToBottom(dep: unknown) {
+  const ref = useRef<HTMLDivElement>(null)
+  const stick = useRef(true)
+  const seen = useRef<HTMLDivElement | null>(null)
+  const onScroll = () => {
+    const el = ref.current
+    if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24
+  }
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (el !== seen.current) stick.current = true // khung vua mo lai: ve cuoi
+    seen.current = el
+    if (el && stick.current) el.scrollTop = el.scrollHeight
+  }, [dep])
+  return { ref, onScroll }
+}
 
 export function Card({ title, hint, children, className }: { title?: string; hint?: ReactNode; children: ReactNode; className?: string }) {
   return (

@@ -210,9 +210,9 @@ export function HomeTabPage({ state, send, go }: PageProps) {
       </PageBody>
       <ActionBar>
         {busy ? (
-          <Button variant="danger" size="xl" className="flex-1" onClick={() => send('stop')}><Square /> Dừng sau kênh đang làm</Button>
+          <Button variant="danger" size="sm" onClick={() => send('stop')}><Square /> Dừng sau kênh đang làm</Button>
         ) : (
-          <Button variant="gradient" size="xl" className="flex-1" disabled={appBusy || !check?.ok || !pick.length} onClick={run}>
+          <Button variant="gradient" size="sm" disabled={appBusy || !check?.ok || !pick.length} onClick={run}>
             <Play /> {pick.length ? `Chạy cho ${pick.length} kênh` : 'Chọn kênh cũ để chạy'}
           </Button>
         )}
