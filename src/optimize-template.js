@@ -46,6 +46,7 @@ function defaultTemplate() {
     license: 'keep',
     embeddable: 'keep',
     like: true,
+    description: '', // '' = khong dung; co chu = dien vao video CHUA co mo ta (co roi thi giu nguyen)
     comment: '{tieu_de}', // '' = khong binh luan
     pin: true,
   }
@@ -65,6 +66,7 @@ function normalizeTemplate(t) {
   out.category = src.category === 'keep' || CATEGORY_NAMES[src.category] ? String(src.category) : d.category
   if (typeof src.language === 'string') out.language = src.language.trim()
   for (const k of ['like', 'pin']) if (typeof src[k] === 'boolean') out[k] = src[k]
+  if (typeof src.description === 'string') out.description = src.description.replace(/\r\n/g, '\n').trim().slice(0, 5000)
   if (typeof src.comment === 'string') out.comment = src.comment.replace(/\r\n/g, '\n').trim().slice(0, 10000)
   return out
 }
@@ -154,6 +156,7 @@ function touchedFields(template) {
   if (t.location) out.push('location')
   if (t.language) out.push('language')
   if (t.like) out.push('like')
+  if (t.description) out.push('description')
   if (t.comment) out.push('comment')
   return out
 }

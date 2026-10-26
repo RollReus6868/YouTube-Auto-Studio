@@ -6,7 +6,7 @@
 //   commentAndPin  trang xem video: Thich, binh luan, ⋮ -> Ghim -> Ghim -> "Da ghim binh luan"
 // Ham thuan tren mot Page da o dung kenh (ctx.withChannel lo chuyen kenh). Muc mau = 'keep' -> bo qua.
 const { StepError, channelOf, sleep } = require('../studio/driver')
-const { CATEGORY_NAMES, normalizeTemplate, tagsToAdd, fmtStudioDate, recordingDateFor } = require('../optimize-template')
+const { CATEGORY_NAMES, normalizeTemplate, tagsToAdd, fmtStudioDate, recordingDateFor, renderComment } = require('../optimize-template')
 
 // Chu tren man hinh (Studio tieng Viet + tieng Anh). Sua o day khi co HTML that.
 const L = (text, regex) => ({ text, regex })
@@ -66,6 +66,7 @@ const SEL = {
   comments: '.tablecell-comments',
   next: 'ytcp-icon-button#navigate-after, [aria-label="Chuyển đến trang tiếp theo"], [aria-label="Next page"]',
   title: '#title-textarea #textbox',
+  desc: '#description-textarea #textbox',
   trigger: '[aria-haspopup], ytcp-dropdown-trigger',
   radio: '[role=radio], tp-yt-paper-radio-button',
   // khong de the long nhau (vd ytcp-playlist-dialog > tp-yt-paper-dialog): moi o se bi dem 2 lan khi dung `within`
@@ -174,7 +175,7 @@ async function pickOption(page, t, option) {
 // ---- (a) danh sach video ---------------------------------------------------------
 const CONTENT_QS = '?filter=%5B%5D&sort=%7B%22columnType%22%3A%22date%22%2C%22sortOrder%22%3A%22DESCENDING%22%7D'
 
-async function listVideos(page, channelUc, { urls, log = () => {}, onStep = () => {}, maxPages = 10 } = {}) {
+async function listVideos(page, channelUc, { urls, log = () => {}, onStep = () => {}, maxPages = 10, limit = 0 } = {}) {
   const uc = channelUc && /^UC[\w-]{10,}$/.test(channelUc) ? channelUc : channelOf(page.url())
   if (!uc) throw new StepError('Không biết UC ID của kênh để mở trang Nội dung.', 'Mở Nội dung')
   onStep('Mở Nội dung')
@@ -197,6 +198,7 @@ async function listVideos(page, channelUc, { urls, log = () => {}, onStep = () =
       }
     }).filter(Boolean), SEL)
     for (const r of rows) if (!seen.has(r.id)) { seen.add(r.id); out.push(r) }
+    if (limit && out.length >= limit) { out.length = limit; break }
     const next = { selector: SEL.next }
     if (!rows.length || !(await page.has(next)) || !(await isEnabled(page, next))) break
     const first = rows[0].id
@@ -212,7 +214,7 @@ async function listVideos(page, channelUc, { urls, log = () => {}, onStep = () =
 }
 
 // ---- (b) toi uu trang Chi tiet video -------------------------------------------
-async function optimizeVideo(page, videoId, template, { urls, log = () => {}, onStep = () => {}, video = {}, now = new Date() } = {}) {
+async function optimizeVideo(page, videoId, template, { urls, log = () => {}, onStep = () => {}, video = {}, now = new Date(), channelName = '' } = {}) {
   const t = normalizeTemplate(template)
   const changed = []
   const warnings = []
@@ -225,6 +227,20 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
     await page.waitFor({ selector: SEL.title }, { timeout: Math.max(page.timeout, 20000) })
   })
   const title = String((await page.text({ selector: SEL.title })) || '').trim()
+
+  // Mo ta: chi dien khi video CHUA co mo ta; da co thi giu nguyen.
+  if (t.description) {
+    await step('Mô tả', async () => {
+      const box = { selector: SEL.desc }
+      await page.waitFor(box)
+      if (String((await page.text(box)) || '').trim()) return log('info', 'Video đã có mô tả: giữ nguyên.')
+      const text = renderComment(t.description, { tieu_de: title, link: `https://youtu.be/${videoId}`, ten_kenh: channelName })
+      const fit = Buffer.byteLength(text) <= 5000 ? text : Buffer.from(text).subarray(0, 5000).toString().replace(/\uFFFD+$/, '')
+      await page.type(box, fit, { clear: false })
+      await page.until((s) => String((window.__ya.one({ selector: s }) || {}).innerText || '').trim().length > 0, [SEL.desc], { what: 'mô tả được điền' })
+      changed.push('description')
+    })
+  }
 
   if (t.playlists.length) {
     await step('Danh sách phát', async () => {
@@ -287,9 +303,15 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
       const have = await page.eval((s) => window.__ya.find({ selector: s, hidden: true }, true).map((e) => String(e.innerText || e.textContent || '').trim()), SEL.chip)
       const { add, skipped } = tagsToAdd(have, t, title)
       for (const s of skipped) warn(`Bỏ thẻ "${s}" vì vượt giới hạn 500 ký tự.`)
+      const hasChip = (tag, timeout) => page.until((s, want) => window.__ya.find({ selector: s, hidden: true }, true).some((e) => window.__ya.norm(e.innerText || e.textContent) === want), [SEL.chip, norm(tag)], { what: `thẻ "${tag}"`, timeout })
       for (const tag of add) {
-        await page.type({ selector: SEL.tagInput }, `${tag},`, { clear: false })
-        await page.until((s, want) => window.__ya.find({ selector: s, hidden: true }, true).some((e) => window.__ya.norm(e.innerText || e.textContent) === want), [SEL.chip, norm(tag)], { what: `thẻ "${tag}"` })
+        // Studio chi tao the khi BAM Enter (hoac phim dau phay); dau phay trong chu dan vao khong tach the.
+        await page.type({ selector: SEL.tagInput }, tag, { clear: false })
+        await page.press('Enter')
+        try { await hasChip(tag, 4000) } catch (_) {
+          await page.press(',')
+          await hasChip(tag, 8000)
+        }
       }
       if (add.length) changed.push('tags')
     })

@@ -73,7 +73,8 @@
 const id = (/\/video\/([\w-]+)\/edit/.exec(location.pathname) || [])[1]
 const KEY = 'opt-video-' + id
 const video = OPT.videoOf(id)
-let saved = OPT.load(KEY, OPT.fresh())
+// video id bat dau bang NoDesc: chua co mo ta (de kiem "mo ta trong thi dien, co roi thi giu")
+let saved = OPT.load(KEY, { ...OPT.fresh(), desc: id.startsWith('NoDesc') ? '' : `${video.title}\n\nIn this episode of Dark Bible Study…` })
 let W = JSON.parse(JSON.stringify(saved))
 const $ = (s, r = document) => r.querySelector(s)
 const esc = OPT.esc
@@ -110,7 +111,7 @@ function basic() {
   return `
   <ytcp-social-suggestions-textbox id="title-textarea" label="Tiêu đề"><div id="label"><span id="label-text">Tiêu đề (bắt buộc)</span></div>
     <div id="textbox" slot="input" contenteditable="true" role="textbox" aria-required="true" aria-label="Thêm tiêu đề để mô tả video của bạn (nhập ký tự @ để đề cập tên một kênh)">${esc(video.title)}</div></ytcp-social-suggestions-textbox>
-  <ytcp-social-suggestions-textbox id="description-textarea"><div id="textbox" slot="input" contenteditable="true" role="textbox" aria-label="Giới thiệu về video của bạn cho người xem (nhập ký tự @ để đề cập tên một kênh)">${esc(video.title)}<br><br>In this episode of Dark Bible Study…</div></ytcp-social-suggestions-textbox>
+  <ytcp-social-suggestions-textbox id="description-textarea"><div id="textbox" slot="input" contenteditable="true" role="textbox" aria-label="Giới thiệu về video của bạn cho người xem (nhập ký tự @ để đề cập tên một kênh)">${esc(W.desc).replace(/\n/g, '<br>')}</div></ytcp-social-suggestions-textbox>
   ${section('', 'Hình thu nhỏ', 'Chọn hình thu nhỏ nổi bật để thu hút sự chú ý của người xem.', OPT.button('', 'Xem đề xuất'))}
   ${section('', 'Danh sách phát', 'Thêm video của bạn vào danh sách phát để sắp xếp nội dung cho người xem.',
     `<ytcp-video-metadata-playlists aria-label="Thêm vào danh sách phát"><ytcp-text-dropdown-trigger placeholder="Chọn">${OPT.trigger('', '', 'aria-label="Chọn danh sách phát" id="pl-trigger"')}</ytcp-text-dropdown-trigger></ytcp-video-metadata-playlists>`)}
@@ -308,8 +309,8 @@ function bindAdvanced() {
   $('#recorded-date').onclick = datePicker
   const inp = $('#text-input')
   const addTags = (s) => { for (const t of s.split(',').map((x) => x.trim()).filter(Boolean)) if (!W.tags.includes(t)) W.tags.push(t); inp.value = ''; paint(); dirty() }
-  inp.addEventListener('input', () => { if (inp.value.includes(',')) addTags(inp.value) })
-  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') addTags(inp.value) })
+  // nhu Studio that: chi tao the khi BAM phim Enter / dau phay; chu dan vao (insertText) co dau phay thi van nam trong o
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTags(inp.value) } })
   $('#chips').addEventListener('click', (e) => { const x = e.target.closest('#delete-icon'); if (x) { W.tags.splice(+x.dataset.i, 1); paint(); dirty() } })
   $('#location input').addEventListener('input', (e) => places(e.target.value))
 }
@@ -329,6 +330,7 @@ setTimeout(() => {
   $('#discard').onclick = () => { W = JSON.parse(JSON.stringify(saved)); paint(); dirty() }
   $('#left').innerHTML = basic()
   $('#right').innerHTML = right()
+  $('#description-textarea #textbox').addEventListener('input', (e) => { W.desc = e.target.innerText.trim(); dirty() })
   bind(); paint(); dirty()
 }, 500)
 </script>

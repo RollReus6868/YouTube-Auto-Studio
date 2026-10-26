@@ -9,7 +9,7 @@ const TITLE = 'The Cost of Being Chosen by God - Matthew 22 Explained'
 const NOW = new Date(2026, 9, 26, 21, 9)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const events = async (mock, type) => { await sleep(300); return mock.events.filter((e) => e.type === type) }
-const KEEP = { playlists: [], paidPromotion: 'keep', ai: 'keep', tagsMode: 'keep', extraTags: [], location: '', recordingDate: 'keep', remix: 'keep', endScreen: 'keep', category: 'keep', language: '', comments: 'keep', license: 'keep', embeddable: 'keep', like: false, comment: '', pin: false }
+const KEEP = { playlists: [], paidPromotion: 'keep', ai: 'keep', tagsMode: 'keep', extraTags: [], location: '', recordingDate: 'keep', remix: 'keep', endScreen: 'keep', category: 'keep', language: '', comments: 'keep', license: 'keep', embeddable: 'keep', like: false, description: '', comment: '', pin: false }
 
 module.exports = [
   ['doc danh sach video (2 trang)', async ({ page, urls }) => {
@@ -20,6 +20,29 @@ module.exports = [
     assert.deepEqual(list[1], { id: VID, title: TITLE, visibility: 'Công khai', date: '25 thg 10, 2026', dateNote: 'Đã phát hành lần…', views: '30', comments: '0' })
     assert.equal(list[0].visibility, 'Đang công chiếu')
     assert.equal(list[6].id, 'HonorPar001', 'doc ca trang 2')
+  }],
+
+  ['chi doc N video moi nhat (limit)', async ({ page, urls }) => {
+    await page.goto(`${urls.studio}/channel/${UC}/videos/upload`)
+    await page.eval(() => localStorage.setItem('opt-pp', '2'))
+    const list = await listVideos(page, UC, { urls, limit: 3 })
+    assert.equal(list.length, 3)
+    assert.equal(list[1].id, VID)
+  }],
+
+  ['mo ta: video chua co thi dien, da co thi giu nguyen', async ({ page, urls, mock }) => {
+    const tpl = { ...KEEP, description: '{tieu_de}\nKênh {ten_kenh}: {link}' }
+    const r = await optimizeVideo(page, 'NoDescVid01', tpl, { urls, now: NOW, channelName: 'Dark Bible Study' })
+    assert.deepEqual([r.changed, r.saved], [['description'], true])
+    const [save] = await events(mock, 'save')
+    assert.equal(save.data.desc, 'Video NoDescVid01\nKênh Dark Bible Study: https://youtu.be/NoDescVid01')
+    mock.events.length = 0
+    const again = await optimizeVideo(page, 'NoDescVid01', tpl, { urls, now: NOW, channelName: 'Dark Bible Study' })
+    assert.deepEqual([again.changed, again.saved], [[], false], 'da co mo ta (lan truoc dien) -> giu nguyen')
+    const keep = await optimizeVideo(page, VID, tpl, { urls, now: NOW })
+    assert.deepEqual([keep.changed, keep.saved], [[], false])
+    assert.deepEqual(await events(mock, 'save'), [])
+    assert.match(await page.text({ selector: '#description-textarea #textbox' }), /In this episode of Dark Bible Study/)
   }],
 
   ['toi uu day du theo mau mac dinh (giong video quay)', async ({ page, urls, mock }) => {

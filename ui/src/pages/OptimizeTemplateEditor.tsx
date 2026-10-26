@@ -23,6 +23,7 @@ export type OptimizeTemplate = {
   license: 'keep' | 'youtube' | 'creativeCommon'
   embeddable: K3
   like: boolean
+  description: string
   comment: string
   pin: boolean
 }
@@ -32,7 +33,7 @@ export type Templates = Record<string, OptimizeTemplate> // 'default' + key kenh
 export const defaultOptimizeTemplate = (): OptimizeTemplate => ({
   playlists: [], paidPromotion: 'no', ai: 'yes', tagsMode: 'title', extraTags: [], location: 'United States',
   recordingDate: 'today', remix: 'none', endScreen: 'latest', category: 'keep', language: '', comments: 'keep',
-  license: 'keep', embeddable: 'keep', like: true, comment: '{tieu_de}', pin: true,
+  license: 'keep', embeddable: 'keep', like: true, description: '', comment: '{tieu_de}', pin: true,
 })
 export const templateOf = (t: Templates | undefined, key: string): OptimizeTemplate =>
   ({ ...defaultOptimizeTemplate(), ...((t && (t[key] || t.default)) || {}) })
@@ -91,7 +92,16 @@ export function OptimizeTemplateEditor({ value: t, onChange, channelName = 'Dark
 }) {
   const set = (p: Partial<OptimizeTemplate>) => onChange({ ...t, ...p })
   const preview = renderComment(t.comment, { tieu_de: sample, link: 'https://youtu.be/vyiSqHByq24', ten_kenh: channelName })
-  const addVar = (v: string) => set({ comment: t.comment ? `${t.comment}${/\s$/.test(t.comment) ? '' : ' '}${v}` : v })
+  const join = (cur: string, v: string) => (cur ? `${cur}${/\s$/.test(cur) ? '' : ' '}${v}` : v)
+  const addVar = (v: string) => set({ comment: join(t.comment, v) })
+  const vars = (add: (v: string) => void) => (
+    <div className="flex flex-wrap items-center gap-1">
+      <span className="mr-1 text-[11px] text-muted-foreground">Bấm để chèn:</span>
+      {COMMENT_VARS.map(([v, l]) => (
+        <button key={v} type="button" onClick={() => add(v)} title={l} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] hover:bg-primary/15 hover:text-primary">{v}</button>
+      ))}
+    </div>
+  )
   return (
     <div className={cn('grid gap-3', !compact && '2xl:grid-cols-2')}>
       <div className="space-y-3">
@@ -134,17 +144,18 @@ export function OptimizeTemplateEditor({ value: t, onChange, channelName = 'Dark
         </Group>
       </div>
       <div className="space-y-3">
+        <Group title="Mô tả" hint="Chỉ điền cho video CHƯA có mô tả; video đã có mô tả thì giữ nguyên.">
+          <Field label="Mô tả video" hint="Để trống = không đụng tới mô tả. Tối đa 5000 ký tự.">
+            <TextArea aria-label="Mô tả video" rows={5} maxLength={5000} value={t.description} onChange={(e) => set({ description: e.target.value })} placeholder={'{tieu_de}\n\nĐăng ký kênh {ten_kenh} để xem thêm video mới.'} />
+          </Field>
+          {vars((v) => set({ description: join(t.description, v) }))}
+        </Group>
         <Group title="Sau khi lưu: trang xem video" hint="Chỉ làm được khi video Công khai / Không công khai.">
           <ToggleRow title="Thích video" hint="Bỏ qua nếu đã thích." checked={t.like} onChange={(like) => set({ like })} />
           <Field label="Bình luận ghim" hint="Để trống = không bình luận. Đã có bình luận này thì tool không đăng lại.">
             <TextArea aria-label="Bình luận ghim" rows={4} value={t.comment} onChange={(e) => set({ comment: e.target.value })} placeholder="{tieu_de}" />
           </Field>
-          <div className="flex flex-wrap items-center gap-1">
-            <span className="mr-1 text-[11px] text-muted-foreground">Bấm để chèn:</span>
-            {COMMENT_VARS.map(([v, l]) => (
-              <button key={v} type="button" onClick={() => addVar(v)} title={l} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] hover:bg-primary/15 hover:text-primary">{v}</button>
-            ))}
-          </div>
+          {vars(addVar)}
           <ToggleRow title="Ghim bình luận" hint="Ghim không được thì vẫn giữ bình luận và báo cảnh báo." checked={t.pin} onChange={(pin) => set({ pin })} />
           <div className="rounded-lg bg-muted/40 p-2.5">
             <div className="mb-1 flex items-center gap-2 text-[11px] font-bold text-muted-foreground">

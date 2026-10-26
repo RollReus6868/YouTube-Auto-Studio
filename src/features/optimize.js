@@ -6,6 +6,7 @@ const ot = require('../optimize-template')
 
 // Binh luan duoc tren trang xem: video cong khai / khong cong khai (rieng tu, len lich thi khong)
 const PUBLIC = /^(công khai|không công khai|public|unlisted)$/i
+const LATEST = 10 // chi quet 10 video moi nhat (trang Noi dung xep moi nhat truoc)
 
 module.exports = (ctx) => {
   const S = ctx.state.f.optimize = { channelKey: '', channels: [], videos: [], busy: false, at: '', templates: {} }
@@ -47,7 +48,7 @@ module.exports = (ctx) => {
     S.busy = true
     ctx.push()
     try {
-      const rows = await ctx.withChannel(key, (page) => listVideos(page, ucOf(key), { urls: ctx.urls, log: ctx.log }), { label: 'Quét video' })
+      const rows = await ctx.withChannel(key, (page) => listVideos(page, ucOf(key), { urls: ctx.urls, log: ctx.log, limit: LATEST }), { label: 'Quét video' })
       const db = readDb()
       S.videos = rows.map((r) => ({ ...r, status: ot.isOptimized(db, key, r.id) ? 'done' : 'new', step: '', error: '', warnings: (db[key] && db[key][r.id] && db[key][r.id].warnings) || [] }))
       S.at = new Date().toISOString()
@@ -79,7 +80,7 @@ module.exports = (ctx) => {
           if (ctx.stopped()) { setV(v.id, { status: 'new', step: '' }); continue }
           const onStep = (step) => setV(v.id, { step })
           try {
-            const r = await optimizeVideo(page, v.id, tpl, { urls: ctx.urls, log: ctx.log, onStep, video: v })
+            const r = await optimizeVideo(page, v.id, tpl, { urls: ctx.urls, log: ctx.log, onStep, video: v, channelName: name })
             const warnings = [...r.warnings]
             const text = ot.renderComment(tpl.comment, { tieu_de: r.title || v.title, link: `https://youtu.be/${v.id}`, ten_kenh: name })
             let c = null

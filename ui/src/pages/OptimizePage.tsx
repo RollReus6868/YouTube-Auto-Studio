@@ -103,7 +103,7 @@ export function OptimizePage({ state, send, go }: PageProps) {
       <PageHeader
         icon={Wand2}
         title="Tối ưu video"
-        description="Quét video đã đăng của kênh, tối ưu trong YouTube Studio theo mẫu, rồi thích + bình luận + ghim."
+        description="Quét 10 video mới nhất của kênh, tối ưu trong YouTube Studio theo mẫu, rồi thích + bình luận + ghim."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -131,7 +131,7 @@ export function OptimizePage({ state, send, go }: PageProps) {
             </div>
           </Card>
         )}
-        <Card title="Video đã đăng" hint={s.at ? `${videos.length} video · ${done} đã tối ưu · quét lúc ${new Date(s.at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : 'Bấm “Quét video” để đọc danh sách trong Studio'}>
+        <Card title="Video đã đăng" hint={s.at ? `${videos.length} video · ${done} đã tối ưu · quét lúc ${new Date(s.at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : 'Bấm “Quét video” để đọc 10 video mới nhất trong Studio'}>
           {videos.length ? (
             <>
               <div className="mb-1 flex items-center gap-3 px-2 text-xs text-muted-foreground">
