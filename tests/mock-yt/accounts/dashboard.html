@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="vi">
+<head><meta charset="utf-8"><title>Trang tổng quan của kênh - YouTube Studio</title>
+<style>
+  * { box-sizing: border-box }
+  body { margin: 0; font-family: Roboto, Arial, sans-serif; background: #1f1f1f; color: #f1f1f1; font-size: 14px }
+  .top { height: 64px; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-bottom: 1px solid #333 }
+  .logo { font-weight: 700; font-size: 20px; margin-right: auto } .logo b { background: #f00; border-radius: 6px; padding: 0 6px; margin-right: 4px }
+  .search { width: 480px; height: 40px; border-radius: 20px; border: 1px solid #444; background: #121212; color: #fff; padding: 0 16px; margin-right: auto }
+  .pill { border: 1px solid #555; border-radius: 18px; padding: 8px 14px; background: none; color: #fff }
+  .av { width: 32px; height: 32px; border-radius: 50%; border: 0; color: #fff; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0 }
+  .wrap { display: flex }
+  nav { width: 240px; padding: 16px 12px; text-align: center } nav a { display: block; text-align: left; padding: 10px 16px; border-radius: 8px; color: #ddd; text-decoration: none } nav a.on { background: #333 }
+  .big { width: 112px; height: 112px; font-size: 36px }
+  .lab { font-weight: 700; font-size: 12px; margin-top: 8px } .nm { color: #aaa; font-size: 12px; margin-bottom: 16px; min-height: 14px }
+  main { flex: 1; padding: 24px 32px } h1 { font-size: 26px; margin: 0 0 24px }
+  .card { background: #282828; border-radius: 12px; padding: 20px; width: 320px }
+  .menu { position: fixed; top: 56px; right: 16px; width: 300px; background: #282828; border-radius: 12px; box-shadow: 0 4px 32px #000a; display: none; padding: 8px 0 }
+  .menu.open { display: block }
+  .hd { display: flex; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #3f3f3f; align-items: center }
+  .item { display: flex; align-items: center; padding: 10px 16px; cursor: pointer; gap: 16px } .item:hover { background: #3a3a3a } .item .chev { margin-left: auto }
+  .sep { border-top: 1px solid #3f3f3f; margin: 8px 0 }
+  .sub-hd { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid #3f3f3f; font-size: 16px } .sub-hd button { background: none; border: 0; color: #fff; font-size: 20px; cursor: pointer }
+  .secs { max-height: 360px; overflow-y: auto; display: block }
+  .acc-hd { padding: 12px 16px; border-bottom: 1px solid #3f3f3f; margin: 0 16px; padding-left: 0 } .acc-hd .em { color: #aaa; font-size: 12px }
+  .row { display: flex; align-items: center; gap: 12px; padding: 8px 16px; cursor: pointer; position: relative } .row:hover { background: #3a3a3a }
+  .row .t div:nth-child(n+2) { color: #aaa; font-size: 12px }
+  .chk { margin-left: auto; font-size: 18px }
+  .other-title { border-top: 4px solid #3f3f3f; padding: 14px 16px 6px; font-weight: 700; font-size: 12px }
+  .spin { padding: 24px; text-align: center; color: #aaa }
+  yt-formatted-string { display: block } yt-icon[hidden] { display: none } .pi, .pii { display: flex; align-items: center; gap: 12px; width: 100%; color: inherit } a { color: inherit; text-decoration: none; display: block }
+  .drawer { display: block; width: 240px } .t > *:nth-child(n+2) { color: #aaa; font-size: 12px } .acc-hd .em, .em { color: #aaa; font-size: 12px }
+</style></head>
+<body>
+<div id="app"></div>
+<script>
+const D = /*DATA*/null
+const P = D.plain // giao dien "la": khong co the/id quen thuoc, tool phai doan theo chu
+const colors = ['#c62828', '#6a1b9a', '#1565c0', '#2e7d32', '#ef6c00', '#4e342e', '#00838f']
+const color = (s) => colors[[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % colors.length]
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const tag = (t, cls) => (P ? `div class="${cls}"` : `${t} class="${cls}"`)
+const end = (t) => (P ? 'div' : t)
+const id = (s) => (P ? '' : ` id="${s}"`)
+const avatar = (name, cls = 'av') => `<span class="${cls}" style="background:${color(name)}">${esc([...name][0].toUpperCase())}</span>`
+
+// Cau truc theo HTML that cua Studio (html/yt-1-trang-chu.html): the, id, thuoc tinh, chu.
+const ys = (attrs, text) => (P ? `<div>${text}</div>` : `<yt-formatted-string${attrs}>${text}</yt-formatted-string>`)
+const link = (label, act, chev) => `<${tag('ytd-compact-link-renderer', 'item')}${act ? ` data-act="${act}"` : ''}><a${id('endpoint')} role="link"><${tag('tp-yt-paper-item', 'pi')} role="none"><span>•</span><div${id('primary-text-container')}>${ys(' id="label"', label)}</div>${chev ? '<span class="chev">›</span>' : ''}</${end('tp-yt-paper-item')}></a></${end('ytd-compact-link-renderer')}>`
+document.getElementById('app').innerHTML = `
+<${tag('ytcp-header', 'top')} style="display:flex">
+  <span class="logo"><b>▶</b>Studio</span>
+  <input class="search" placeholder="Tìm kiếm trên kênh của bạn">
+  <button class="pill">✦ Hỏi Studio</button><button class="pill">Tạo</button>
+  <${tag('ytd-topbar-menu-button-renderer', 'tb')}><button${id('avatar-btn')} class="av" aria-haspopup="true" aria-label="${P ? 'Tài khoản' : 'Account'}" style="background:${color(D.active.name)};cursor:pointer">${esc([...D.active.name][0])}</button></${end('ytd-topbar-menu-button-renderer')}>
+</${end('ytcp-header')}>
+<div class="wrap">
+  <${tag('ytcp-navigation-drawer', 'drawer')}${id('nav-drawer')}><nav${id('left-nav')}>
+    ${avatar(D.active.name, 'av big')}
+    <div${id('entity-label-container')}>
+      <div class="lab"${id('entity-type')}>Kênh của bạn</div>
+      <div><div class="nm"${id('entity-name')}></div></div>
+    </div>
+    <a class="on">Tổng quan</a><a>Nội dung</a><a>Số liệu phân tích</a><a>Cộng đồng</a><a>Ngôn ngữ</a><a>Kiếm tiền</a><a>Tuỳ chỉnh</a>
+  </nav></${end('ytcp-navigation-drawer')}>
+  <main>
+    <h1>Trang tổng quan của kênh</h1>
+    <div class="card"><div>Số liệu phân tích về kênh</div><div style="color:#aaa;margin-top:8px">Số người đăng ký hiện tại</div><div style="font-size:28px">${esc(D.active.subs)}</div></div>
+  </main>
+</div>
+<${tag('ytcp-popup-container', 'pc')}><${tag('tp-yt-iron-dropdown', 'menu')}><div${id('contentWrapper')}>
+  <${tag('ytd-multi-page-menu-renderer', 'mp')} menu-style="multi-page-menu-style-type-account">
+    <div class="page1">
+      <div${id('header')}><${tag('ytd-active-account-header-renderer', 'hd')}>${avatar(D.active.name)}<div${id('channel-container')}>${ys(' id="account-name"', esc(D.active.name))}${ys(' id="email" is-empty=""', '')}${ys(' id="channel-handle"', esc(D.active.handle))}</div></${end('ytd-active-account-header-renderer')}></div>
+      <div${id('container')} style="padding-top:8px"><div${id('sections')}>
+        ${link('Kênh của bạn')}${link('YouTube')}${link('Chuyển đổi tài khoản', 'switch', true)}${link('Đăng xuất', 'logout')}
+        <div class="sep"></div>
+        ${link('Giao diện: Giao diện thiết bị', '', true)}${link('Gửi ý kiến phản hồi')}
+      </div></div>
+    </div>
+    <div class="page2"${id('submenu')} style="display:none"><${tag('ytd-multi-page-menu-renderer', 'mp2')} menu-style="multi-page-menu-style-type-switcher">
+      <div${id('header')}><${tag('ytd-simple-menu-header-renderer', 'sub-hd')}><${tag('ytd-button-renderer', 'bb')}${id('back-button')}><button aria-label="Quay lại" data-act="back">←</button></${end('ytd-button-renderer')}><h2>${ys('', 'Tài khoản')}</h2></${end('ytd-simple-menu-header-renderer')}></div>
+      <div${id('container')}><div id="sections" class="secs"><div class="spin">Đang tải…</div></div></div>
+    </${end('ytd-multi-page-menu-renderer')}></div>
+  </${end('ytd-multi-page-menu-renderer')}>
+</div></${end('tp-yt-iron-dropdown')}></${end('ytcp-popup-container')}>`
+
+// ten kenh o thanh ben nap muon (nhu Studio that)
+setTimeout(() => { document.querySelector('.nm').textContent = D.active.name }, 300)
+
+const menu = document.querySelector('.menu')
+// dong kenh nhu ytd-account-item-renderer that: ten #channel-title, @handle va so nguoi dang ky la
+// yt-formatted-string[secondary] (khong co id), dau ✓ la yt-icon#selected (an bang [hidden])
+const row = (c, opts = {}) => {
+  const on = c.uc === D.active.uc && !opts.other
+  return `<${tag('ytd-account-item-renderer', 'row')} thumbnail-size="${opts.other ? 36 : 48}"${on && !P ? ' enable-ring-for-active-account=""' : ''} data-uc="${opts.other || opts.personal || c.deleted ? '' : c.uc}" data-other="${opts.other ? 1 : ''}" data-deleted="${c.deleted ? 1 : ''}">
+  <${tag('tp-yt-paper-icon-item', 'pii')} role="option" tabindex="0"><div${id('contentIcon')}>${avatar(c.name)}</div>
+  <${tag('tp-yt-paper-item-body', 't')} two-line="">${ys(' id="channel-title"', esc(c.name))}${c.handle && !opts.other ? ys(' respect-lang-dir="" secondary="" dir="auto"', esc(c.handle)) : ys(' respect-lang-dir="" secondary="" is-empty="" dir="auto"', '')}${ys(' secondary=""', esc(c.subs))}</${end('tp-yt-paper-item-body')}>
+  ${P ? (on ? '<span class="chk">✓</span>' : '') : `<yt-icon id="selected" class="chk" icon="yt-icons:check"${on ? '' : ' hidden=""'}>✓</yt-icon>`}
+  </${end('tp-yt-paper-icon-item')}>
+</${end('ytd-account-item-renderer')}>`
+}
+
+function loadSections() {
+  const box = document.querySelector('.page2 .secs')
+  box.innerHTML = '<div class="spin">Đang tải…</div>'
+  setTimeout(() => {
+    box.innerHTML = `
+      <${tag('ytd-account-section-list-renderer', 'sec')}>
+        <div${id('header')}><${tag('ytd-google-account-header-renderer', 'acc-hd')}><div${id('container')}><div>${ys(' id="name"', esc(D.account.name))}</div><div class="em">${ys(' id="email"', esc(D.account.email))}</div></div></${end('ytd-google-account-header-renderer')}></div>
+        <div${id('contents')}><${tag('ytd-account-item-section-renderer', 'its')}><div${id('contents')}>
+        ${D.account.personal ? row({ name: D.account.personal, subs: 'Không có kênh' }, { personal: true }) : ''}
+        ${D.channels.map((c) => row(c)).join('')}
+        </div></${end('ytd-account-item-section-renderer')}></div>
+      </${end('ytd-account-section-list-renderer')}>
+      ${D.others ? `<${tag('ytd-account-section-list-renderer', 'sec')}>
+        <div${id('header')}><${tag('ytd-accounts-dialog-header-renderer', 'other-title')}>${ys('', '<span dir="auto">Các tài khoản khác</span>')}</${end('ytd-accounts-dialog-header-renderer')}></div>
+        <div${id('contents')}><${tag('ytd-account-item-section-renderer', 'its')}><div${id('header')}><${tag('ytd-account-item-section-header-renderer', 'acc-hd em')}>${ys('', esc(D.others.email))}</${end('ytd-account-item-section-header-renderer')}></div>
+        <div${id('contents')}>${D.others.channels.map((c) => row(c, { other: true })).join('')}</div></${end('ytd-account-item-section-renderer')}></div>
+      </${end('ytd-account-section-list-renderer')}>` : ''}`
+  }, 600)
+}
+
+document.addEventListener('click', async (e) => {
+  const av = e.target.closest('.av[aria-haspopup]')
+  if (av) { menu.classList.toggle('open'); menu.querySelector('.page1').style.display = ''; menu.querySelector('.page2').style.display = 'none'; return }
+  const act = e.target.closest('[data-act]')
+  if (act && act.dataset.act === 'switch') { menu.querySelector('.page1').style.display = 'none'; menu.querySelector('.page2').style.display = ''; loadSections(); return }
+  if (act && act.dataset.act === 'back') { menu.querySelector('.page1').style.display = ''; menu.querySelector('.page2').style.display = 'none'; return }
+  if (act && act.dataset.act === 'logout') { location.href = '/studio/__logout'; return }
+  const r = e.target.closest('.row')
+  if (r) {
+    if (r.dataset.other) { fetch('/__log', { method: 'POST', body: JSON.stringify({ type: 'other-account-click' }) }); return }
+    if (r.dataset.deleted) { fetch('/__log', { method: 'POST', body: JSON.stringify({ type: 'deleted-click' }) }); return }
+    if (!r.dataset.uc) { fetch('/__log', { method: 'POST', body: JSON.stringify({ type: 'create-channel-click' }) }); location.href = '/studio/create-channel'; return }
+    menu.classList.remove('open')
+    await fetch('/studio/__switch?uc=' + r.dataset.uc)
+    location.href = '/studio/'
+    return
+  }
+  if (!e.target.closest('.menu')) menu.classList.remove('open')
+})
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') menu.classList.remove('open') })
+</script>
+</body>
+</html>

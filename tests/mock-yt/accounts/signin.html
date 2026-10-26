@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="vi">
+<head><meta charset="utf-8"><title>Đăng nhập - Tài khoản Google</title>
+<style>
+  body { margin: 0; font-family: Roboto, Arial, sans-serif; background: #f0f4f9; color: #1f1f1f; display: flex; align-items: center; justify-content: center; min-height: 100vh }
+  .box { background: #fff; border-radius: 28px; padding: 36px; width: 420px }
+  h1 { font-weight: 400; font-size: 32px; margin: 12px 0 }
+  input { width: 100%; box-sizing: border-box; height: 52px; border: 1px solid #747775; border-radius: 4px; padding: 0 14px; font-size: 16px; margin: 24px 0 }
+  button { background: #0b57d0; color: #fff; border: 0; border-radius: 20px; height: 40px; padding: 0 24px; font-size: 14px; float: right }
+  #err { color: #b3261e; font-size: 13px }
+</style></head>
+<body>
+<!-- Trang dang nhap Google gia: nhap email, bam "Tiep theo" -> cookie MOCK_SID -> ve Studio -->
+<div class="box">
+  <div>Google</div>
+  <h1>Đăng nhập</h1>
+  <div>Sử dụng Tài khoản Google của bạn</div>
+  <input id="identifierId" type="email" aria-label="Email hoặc số điện thoại" placeholder="Email hoặc số điện thoại">
+  <div id="err"></div>
+  <button id="next">Tiếp theo</button>
+</div>
+<script>
+const DATA = /*DATA*/null
+document.getElementById('next').onclick = async () => {
+  const email = document.getElementById('identifierId').value.trim()
+  const r = await fetch('/studio/__login?email=' + encodeURIComponent(email))
+  if (!r.ok) { document.getElementById('err').textContent = 'Không tìm thấy Tài khoản Google của bạn'; return }
+  location.href = '/studio/'
+}
+</script>
+</body>
+</html>
