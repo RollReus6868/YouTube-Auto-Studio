@@ -68,7 +68,7 @@ class Google {
   // ---- dang nhap ------------------------------------------------------------
   // Mo trinh duyet mac dinh toi trang dang nhap Google, cho Google chuyen ve
   // http://127.0.0.1:<cong>/ kem ma, doi ma lay token. openUrl(url) do main.js mo.
-  async login(openUrl, { timeoutMs = 5 * 60e3 } = {}) {
+  async login(openUrl, { timeoutMs = 5 * 60e3, loginHint = '' } = {}) {
     const verifier = b64url(crypto.randomBytes(32))
     const challenge = b64url(crypto.createHash('sha256').update(verifier).digest())
     const stateTok = b64url(crypto.randomBytes(16))
@@ -99,6 +99,8 @@ class Google {
           client_id: this.client.client_id, redirect_uri: redirect, response_type: 'code', scope: SCOPE,
           access_type: 'offline', prompt: 'consent', code_challenge: challenge, code_challenge_method: 'S256', state: stateTok,
         })
+        // goi y tai khoan Google (email cua tai khoan chua kenh) de nguoi dung khoi chon nham
+        if (loginHint) q.set('login_hint', loginHint)
         Promise.resolve(openUrl(`${this.ep.auth}?${q}`)).catch(reject)
       })
       const t = await this.tokenRequest({ grant_type: 'authorization_code', code, redirect_uri: redirect, code_verifier: verifier })

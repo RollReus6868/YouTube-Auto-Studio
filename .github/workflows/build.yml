@@ -75,6 +75,7 @@ jobs:
       - name: Kiem thu phan xu ly (quet thu muc, mau, lich, Google API gia lap)
         run: |
           node tests/ci-run.js node tests/unit-test.js
+          node tests/ci-run.js node tests/accounts-test.js
           node tests/ci-run.js node tests/google-test.js
 
       - name: Chay that app tu ma nguon (Studio gia lap nhung trong cua so)
@@ -83,6 +84,7 @@ jobs:
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-update.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-upload.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-comments.js
+          xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-accounts.js
 
   # ------------------------------------------------------------------ 2. Windows
   windows:
