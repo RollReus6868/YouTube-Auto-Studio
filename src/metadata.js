@@ -47,9 +47,13 @@ const splitTags = (s) => String(s || '').split(/[,\n]/).map((t) => t.trim()).fil
 const pad = (n) => String(n).padStart(2, '0')
 const fmtDate = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`
 
-// {bien} -> gia tri; bien khong biet thi giu nguyen de nguoi dung thay ma sua.
+// {bien} -> gia tri (bien biet nhung rong -> chuoi rong); bien khong biet thi giu nguyen
+// de nguoi dung thay ma sua. Don dau cach / dong trong thua do bien rong de lai.
 function render(template, vars) {
-  return String(template || '').replace(/\{([\p{L}\w]+)\}/gu, (m, k) => (vars[k] !== undefined && vars[k] !== '' ? String(vars[k]) : m))
+  return String(template || '')
+    .replace(/\{([\p{L}\w]+)\}/gu, (m, k) => (vars[k] !== undefined && vars[k] !== null ? String(vars[k]) : m))
+    .replace(/[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
 }
 
 // Ket qua cuoi cung cho mot video: preset + ghi de tu info.txt.

@@ -37,6 +37,7 @@ export type Settings = {
   replyMode: 'review' | 'auto' | 'off'
   replyPerHour: number
   skipWords: string
+  youtubeChannel: { id: string; title: string } | null
 }
 export type VideoMeta = {
   title: string
@@ -75,6 +76,8 @@ export type PostItem = {
   errors: string[]
   warnings: string[]
 }
+export type Job = { status: 'queued' | 'run' | 'done' | 'error' | 'stopped'; title?: string; step: string; progress: number; error: string; url: string; warnings?: string[] }
+export type Draft = { id: string; text: string; loading: boolean; error: string }
 export type State = {
   status: 'idle' | 'run' | 'update'
   version: string
@@ -83,6 +86,9 @@ export type State = {
   secrets: { gemini: boolean; geminiEncrypted: boolean; oauth: { project_id: string; client_id: string } | null }
   scan: { root: string; videos: VideoItem[]; posts: PostItem[]; errors: string[]; at: string }
   studio: { channelId: string; url: string; visible: boolean }
+  youtube: { channel: { id: string; title: string; thumb?: string } | null; busy: boolean }
+  jobs: Record<string, Job>
+  draft: Draft | null
   categories: [string, string][]
   logs: { t: string; level: Level; msg: string }[]
 }
@@ -122,7 +128,7 @@ const demoSettings: Settings = {
   ],
   defaultPreset: 'mac-dinh', geminiModel: 'gemini-2.5-flash',
   replyStyle: 'Trả lời thân thiện, ngắn gọn (1–2 câu), xưng "mình", gọi khán giả là "bạn".',
-  replyMode: 'review', replyPerHour: 20, skipWords: '',
+  replyMode: 'review', replyPerHour: 20, skipWords: '', youtubeChannel: { id: 'UCxxxxxxxxxxxxxxxxxxxxxx', title: 'Kênh Của Tôi' },
 }
 
 const meta = (title: string, publishAt: string | null): VideoMeta => ({
@@ -150,6 +156,12 @@ export const demoState: State = {
     ],
   },
   studio: { channelId: 'UCxxxxxxxxxxxxxxxxxxxxxx', url: 'https://studio.youtube.com/channel/UCxxxxxxxxxxxxxxxxxxxxxx', visible: false },
+  youtube: { channel: { id: 'UCxxxxxxxxxxxxxxxxxxxxxx', title: 'Kênh Của Tôi' }, busy: false },
+  jobs: {
+    v1: { status: 'done', step: '', progress: 100, error: '', url: 'https://youtu.be/abc123' },
+    v2: { status: 'run', step: 'upload', progress: 42, error: '', url: '' },
+  },
+  draft: null,
   categories: CATEGORIES,
   logs: [
     { t: '12:00:02', level: 'ok', msg: 'Thư mục gốc: D:\\YouTube-DangBai' },
@@ -162,7 +174,8 @@ export const emptyState: State = {
   status: 'idle', version: '', update: noUpdate, settings: null,
   secrets: { gemini: false, geminiEncrypted: false, oauth: null },
   scan: { root: '', videos: [], posts: [], errors: [], at: '' },
-  studio: { channelId: '', url: '', visible: false }, categories: CATEGORIES, logs: [],
+  studio: { channelId: '', url: '', visible: false }, youtube: { channel: null, busy: false }, jobs: {}, draft: null,
+  categories: CATEGORIES, logs: [],
 }
 
 export function call(cmd: string, payload?: unknown): Promise<State | null> {

@@ -1,10 +1,10 @@
 import {
   AlertTriangle, ArrowUpCircle, CalendarClock, Copy, Download, Eraser, ExternalLink, FileVideo, FolderOpen, FolderPlus, Globe, Home,
   ImageIcon, KeyRound, LayoutTemplate, Megaphone, MessageSquareReply, Palette, Plus, RefreshCw, Save, ScrollText, Settings, Sparkles,
-  SquarePlay, Subtitles, Trash2, Upload,
+  SquarePlay, Square, Subtitles, Trash2, Upload, LogIn, LogOut,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { call, demoState, emptyState, isDemo, newPreset, type Level, type PostItem, type Preset, type Settings as SettingsT, type State, type VideoItem } from './api'
+import { call, demoState, emptyState, isDemo, newPreset, type Job, type Level, type PostItem, type Preset, type Settings as SettingsT, type State, type VideoItem } from './api'
 import {
   ActionBar, AppShell, BrowserPane, Button, Card, Choice, Dialog, EmptyState, Field, GradientProgress, LevelTag, PageBody, PageHeader, Pill, Select,
   Sidebar, TextArea, TextInput, ThemeGrid, ToggleRow, cn, type Tone,
@@ -79,11 +79,38 @@ function FolderBar({ state, send }: Backend) {
 }
 
 /* ================= Dang video ================= */
-function VideoCard({ v, open, onToggle, onOpen }: { v: VideoItem; open: boolean; onToggle: () => void; onOpen: () => void }) {
+const STEPS: Record<string, string> = { upload: 'Đang tải lên', thumbnail: 'Đang đặt thumbnail', playlist: 'Đang thêm vào playlist', subtitles: 'Đang thêm phụ đề' }
+
+function JobLine({ job, send }: { job: Job; send: Backend['send'] }) {
+  if (job.status === 'queued') return <Pill tone="muted">Đang chờ đăng</Pill>
+  if (job.status === 'run') {
+    return (
+      <div className="space-y-1">
+        <GradientProgress value={job.progress} />
+        <p className="text-[11px] text-muted-foreground">{STEPS[job.step] || 'Đang xử lý'}{job.step === 'upload' ? ` · ${job.progress}%` : '…'}</p>
+      </div>
+    )
+  }
+  if (job.status === 'done') {
+    return (
+      <span className="inline-flex flex-wrap items-center gap-2">
+        <Pill tone="success">Đã đăng</Pill>
+        <button className="text-xs font-semibold text-primary hover:underline" onClick={() => send('open_url', job.url)}>{job.url}</button>
+      </span>
+    )
+  }
+  if (job.status === 'stopped') return <Pill tone="warning">Đã dừng</Pill>
+  return <Pill tone="error" className="max-w-full">{job.error}</Pill>
+}
+
+function VideoCard({ v, job, open, onToggle, busy, connected, send }: {
+  v: VideoItem; job?: Job; open: boolean; onToggle: () => void; busy: boolean; connected: boolean; send: Backend['send']
+}) {
   const bad = v.errors.length > 0
+  const active = job && (job.status === 'run' || job.status === 'queued')
   return (
-    <article className={cn('rounded-xl border bg-card/40 transition-all', bad ? 'border-red-500/30' : 'border-border/50 hover:border-primary/30')}>
-      <button onClick={onToggle} aria-expanded={open} className="flex w-full items-start gap-3 p-3 text-left">
+    <article className={cn('rounded-xl border bg-card/40 transition-all', bad ? 'border-red-500/30' : active ? 'border-primary/40' : 'border-border/50 hover:border-primary/30')}>
+      <button onClick={onToggle} aria-expanded={open} className="flex w-full items-start gap-3 p-3 pb-[38px] text-left">
         <div className="relative flex h-[72px] w-32 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
           {v.thumbUrl ? <img src={v.thumbUrl} alt="" className="h-full w-full object-cover" /> : <ImageIcon className="h-6 w-6 text-muted-foreground/60" />}
           {v.size > 0 && <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[10px] font-semibold text-white">{fmtSize(v.size)}</span>}
@@ -96,11 +123,15 @@ function VideoCard({ v, open, onToggle, onOpen }: { v: VideoItem; open: boolean;
             {v.video && <Chip icon={FileVideo}>{v.video}</Chip>}
             {v.subtitles.length > 0 && <Chip icon={Subtitles}>{v.subtitles.map((s) => s.lang).join(', ')}</Chip>}
           </div>
-          {bad ? <Pill tone="error" className="max-w-full">{v.errors[0]}</Pill>
-            : v.warnings.length > 0 ? <Pill tone="warning" className="max-w-full">{v.warnings[0]}</Pill>
-            : <Pill tone="success">Sẵn sàng</Pill>}
         </div>
       </button>
+      {/* nam ngoai nut mo/dong: trong dong trang thai co lien ket bam duoc */}
+      <div className="-mt-[34px] mb-3 ml-[152px] mr-3 min-h-[22px]">
+        {job && !bad ? <JobLine job={job} send={send} />
+          : bad ? <Pill tone="error" className="max-w-full">{v.errors[0]}</Pill>
+          : v.warnings.length > 0 ? <Pill tone="warning" className="max-w-full">{v.warnings[0]}</Pill>
+          : <Pill tone="success">Sẵn sàng</Pill>}
+      </div>
       {open && (
         <div className="space-y-3 border-t border-border/50 p-3 text-sm">
           <div>
@@ -115,27 +146,65 @@ function VideoCard({ v, open, onToggle, onOpen }: { v: VideoItem; open: boolean;
             <dt className="text-muted-foreground">Dành cho trẻ em</dt><dd className="font-semibold">{v.meta.madeForKids ? 'Có' : 'Không'}</dd>
             <dt className="text-muted-foreground">Hiển thị</dt><dd className="font-semibold">{v.meta.publishAt ? `Riêng tư → Công khai lúc ${fmtWhen(v.meta.publishAt)}` : PRIVACY[v.meta.privacy]}</dd>
           </dl>
-          {[...v.errors.slice(1), ...v.warnings.slice(v.errors.length ? 0 : 1)].map((m) => (
+          {[...v.errors.slice(1), ...v.warnings.slice(v.errors.length ? 0 : 1), ...(job?.warnings ?? [])].map((m) => (
             <p key={m} className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />{m}</p>
           ))}
-          <Button variant="subtle" className="h-8 px-3 text-xs" onClick={onOpen} disabled={!v.folder}><FolderOpen /> Mở thư mục</Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" className="h-8 px-3 text-xs" disabled={busy || !v.folder || !v.video} onClick={() => send('describe', v.id)}><Sparkles /> Gemini viết mô tả</Button>
+            <Button variant="outline" className="h-8 px-3 text-xs" disabled={busy || bad || !connected || job?.status === 'done'} onClick={() => send('upload', [v.id])}><Upload /> Đăng video này</Button>
+            <Button variant="subtle" className="h-8 px-3 text-xs" onClick={() => send('open_path', v.folder)} disabled={!v.folder}><FolderOpen /> Mở thư mục</Button>
+          </div>
         </div>
       )}
     </article>
   )
 }
 
+function DraftDialog({ state, send }: Backend) {
+  const d = state.draft
+  const [text, setText] = useState('')
+  useEffect(() => setText(d?.text ?? ''), [d?.text])
+  const v = state.scan.videos.find((x) => x.id === d?.id)
+  return (
+    <Dialog
+      open={!!d}
+      onClose={() => send('draft_close')}
+      title={`Gemini viết mô tả${v ? `: ${v.meta.title}` : ''}`}
+      actions={
+        <>
+          <Button variant="outline" onClick={() => send('draft_close')}>Đóng</Button>
+          <Button variant="outline" disabled={d?.loading} onClick={() => d && send('describe', d.id)}><RefreshCw /> Viết lại</Button>
+          <Button disabled={!d || d.loading || !text.trim()} onClick={() => d && send('save_description', { id: d.id, text })}><Save /> Lưu vào info.txt</Button>
+        </>
+      }
+    >
+      {d?.loading ? <p className="animate-pulse">Gemini đang viết…</p>
+        : d?.error ? <p className="text-red-600 dark:text-red-400">{d.error}</p>
+        : <>
+            <TextArea rows={10} value={text} onChange={(e) => setText(e.target.value)} aria-label="Mô tả Gemini viết" className="text-foreground" />
+            <p className="text-[11px]">Sửa lại nếu cần. Bấm lưu sẽ thay phần mô tả (sau dòng ---) trong info.txt của video này.</p>
+          </>}
+    </Dialog>
+  )
+}
+
 function VideosPage({ state, send, go }: Backend & { go: (p: string) => void }) {
   const [open, setOpen] = useState<string | null>(null)
-  const ready = state.scan.videos.filter((v) => !v.errors.length)
-  const connected = false // giai doan 2: dang nhap kenh qua OAuth
+  const ready = state.scan.videos.filter((v) => !v.errors.length && state.jobs[v.id]?.status !== 'done')
+  const connected = !!state.youtube.channel
+  const busy = state.status !== 'idle'
+  const finished = Object.entries(state.jobs).filter(([id, j]) => j.status === 'done' && !state.scan.videos.some((v) => v.id === id))
   return (
     <>
       <PageHeader
         icon={Upload}
         title="Đăng video"
         description="Mỗi thư mục con trong videos/ là một video. Tool điền sẵn tiêu đề, mô tả, thẻ và lịch theo mẫu mặc định."
-        actions={<><UpdateBadge state={state} go={() => go('update')} />{state.secrets.oauth ? <Pill tone="info">Đã có OAuth client</Pill> : <Pill tone="muted">Chưa kết nối API</Pill>}</>}
+        actions={<>
+          <UpdateBadge state={state} go={() => go('update')} />
+          {connected ? <Pill tone="success" className="max-w-[220px]">{state.youtube.channel!.title}</Pill>
+            : <button onClick={() => go('settings')} className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted/70">Chưa đăng nhập kênh</button>}
+        </>}
       />
       <div className="shrink-0 space-y-3 px-4 pb-3">
         <FolderBar state={state} send={send} />
@@ -147,32 +216,50 @@ function VideosPage({ state, send, go }: Backend & { go: (p: string) => void }) 
         ))}
       </div>
       <PageBody>
+        {finished.length > 0 && (
+          <Card title="Vừa đăng xong" hint="thư mục đã chuyển vào da-dang/">
+            <ul className="space-y-1.5">
+              {finished.map(([id, j]) => (
+                <li key={id} className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="min-w-0 flex-1 truncate font-semibold">{j.title}</span>
+                  <button className="text-xs font-semibold text-primary hover:underline" onClick={() => send('open_url', j.url)}>{j.url}</button>
+                  {j.warnings && j.warnings.length > 0 && <Pill tone="warning" className="max-w-full">{j.warnings[0]}</Pill>}
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
         {state.scan.videos.length === 0 ? (
           <EmptyState icon={FileVideo} text={state.scan.root ? 'Chưa có video nào trong thư mục videos/. Mỗi video là một thư mục con chứa file video, thumbnail và info.txt (tùy chọn).' : 'Chọn thư mục gốc để tool quét video và bài viết của bạn.'} />
         ) : (
           <>
-            <p className="text-xs text-muted-foreground">{state.scan.videos.length} video · {ready.length} sẵn sàng · bấm vào một video để xem mô tả đã điền</p>
+            <p className="text-xs text-muted-foreground">{state.scan.videos.length} video · {ready.length} sẵn sàng · bấm vào một video để xem mô tả, nhờ Gemini viết, hoặc đăng riêng</p>
             {state.scan.videos.map((v) => (
-              <VideoCard key={v.id} v={v} open={open === v.id} onToggle={() => setOpen(open === v.id ? null : v.id)} onOpen={() => send('open_path', v.folder)} />
+              <VideoCard key={v.id} v={v} job={state.jobs[v.id]} open={open === v.id} onToggle={() => setOpen(open === v.id ? null : v.id)} busy={busy} connected={connected} send={send} />
             ))}
           </>
         )}
       </PageBody>
       <ActionBar>
-        <Button variant="gradient" size="xl" className="flex-1" disabled={!connected || !ready.length} title={connected ? '' : 'Cần kết nối kênh YouTube (giai đoạn 2)'}>
-          <Upload /> {ready.length ? `Đăng ${ready.length} video` : 'Đăng video'}
-        </Button>
+        {busy ? (
+          <Button variant="danger" size="xl" className="flex-1" onClick={() => send('stop')}><Square /> Dừng sau video đang tải</Button>
+        ) : (
+          <Button variant="gradient" size="xl" className="flex-1" disabled={!connected || !ready.length} title={connected ? '' : 'Đăng nhập kênh YouTube trong Cài đặt trước'} onClick={() => send('upload')}>
+            <Upload /> {ready.length ? `Đăng ${ready.length} video` : 'Đăng video'}
+          </Button>
+        )}
         <Button variant="subtle" size="icon-xl" aria-label="Sửa mẫu mặc định" title="Sửa mẫu mặc định" onClick={() => go('presets')}>
           <LayoutTemplate />
         </Button>
       </ActionBar>
+      <DraftDialog state={state} send={send} />
     </>
   )
 }
 
 /* ================= Mau mac dinh (kieu hop thoai tai len cua Studio) ================= */
 function renderPreview(tpl: string, vars: Record<string, string>) {
-  return tpl.replace(/\{([\p{L}\w]+)\}/gu, (m, k) => (vars[k] ? vars[k] : m))
+  return tpl.replace(/\{([\p{L}\w]+)\}/gu, (m, k) => (k in vars ? vars[k] : m)).replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n')
 }
 
 function PresetsPage({ state, send }: Backend) {
@@ -555,6 +642,15 @@ function SettingsPage({ state, send }: Backend) {
                   {state.secrets.oauth && <Button variant="subtle" className="h-8 px-3" onClick={() => send('oauth_clear')}><Trash2 /> Xóa</Button>}
                 </div>
                 <Button variant="subtle" className="h-8 px-3 text-xs" onClick={() => send('open_url', 'https://console.cloud.google.com/apis/credentials')}><ExternalLink /> Mở Google Cloud Console</Button>
+                <hr className="gradient-divider" />
+                <div className="flex flex-wrap items-center gap-2">
+                  {state.youtube.channel ? <Pill tone="success" className="max-w-full">Kênh {state.youtube.channel.title}</Pill> : <Pill tone="muted">Chưa đăng nhập kênh</Pill>}
+                  <span className="flex-1" />
+                  {state.youtube.channel
+                    ? <Button variant="subtle" className="h-8 px-3" disabled={state.status !== 'idle'} onClick={() => send('yt_logout')}><LogOut /> Ngắt kết nối</Button>
+                    : <Button variant="default" className="h-8 px-3" disabled={!state.secrets.oauth || state.youtube.busy} onClick={() => send('yt_login')}><LogIn /> {state.youtube.busy ? 'Đang chờ bạn đăng nhập…' : 'Đăng nhập kênh'}</Button>}
+                </div>
+                <p className="text-[11px] text-muted-foreground">Đăng nhập mở trong trình duyệt mặc định. Google có thể cảnh báo “ứng dụng chưa được xác minh”: bấm Nâng cao → Đi tới (không an toàn) vì đây là app của chính bạn.</p>
               </div>
             </Card>
             <Card title="Gemini API" hint={<Sparkles className="inline h-3.5 w-3.5" />}>

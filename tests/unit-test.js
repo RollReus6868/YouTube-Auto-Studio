@@ -81,6 +81,9 @@ test('mau tieu de / mo ta', () => {
   assert.equal(m.description, 'Bí ẩn rừng sâu | Tập 3\nNgày 02/11/2026\n#phimhay #review\nLan')
   assert.deepEqual([m.privacy, m.publishAt, m.thumbnail], ['private', null, '/t.jpg'])
   assert.deepEqual(md.validateMeta(m), [])
+  // bien rong (khong co the, khong co so tap) -> chuoi rong, khong bao "chua dien"
+  const e = md.buildVideoMeta({ name: 'X', info: { vars: {} } }, md.defaultPreset())
+  assert.deepEqual([e.title, e.description, md.validateMeta(e)], ['X', 'X', []])
   // len lich -> private + publishAt, ngay lay theo gio dang
   const s = md.buildVideoMeta(item, { ...preset, privacy: 'public' }, { publishAt: new Date(2026, 10, 5, 19).toISOString() })
   assert.equal(s.privacy, 'private')

@@ -54,6 +54,17 @@ Phần mô tả viết từ đây. Dòng "Khách mời" ở trên dùng được
 
 Biến dùng trong mẫu: `{ten_video}` `{tieu_de}` `{so_tap}` `{ngay}` `{ten_kenh}` `{hashtag}` `{playlist}` và mọi khóa trong info.txt.
 
+## Kết nối kênh YouTube (làm một lần)
+
+1. Vào [Google Cloud Console](https://console.cloud.google.com/), tạo dự án mới (ví dụ `tool-dang-youtube`).
+2. **APIs & Services → Library**: tìm **YouTube Data API v3**, bấm **Enable**.
+3. **APIs & Services → OAuth consent screen**: chọn **External**, điền tên app và email, thêm email của bạn vào **Test users**. Sau đó bấm **Publish app** (chuyển sang *In production*) để đăng nhập không hết hạn sau 7 ngày.
+4. **APIs & Services → Credentials → Create credentials → OAuth client ID**, loại **Desktop app**, tải file JSON.
+5. Trong tool: **Cài đặt → Kết nối YouTube API → Nhập file JSON**, rồi **Đăng nhập kênh**. Google báo "ứng dụng chưa được xác minh" thì bấm **Nâng cao → Đi tới ... (không an toàn)**, vì đây là app của chính bạn.
+6. Muốn video đăng lên được để Công khai: nộp đơn [YouTube API Services Audit](https://support.google.com/youtube/contact/yt_api_form) cho dự án này.
+
+Gemini API key lấy ở [Google AI Studio](https://aistudio.google.com/apikey), dán vào **Cài đặt → Gemini API**.
+
 ## Lưu ý về API YouTube
 
 - Video tải lên từ dự án Google Cloud **chưa qua kiểm duyệt** (YouTube API Services Audit) bị khóa ở chế độ Riêng tư.

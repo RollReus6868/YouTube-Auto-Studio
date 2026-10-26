@@ -9,6 +9,8 @@ const updater = require('./updater')
 const scanner = require('./scanner')
 const { buildVideoMeta, validateMeta, planSchedule, CATEGORIES } = require('./metadata')
 const { Store, parseOAuthClient } = require('./store')
+const { Google, endpoints, gemini, descriptionPrompt } = require('./google')
+const { uploadOne } = require('./uploader')
 
 const MAX_LOGS = 300
 const STUDIO_URL = process.env.YA_STUDIO_URL || 'https://studio.youtube.com/'
@@ -20,6 +22,8 @@ let studio = null // WebContentsView
 let store = null
 let busy = false
 let release = null // ban moi tim thay tren GitHub
+let stop = false
+let raw = new Map() // id -> du lieu quet day du (duong dan file) cho viec dang
 const kind = updater.installKind({ exe: process.execPath, packaged: app.isPackaged, platform: process.platform })
 const state = {
   status: 'idle', logs: [],
@@ -29,6 +33,9 @@ const state = {
   secrets: { gemini: false, geminiEncrypted: false, oauth: null },
   scan: { root: '', videos: [], posts: [], errors: [], at: '' },
   studio: { channelId: '', url: '', visible: false },
+  youtube: { channel: null, busy: false },
+  jobs: {}, // id video -> { status: queued|run|done|error|stopped, step, progress, error, url }
+  draft: null, // { id, text, loading, error } mo ta Gemini dang soan
   categories: CATEGORIES,
 }
 
@@ -56,12 +63,29 @@ function refreshSettings() {
 // ---- quet thu muc -------------------------------------------------------------------
 const fileUrl = (p) => (p ? pathToFileURL(p).href : '')
 
+// Lich su da dang: chan dang lai mot thu muc neu chua chuyen duoc vao da-dang/
+const historyFile = () => logFile('uploads.json')
+function readHistory() {
+  try { return JSON.parse(fs.readFileSync(historyFile(), 'utf8')) } catch (_) { return [] }
+}
+function addHistory(entry) {
+  const h = readHistory()
+  h.push(entry)
+  fs.writeFileSync(historyFile(), JSON.stringify(h.slice(-2000), null, 1))
+}
+
 function runScan(quiet = false) {
   const r = scanner.scan(store.settings.root)
+  const done = new Map(readHistory().map((h) => [h.folder, h]))
+  for (const v of r.videos) {
+    const h = done.get(v.folder)
+    if (h) v.errors.unshift(`Đã đăng lên YouTube lúc ${new Date(h.at).toLocaleString('vi-VN')} (${h.url}). Chuyển thư mục này vào da-dang/ để ẩn.`)
+  }
   const ready = r.videos.filter((v) => !v.errors.length)
   const plan = planSchedule(ready, (v) => store.presetFor(v))
   const planOf = new Map(ready.map((v, i) => [v.id, plan[i]]))
   const channel = store.settings.channel
+  raw = new Map()
   state.scan = {
     root: r.root, errors: r.errors, at: r.at,
     videos: r.videos.map((v) => {
@@ -69,6 +93,7 @@ function runScan(quiet = false) {
       const p = planOf.get(v.id) || { publishAt: null, warning: '' }
       const meta = buildVideoMeta(v, preset, { publishAt: p.publishAt, channel })
       const problems = v.errors.length ? v.errors : validateMeta(meta)
+      raw.set(v.id, { folder: v.folder, video: v.video, meta, info: v.info, name: v.name, ok: !problems.length })
       return {
         id: v.id, dir: v.dir, folder: v.folder, name: v.name, size: v.size || 0,
         video: v.video ? path.basename(v.video) : '', thumbUrl: fileUrl(v.thumbnail),
@@ -227,6 +252,131 @@ async function updateInstall() {
   }
 }
 
+// ---- YouTube API --------------------------------------------------------------------
+function oauthClient() {
+  try { return store.hasSecret('oauthClient') ? JSON.parse(store.getSecret('oauthClient')) : null } catch (_) { return null }
+}
+function google() {
+  const client = oauthClient()
+  if (!client) throw new Error('Chưa nhập OAuth client (Cài đặt → Kết nối YouTube API).')
+  let tokens = null
+  try { tokens = store.hasSecret('youtubeToken') ? JSON.parse(store.getSecret('youtubeToken')) : null } catch (_) { /* hong */ }
+  return new Google({ client, tokens, fetchFn: net.fetch, ep: endpoints(), onTokens: (t) => store.setSecret('youtubeToken', JSON.stringify(t)) })
+}
+// Trong kiem thu (YA_GOOGLE_MOCK) "trinh duyet" chi la mot lan fetch di theo chuyen huong
+async function openLogin(url) {
+  if (process.env.YA_GOOGLE_MOCK) {
+    const r = await fetch(url, { redirect: 'manual' })
+    await fetch(r.headers.get('location')).then((x) => x.text())
+  } else await shell.openExternal(url)
+}
+
+async function ytLogin() {
+  state.youtube.busy = true
+  push()
+  try {
+    const g = google()
+    log('info', 'Đã mở trang đăng nhập Google trong trình duyệt. Chọn tài khoản có kênh và bấm Cho phép.')
+    await g.login(openLogin)
+    state.youtube.channel = await g.myChannel()
+    store.save({ youtubeChannel: state.youtube.channel })
+    refreshSettings()
+    log('ok', `Đã kết nối kênh "${state.youtube.channel.title}".`)
+  } catch (e) {
+    log('error', `Không đăng nhập được kênh: ${e.message}`)
+  } finally {
+    state.youtube.busy = false
+    push()
+  }
+}
+
+function ytLogout() {
+  store.setSecret('youtubeToken', '')
+  store.save({ youtubeChannel: null })
+  state.youtube.channel = null
+  log('info', 'Đã ngắt kết nối kênh YouTube.')
+}
+
+function setJob(id, patch) {
+  state.jobs[id] = { ...(state.jobs[id] || {}), ...patch }
+  push()
+}
+
+async function runUploads(ids) {
+  if (!state.youtube.channel) return log('warn', 'Hãy đăng nhập kênh YouTube trước (Cài đặt → Đăng nhập kênh).')
+  const list = (ids && ids.length ? ids : [...raw.keys()]).filter((id) => raw.get(id) && raw.get(id).ok && (!state.jobs[id] || state.jobs[id].status !== 'done'))
+  if (!list.length) return log('warn', 'Không có video nào sẵn sàng để đăng.')
+  let g
+  try { g = google() } catch (e) { return log('error', e.message) }
+  busy = true
+  stop = false
+  state.status = 'run'
+  for (const id of list) setJob(id, { status: 'queued', step: '', progress: 0, error: '', url: '', title: raw.get(id).meta.title })
+  log('info', `Bắt đầu đăng ${list.length} video.`)
+  let ok = 0
+  try {
+    for (const id of list) {
+      if (stop) { setJob(id, { status: 'stopped' }); continue }
+      const item = raw.get(id)
+      setJob(id, { status: 'run', step: 'upload', progress: 0 })
+      try {
+        const r = await uploadOne(g, item, {
+          root: store.settings.root, log, shouldStop: () => stop,
+          onStep: (step, progress) => setJob(id, progress === undefined ? { step } : { step, progress }),
+        })
+        addHistory({ folder: item.folder, movedTo: r.folder, id: r.id, url: r.url, title: item.meta.title, at: new Date().toISOString() })
+        setJob(id, { status: 'done', step: '', progress: 100, url: r.url, warnings: r.warnings })
+        ok++
+      } catch (e) {
+        setJob(id, { status: e.reason === 'stopped' ? 'stopped' : 'error', error: e.message })
+        log(e.reason === 'stopped' ? 'warn' : 'error', `${item.meta.title}: ${e.message}`)
+        // het han muc / mat dang nhap: cac video sau cung se loi, dung han
+        if (['quotaExceeded', 'uploadLimitExceeded', 'invalid_grant', 'youtubeSignupRequired', 'accessNotConfigured'].includes(e.reason)) stop = true
+      }
+    }
+  } finally {
+    busy = false
+    state.status = 'idle'
+    log(ok === list.length ? 'ok' : 'warn', `Xong: đăng được ${ok}/${list.length} video.`)
+    runScan(true)
+  }
+}
+
+// ---- Gemini viet mo ta -------------------------------------------------------------
+async function describe(id) {
+  const item = raw.get(id)
+  if (!item) return
+  state.draft = { id, text: '', loading: true, error: '' }
+  push()
+  try {
+    const text = await gemini({
+      key: store.getSecret('gemini'), model: store.settings.geminiModel, fetchFn: net.fetch, ep: endpoints(),
+      prompt: descriptionPrompt({ title: item.meta.title, name: item.name, notes: item.info.ghi_chu, channel: store.settings.channel, language: item.meta.language, current: item.info.mo_ta }),
+    })
+    state.draft = { id, text: text.replace(/[<>]/g, ''), loading: false, error: '' }
+  } catch (e) {
+    state.draft = { id, text: '', loading: false, error: e.message }
+  }
+  push()
+}
+
+// Ghi mo ta vao info.txt (giu nguyen cac dong khoa phia tren, thay phan sau "---")
+function saveDescription({ id, text }) {
+  const item = raw.get(id)
+  if (!item || !text) return
+  const file = ['info.txt', 'thong-tin.txt', 'mo-ta.txt'].map((f) => path.join(item.folder, f)).find((f) => fs.existsSync(f)) || path.join(item.folder, 'info.txt')
+  let head = ''
+  if (fs.existsSync(file)) {
+    const lines = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '').split(/\r?\n/)
+    const cut = lines.findIndex((l) => /^\s*-{3,}/.test(l) || /^\s*(mô tả|mo ta|description)\s*:\s*$/i.test(l))
+    head = (cut === -1 ? lines : lines.slice(0, cut)).join('\r\n').trimEnd()
+  }
+  fs.writeFileSync(file, `${head ? `${head}\r\n` : ''}---\r\n${text.trim().replace(/\r?\n/g, '\r\n')}\r\n`)
+  state.draft = null
+  log('ok', `Đã lưu mô tả vào ${path.relative(store.settings.root, file)}.`)
+  runScan(true)
+}
+
 // ---- lenh tu giao dien --------------------------------------------------------------
 async function chooseRoot() {
   const r = await dialog.showOpenDialog(win, { title: 'Chọn thư mục gốc chứa video và bài viết', properties: ['openDirectory', 'createDirectory'] })
@@ -259,6 +409,13 @@ async function importOAuth(file) {
 
 const commands = {
   hello: () => {},
+  stop: () => { stop = true },
+  yt_login: () => !busy && !state.youtube.busy && ytLogin(),
+  yt_logout: () => !busy && ytLogout(),
+  upload: (ids) => !busy && runUploads(ids),
+  describe: (id) => describe(id),
+  draft_close: () => { state.draft = null },
+  save_description: (p) => !busy && saveDescription(p || {}),
   pane: (r) => setPane(r),
   clear: () => { state.logs = [] },
   scan: () => runScan(),
@@ -332,6 +489,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     store = new Store(app.getPath('userData'), safeStorage)
     refreshSettings()
+    if (store.hasSecret('youtubeToken')) state.youtube.channel = store.settings.youtubeChannel || null
     createWindow()
     if (store.settings.root) runScan(true)
     setInterval(refreshStudio, 2000)

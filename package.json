@@ -1,7 +1,7 @@
 {
   "name": "yt-auto-studio",
   "productName": "YTAutoStudio",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Tool desktop tu dong dang video, bai cong dong va tra loi binh luan YouTube (Gemini)",
   "main": "src/main.js",
   "author": "RollReus6868",
@@ -9,7 +9,7 @@
   "repository": { "type": "git", "url": "https://github.com/RollReus6868/youtube-auto-studio.git" },
   "scripts": {
     "start": "electron .",
-    "test": "node tests/unit-test.js && node tests/updater-test.js",
+    "test": "node tests/unit-test.js && node tests/google-test.js && node tests/updater-test.js",
     "build:ui": "npm --prefix ui run build"
   },
   "devDependencies": {
