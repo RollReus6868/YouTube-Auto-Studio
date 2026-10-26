@@ -1,5 +1,6 @@
 // Mau mac dinh (preset) kieu hop thoai tai len cua YouTube Studio, dien mau tieu de /
 // mo ta va tinh gio dang. Khong require('electron') nen kiem thu duoc bang node thuong.
+const { defaultTemplate, normalizeTemplate } = require('./optimize-template')
 
 // Danh muc YouTube (videoCategories, vung VN) - id la so YouTube dung trong API.
 const CATEGORIES = [
@@ -28,12 +29,14 @@ function defaultPreset(id = 'mac-dinh', name = 'Mặc định') {
     publicStatsViewable: true,
     privacy: 'private', // public | unlisted | private (khi len lich: luon private toi gio dang)
     schedule: { mode: 'now', times: ['19:00'], intervalHours: 24 }, // now | times | interval
-    optimizeAfterUpload: false, // sau khi dang: tu toi uu trong Studio bang mau toi uu cua kenh (src/features/optimize.js)
+    optimizeAfterUpload: false, // sau khi dang: tu toi uu trong Studio bang mau `optimize` cua preset (src/features/optimize.js)
+    optimize: defaultTemplate(), // cac muc chi co trong Studio (src/optimize-template.js)
   }
 }
 
 // Bu cac truong thieu (preset luu tu ban cu) bang gia tri mac dinh.
-function normalizePreset(p) {
+// seed: mau Studio cho preset chua co `optimize` (xem presetSeed trong optimize-template.js).
+function normalizePreset(p, seed) {
   const d = defaultPreset(p && p.id, p && p.name)
   const out = { ...d, ...(p || {}) }
   out.schedule = { ...d.schedule, ...((p && p.schedule) || {}) }
@@ -41,6 +44,7 @@ function normalizePreset(p) {
   out.schedule.times = (out.schedule.times || []).filter((t) => /^\d{1,2}:\d{2}$/.test(t))
   if (!out.schedule.times.length) out.schedule.times = ['19:00']
   out.optimizeAfterUpload = out.optimizeAfterUpload === true
+  out.optimize = normalizeTemplate(p && p.optimize && typeof p.optimize === 'object' ? p.optimize : seed)
   return out
 }
 

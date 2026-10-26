@@ -64,8 +64,9 @@ module.exports = (ctx) => {
   }
 
   // Toi uu danh sach video `todo` cua kenh `key` (mot lan withChannel cho ca lo).
+  // v.tpl (neu co): mau rieng cua video (mau Studio cua preset luc dang), khong thi mau cua kenh.
   async function optimizeMany(key, todo) {
-    const tpl = ot.templateFor(templates(), key)
+    const chTpl = ot.templateFor(templates(), key)
     const name = (channel(key) || {}).name || ''
     const mine = () => key === S.channelKey
     const setV = (id, patch) => { if (mine()) set(id, patch) }
@@ -79,6 +80,7 @@ module.exports = (ctx) => {
         for (const v of todo) {
           if (ctx.stopped()) { setV(v.id, { status: 'new', step: '' }); continue }
           const onStep = (step) => setV(v.id, { step })
+          const tpl = v.tpl ? ot.normalizeTemplate(v.tpl) : chTpl
           try {
             const r = await optimizeVideo(page, v.id, tpl, { urls: ctx.urls, log: ctx.log, onStep, video: v, channelName: name })
             const warnings = [...r.warnings]
@@ -131,7 +133,8 @@ module.exports = (ctx) => {
 
   // ---- tu toi uu sau khi dang (preset.optimizeAfterUpload) ----
   // main.js goi ctx.afterUpload sau moi video dang xong. Video duoc xep hang cho toi khi qua gio
-  // dang + 15 phut (cho YouTube xu ly xong), roi tu toi uu bang mau cua kenh.
+  // dang + 15 phut (cho YouTube xu ly xong), roi tu toi uu bang mau Studio cua preset (preset.optimize,
+  // cac muc API da dat thi giu nguyen). Preset/hang cho cu khong co mau: dung mau cua kenh nhu truoc.
   const pendingFile = () => ctx.logFile('optimize-pending.json')
   const readPending = () => { try { return JSON.parse(fs.readFileSync(pendingFile(), 'utf8')) } catch (_) { return [] } }
   const writePending = (list) => fs.writeFileSync(pendingFile(), JSON.stringify(list, null, 1))
@@ -140,9 +143,19 @@ module.exports = (ctx) => {
     if (!preset || !preset.optimizeAfterUpload || !videoId || !channelId) return
     try { // khong bao gio lam hong buoc dang video
       const due = Math.max(Date.now(), (publishAt && Date.parse(publishAt)) || 0) + AFTER_MS
-      writePending(readPending().filter((x) => x.id !== videoId).concat([{ channelKey: channelId, id: videoId, title: title || videoId, due }]))
+      const entry = { channelKey: channelId, id: videoId, title: title || videoId, due }
+      if (preset.optimize) Object.assign(entry, { presetId: preset.id || '', tpl: ot.withoutApiFields(preset.optimize) })
+      writePending(readPending().filter((x) => x.id !== videoId).concat([entry]))
       ctx.log('info', `Đã xếp "${title || videoId}" vào hàng chờ tự tối ưu (lúc ${new Date(due).toLocaleString('vi-VN')}).`)
     } catch (e) { ctx.log('warn', `Không xếp được video vào hàng chờ tối ưu: ${e.message}`) }
+  }
+  // Mau cho video trong hang cho: preset hien tai (nguoi dung co the da sua mau sau khi dang),
+  // preset da xoa thi mau chup luc dang, khong co ca hai -> null (mau cua kenh).
+  function pendingTemplate(x) {
+    const ps = (ctx.store && ctx.store.settings.presets) || []
+    const p = x.presetId && ps.find((q) => q.id === x.presetId)
+    if (p && p.optimize) return ot.withoutApiFields(p.optimize)
+    return x.tpl ? ot.withoutApiFields(x.tpl) : null
   }
   async function processPending(now = Date.now()) {
     if (S.busy || !ctx.withChannel) return 0
@@ -153,7 +166,7 @@ module.exports = (ctx) => {
     // bo khoi hang cho truoc khi chay: loi thi video van hien trong trang Toi uu video de chay lai
     writePending(readPending().filter((x) => !batch.some((b) => b.id === x.id)))
     ctx.log('info', `Tự tối ưu ${batch.length} video vừa đăng.`)
-    return optimizeMany(key, batch.map((x) => ({ id: x.id, title: x.title, visibility: '', date: '' })))
+    return optimizeMany(key, batch.map((x) => ({ id: x.id, title: x.title, visibility: '', date: '', tpl: pendingTemplate(x) })))
   }
 
   function saveTemplate({ channelKey, template } = {}) {

@@ -180,6 +180,20 @@ module.exports.push(['tinh nang: quet, toi uu da chon, nho video da toi uu', asy
   assert(JSON.parse(fs.readFileSync(path.join(tmp, 'optimized.json'), 'utf8'))[UC].NeverProp01)
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(tmp, 'optimize-pending.json'), 'utf8')), [])
   assert.equal((await events(mock, 'save')).length, 1)
+  assert.deepEqual((await events(mock, 'comment')).map((e) => e.text), ['God Was Never Their Property: John 1 and Black Faith | Dark Bible Study'], 'preset chua co mau -> mau cua kenh')
+  // preset co mau Studio rieng: dung mau cua preset, cac muc API da dat (AI, danh muc...) giu nguyen
+  mock.events.length = 0
+  const preset = { id: 'p1', optimizeAfterUpload: true, optimize: { ...defaultTemplate(), ai: 'no', category: '27', license: 'creativeCommon', embeddable: 'no', remix: 'audio', comment: 'Mẫu preset: {tieu_de}' } }
+  ctx.afterUpload({ videoId: 'Maccabee001', title: 'Who Decides?', preset, channelId: UC })
+  const pend = JSON.parse(fs.readFileSync(path.join(tmp, 'optimize-pending.json'), 'utf8'))
+  assert.deepEqual([pend[0].presetId, pend[0].tpl.ai, pend[0].tpl.category, pend[0].tpl.remix], ['p1', 'keep', 'keep', 'audio'], 'luu id preset + mau tren hang cho')
+  // nguoi dung sua preset sau khi dang -> dung ban moi nhat cua preset
+  saved.presets = [{ ...preset, optimize: { ...preset.optimize, comment: 'Mẫu mới: {tieu_de}' } }]
+  assert.equal(await f.processPending(Date.now() + 16 * 60e3), 1, logs.slice(-5).join('\n'))
+  const [sv] = await events(mock, 'save')
+  assert.equal(sv.data.remix, 'Chỉ cho phép phối lại âm thanh')
+  assert.deepEqual([sv.data.ai, sv.data.category, sv.data.license, sv.data.embed], ['', 'Mọi người và blog', 'Giấy phép chuẩn của YouTube', true], 'muc API giu nguyen')
+  assert.deepEqual((await events(mock, 'comment')).map((e) => e.text), [`Mẫu mới: ${S.videos.find((v) => v.id === 'Maccabee001').title}`])
   // khong co withChannel -> bao loi ro rang
   ctx.withChannel = null
   await f.commands.optimize_list(UC)

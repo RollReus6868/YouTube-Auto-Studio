@@ -87,6 +87,21 @@ function setTemplate(templates, key, t) {
   return out
 }
 
+// Cac muc mau tai len (preset) da dat qua API luc dang: chay toi uu sau khi dang thi giu nguyen
+// trong Studio de khong ghi de gia tri cua API.
+const API_FIELDS = ['category', 'language', 'license', 'embeddable', 'ai', 'description']
+function withoutApiFields(t) {
+  const out = normalizeTemplate(t)
+  for (const k of API_FIELDS) out[k] = k === 'language' || k === 'description' ? '' : 'keep'
+  return out
+}
+
+// Mau Studio cho preset cu (chua co preset.optimize): da bat "sau khi dang: toi uu" thi lay mau
+// toi uu mac dinh dang luu (giu nguyen cach chay cu), khong thi lay mau goc cua tool.
+function presetSeed(preset, templates) {
+  return preset && preset.optimizeAfterUpload === true && templates && templates.default ? templates.default : defaultTemplate()
+}
+
 // {bien} -> gia tri; bien khong biet giu nguyen (giong src/metadata.js)
 function renderComment(tpl, vars) {
   return String(tpl || '')
@@ -171,5 +186,6 @@ const isOptimized = (db, channelKey, videoId) => !!(db && db[channelKey] && db[c
 
 module.exports = {
   CATEGORY_NAMES, STUDIO_LANGUAGES, COMMENT_VARS, defaultTemplate, normalizeTemplate, templateFor, setTemplate,
+  API_FIELDS, withoutApiFields, presetSeed,
   renderComment, tagsToAdd, tagLength, fmtStudioDate, parseStudioDate, recordingDateFor, touchedFields, markOptimized, isOptimized,
 }

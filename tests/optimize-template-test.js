@@ -87,6 +87,58 @@ test('mau tai len: tuy chon tu toi uu sau khi dang', () => {
   assert.equal(md.normalizePreset({ optimizeAfterUpload: 'co' }).optimizeAfterUpload, false)
 })
 
+test('mau tai len: moi preset co mau Studio rieng (preset.optimize)', () => {
+  assert.deepEqual(md.defaultPreset().optimize, ot.defaultTemplate())
+  assert.deepEqual(md.normalizePreset({ name: 'Cũ' }).optimize, ot.defaultTemplate(), 'preset cu -> mau goc')
+  const p = md.normalizePreset({ name: 'A', optimize: { playlists: 'Dark Bible Study, Dark Bible Study, Podcast', remix: 'sai', comments: 'pause', pin: 'co', location: '  United States ' } })
+  assert.deepEqual(p.optimize.playlists, ['Dark Bible Study', 'Podcast'])
+  assert.equal(p.optimize.remix, 'none', 'gia tri sai -> mac dinh')
+  assert.equal(p.optimize.comments, 'pause')
+  assert.equal(p.optimize.pin, true)
+  assert.equal(p.optimize.location, 'United States')
+  assert.deepEqual(Object.keys(p.optimize), Object.keys(ot.defaultTemplate()), 'du cac muc')
+  // preset cu da bat "sau khi dang: toi uu" -> lay mau toi uu mac dinh dang luu
+  const saved = { default: { ...ot.defaultTemplate(), playlists: ['Kinh Thánh'], remix: 'audio' }, UCx: { ...ot.defaultTemplate(), remix: 'all' } }
+  assert.deepEqual(ot.presetSeed({ optimizeAfterUpload: true }, saved), saved.default)
+  assert.deepEqual(ot.presetSeed({ optimizeAfterUpload: false }, saved), ot.defaultTemplate())
+  assert.deepEqual(ot.presetSeed({ optimizeAfterUpload: true }, {}), ot.defaultTemplate())
+  assert.deepEqual(md.normalizePreset({ optimizeAfterUpload: true }, ot.presetSeed({ optimizeAfterUpload: true }, saved)).optimize.playlists, ['Kinh Thánh'])
+  // preset da co mau thi khong bi ghi de boi seed
+  assert.equal(md.normalizePreset({ optimize: { remix: 'keep' } }, saved.default).optimize.remix, 'keep')
+})
+
+test('mau tai len: Store chuyen preset cu + luu mau Studio cung preset', () => {
+  const fs = require('fs')
+  const os = require('os')
+  const path = require('path')
+  const { Store } = require('../src/store')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ya-preset-'))
+  const def = { ...ot.defaultTemplate(), playlists: ['Dark Bible Study'], comment: 'Cảm ơn {ten_kenh}' }
+  fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({
+    optimizeTemplates: { default: def },
+    presets: [{ id: 'bat', name: 'Bật', optimizeAfterUpload: true }, { id: 'tat', name: 'Tắt' }],
+  }))
+  const st = new Store(dir)
+  assert.deepEqual(st.settings.presets[0].optimize, ot.normalizeTemplate(def), 'bat -> mau toi uu mac dinh')
+  assert.deepEqual(st.settings.presets[1].optimize, ot.defaultTemplate(), 'tat -> mau goc')
+  const edited = st.settings.presets.map((p) => (p.id === 'tat' ? { ...p, optimize: { ...p.optimize, remix: 'audio', extraTags: 'a, b' } } : p))
+  st.save({ presets: edited })
+  const again = new Store(dir)
+  assert.equal(again.settings.presets[1].optimize.remix, 'audio')
+  assert.deepEqual(again.settings.presets[1].optimize.extraTags, ['a', 'b'])
+  assert.deepEqual(again.settings.presets[0].optimize.playlists, ['Dark Bible Study'])
+  fs.rmSync(dir, { recursive: true, force: true })
+})
+
+test('sau khi dang: muc da dat qua API thi giu nguyen trong Studio', () => {
+  assert.deepEqual([...ot.API_FIELDS].sort(), ['ai', 'category', 'description', 'embeddable', 'language', 'license'])
+  const t = ot.withoutApiFields({ ...ot.defaultTemplate(), category: '27', language: 'Tiếng Việt', license: 'youtube', embeddable: 'no', ai: 'yes', description: 'Mô tả', playlists: ['P'], comments: 'off', remix: 'audio' })
+  assert.deepEqual([t.category, t.language, t.license, t.embeddable, t.ai, t.description], ['keep', '', 'keep', 'keep', 'keep', ''])
+  assert.deepEqual([t.playlists, t.comments, t.remix, t.paidPromotion, t.tagsMode, t.endScreen], [['P'], 'off', 'audio', 'no', 'title', 'latest'], 'muc chi co trong Studio giu nguyen gia tri')
+  assert(!ot.touchedFields(t).some((k) => ot.API_FIELDS.includes(k)), 'khong dung toi muc API')
+  assert.equal(ot.withoutApiFields(null).ai, 'keep')
+})
+
 ;(async () => {
   let failed = 0
   for (const [name, fn] of tests) {
