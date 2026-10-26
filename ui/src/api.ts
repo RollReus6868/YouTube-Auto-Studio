@@ -93,6 +93,7 @@ export type State = {
   comments: { items: Comment[]; busy: boolean; at: string; sentLastHour: number }
   categories: [string, string][]
   logs: { t: string; level: Level; msg: string }[]
+  f: Record<string, unknown> // trang thai rieng cua tung tinh nang (ui/src/pages)
 }
 
 declare global {
@@ -173,7 +174,7 @@ export const demoState: State = {
       { id: 'c4', videoId: 'v', videoTitle: 'Bí ẩn rừng sâu tập 2', author: 'An', text: 'Hay!', publishedAt: new Date(Date.now() - 50 * 3600e3).toISOString(), likeCount: 0, status: 'sent', kind: 'khen', draft: 'Cảm ơn bạn nhiều!', error: '', note: '' },
     ],
   },
-  categories: CATEGORIES,
+  categories: CATEGORIES, f: {},
   logs: [
     { t: '12:00:02', level: 'ok', msg: 'Thư mục gốc: D:\\YouTube-DangBai' },
     { t: '12:00:02', level: 'info', msg: 'Đã quét: 3 video (2 sẵn sàng), 2 bài cộng đồng.' },
@@ -187,7 +188,7 @@ export const emptyState: State = {
   scan: { root: '', videos: [], posts: [], errors: [], at: '' },
   studio: { channelId: '', url: '', visible: false }, youtube: { channel: null, busy: false }, jobs: {}, draft: null,
   comments: { items: [], busy: false, at: '', sentLastHour: 0 },
-  categories: CATEGORIES, logs: [],
+  categories: CATEGORIES, logs: [], f: {},
 }
 
 export function call(cmd: string, payload?: unknown): Promise<State | null> {

@@ -1,0 +1,19 @@
+<!doctype html><meta charset="utf-8"><title>driver</title>
+<body style="font-family:sans-serif">
+<button id="b1" onclick="window.clicked=(window.clicked||0)+1">Lưu</button>
+<div hidden><button>Lưu ẩn</button></div>
+<tp-host></tp-host>
+<input id="i1" aria-label="Thêm thẻ" value="cũ">
+<div id="ce" contenteditable="true" aria-label="Thêm bình luận…"></div>
+<input type="file" id="f" multiple style="display:none">
+<div id="cover" style="position:fixed;inset:0;display:none;background:#0003"></div>
+<script>
+customElements.define('tp-host', class extends HTMLElement {
+  connectedCallback() {
+    const r = this.attachShadow({ mode: 'open' })
+    r.innerHTML = '<span role="button" tabindex="0">Chuyển đổi tài khoản</span>'
+    r.firstChild.addEventListener('click', () => { window.shadowClicked = true })
+  }
+})
+setTimeout(() => { const b = document.createElement('button'); b.textContent = 'Xong'; b.onclick = () => { window.done = true }; document.body.appendChild(b) }, 400)
+</script>

@@ -15,6 +15,11 @@ const { uploadOne } = require('./uploader')
 
 const MAX_LOGS = 300
 const STUDIO_URL = process.env.YA_STUDIO_URL || 'https://studio.youtube.com/'
+// Goc dia chi cho cac luong tu dong (bai kiem tro sang may chu gia tests/mock-yt)
+const URLS = {
+  studio: process.env.YA_STUDIO_BASE || 'https://studio.youtube.com',
+  youtube: process.env.YA_YOUTUBE_BASE || 'https://www.youtube.com',
+}
 // Phai dat TRUOC app.whenReady(): noi luu phien dang nhap, cai dat va log.
 if (process.env.YA_DATA_DIR) app.setPath('userData', process.env.YA_DATA_DIR)
 
@@ -41,6 +46,7 @@ const state = {
   draft: null, // { id, text, loading, error } mo ta Gemini dang soan
   comments: { items: [], busy: false, at: '', sentLastHour: 0 },
   categories: CATEGORIES,
+  f: {}, // trang thai rieng cua tung tinh nang (src/features/*), vd f.optimize
 }
 
 const push = () => { if (win && !win.isDestroyed()) win.webContents.send('state', state) }
@@ -546,6 +552,29 @@ const commands = {
   update_install: () => !busy && updateInstall(),
 }
 
+// ---- tinh nang dang mo-dun (src/features/*.js) -----------------------------------------
+// Moi tinh nang: module.exports = (ctx) => ({ commands: { ten_lenh: fn }, start?: fn })
+// va giu trang thai cua minh trong state.f.<ten>.
+const ctx = {
+  app, state, push, log, logFile, urls: URLS,
+  get store() { return store },
+  refreshSettings,
+  stopped: () => stop,
+  resetStop: () => { stop = false },
+  isBusy: () => busy,
+  setBusy: (b) => { busy = b; state.status = b ? 'run' : 'idle'; push() },
+  gemini: (opts) => gemini({ key: store.getSecret('gemini'), model: store.settings.geminiModel, ...opts }),
+  // dat boi tinh nang accounts: chay fn(page) tren kenh da chon (tu chuyen kenh, kiem UC ID)
+  withChannel: null,
+}
+const FEATURES = []
+const started = []
+for (const name of FEATURES) {
+  const f = require(`./features/${name}`)(ctx)
+  Object.assign(commands, f.commands || {})
+  if (f.start) started.push(f.start)
+}
+
 ipcMain.handle('call', async (_e, cmd, payload) => {
   const fn = commands[cmd]
   if (fn) {
@@ -588,6 +617,7 @@ if (!app.requestSingleInstanceLock()) {
     state.comments.items = desk.items.slice(0, 200)
     setInterval(() => commentsRound(false), COMMENT_POLL_MS)
     createWindow()
+    for (const fn of started) fn()
     if (store.settings.root) runScan(true)
     setInterval(refreshStudio, 2000)
     if (!process.env.YA_NO_UPDATE_CHECK) updateCheck()

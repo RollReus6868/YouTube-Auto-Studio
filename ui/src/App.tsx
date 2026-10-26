@@ -10,6 +10,7 @@ import {
   Sidebar, TextArea, TextInput, ThemeGrid, ToggleRow, cn, type Tone,
 } from './kit'
 import { GuidePage } from './GuidePage'
+import { FEATURE_PAGES } from './pages'
 
 const LEVELS: Record<Level, { tone: Tone; label: string }> = {
   info: { tone: 'info', label: 'TIN' },
@@ -23,7 +24,7 @@ const MODELS: [string, string][] = [['gemini-2.5-flash', 'Gemini 2.5 Flash (nhan
 const VARS = ['{ten_video}', '{tieu_de}', '{so_tap}', '{ngay}', '{ten_kenh}', '{hashtag}', '{playlist}']
 
 function useBackend() {
-  const [state, setState] = useState<State>(() => (isDemo() ? demoState : emptyState))
+  const [state, setState] = useState<State>(() => (isDemo() ? withDemo(demoState) : emptyState))
   useEffect(() => {
     window.ya?.onState(setState)
     call('hello').then((s) => s && setState(s))
@@ -32,6 +33,17 @@ function useBackend() {
   return { state, send }
 }
 type Backend = ReturnType<typeof useBackend>
+const withDemo = (s: State): State => ({ ...s, f: { ...s.f, ...Object.fromEntries(FEATURE_PAGES.filter((p) => p.demo).map((p) => [p.id, p.demo])) } })
+// chen trang tinh nang vao danh sach thanh ben (sau trang `after`, hoac cuoi nhom)
+type NavItem = { id: string; label: string; icon: typeof Home; dot?: boolean }
+function withFeatures(items: NavItem[], bottom: boolean) {
+  const out = [...items]
+  for (const p of FEATURE_PAGES.filter((x) => !!x.bottom === bottom)) {
+    const i = p.after ? out.findIndex((x) => x.id === p.after) : -1
+    out.splice(i >= 0 ? i + 1 : out.length, 0, { id: p.id, label: p.label, icon: p.icon })
+  }
+  return out
+}
 
 const fmtWhen = (iso: string) => {
   const d = new Date(iso)
@@ -843,8 +855,10 @@ export default function App() {
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
   const errors = backend.state.logs.some((l) => l.level === 'error')
+  const feature = FEATURE_PAGES.find((p) => p.id === page)
   const body =
-    page === 'videos' ? <VideosPage {...backend} go={go} />
+    feature ? <feature.Page {...backend} go={go} />
+    : page === 'videos' ? <VideosPage {...backend} go={go} />
     : page === 'presets' ? <PresetsPage {...backend} />
     : page === 'community' ? <CommunityPage {...backend} />
     : page === 'comments' ? <CommentsPage {...backend} go={go} />
@@ -854,22 +868,22 @@ export default function App() {
     : <SettingsPage {...backend} />
   return (
     <AppShell
-      browser={WITH_BROWSER.has(page) ? <Browser {...backend} /> : undefined}
+      browser={WITH_BROWSER.has(page) || feature?.browser ? <Browser {...backend} /> : undefined}
       sidebar={
         <Sidebar
           brand="YT Auto Studio"
-          items={[
+          items={withFeatures([
             { id: 'videos', label: 'Đăng video', icon: Upload },
             { id: 'presets', label: 'Mẫu mặc định', icon: LayoutTemplate },
             { id: 'community', label: 'Cộng đồng', icon: Megaphone },
             { id: 'comments', label: 'Bình luận', icon: MessageSquareReply },
-          ]}
-          bottomItems={[
+          ], false)}
+          bottomItems={withFeatures([
             { id: 'guide', label: 'Hướng dẫn API', icon: BookOpen },
             { id: 'logs', label: 'Nhật ký', icon: ScrollText, dot: errors },
             { id: 'update', label: 'Cập nhật', icon: ArrowUpCircle, dot: backend.state.update.status === 'available' },
             { id: 'settings', label: 'Cài đặt', icon: Settings },
-          ]}
+          ], true)}
           activeId={page}
           onSelect={go}
         />
