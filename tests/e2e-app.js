@@ -80,7 +80,7 @@ run(9344, {}, async ({ ui, find, dataDir }) => {
 
   // 5) trang Cong dong: khung Studio nam dung vi tri giao dien danh cho no
   await ui.getByRole('button', { name: 'Cộng đồng', exact: true }).click()
-  await ui.getByText('Chào cả nhà!').waitFor()
+  await ui.getByRole('button', { name: /Lấy bình luận mới/ }).waitFor()
   const studio = await find('mock_studio')
   const pane = await ui.locator('[data-pane]').boundingBox()
   assert(pane.width > 300 && pane.height > 300, JSON.stringify(pane))

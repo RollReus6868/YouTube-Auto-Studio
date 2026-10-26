@@ -76,15 +76,18 @@ jobs:
         run: |
           node tests/ci-run.js node tests/unit-test.js
           node tests/ci-run.js node tests/accounts-test.js
+          node tests/ci-run.js node tests/inbox-test.js
           node tests/ci-run.js node tests/google-test.js
 
       - name: Chay that app tu ma nguon (Studio gia lap nhung trong cua so)
         run: |
+          xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/flows/run.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-app.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-update.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-upload.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-comments.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-accounts.js
+          xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-inbox.js
 
   # ------------------------------------------------------------------ 2. Windows
   windows:
