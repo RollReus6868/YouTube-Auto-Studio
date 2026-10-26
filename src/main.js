@@ -401,7 +401,7 @@ const COMMENT_POLL_MS = Number(process.env.YA_COMMENT_POLL_MS) || 10 * 60e3
 const DRAFTS_PER_ROUND = 20
 
 function pushComments() {
-  state.comments = { ...state.comments, items: desk.items.slice(0, 200), sentLastHour: desk.sentLastHour() }
+  state.comments = { ...state.comments, items: desk.items.filter((x) => x.source !== 'studio').slice(0, 200), sentLastHour: desk.sentLastHour() }
   push()
 }
 
@@ -451,7 +451,7 @@ async function commentsRound(manual = false) {
     if (store.settings.replyMode !== 'off' && store.hasSecret('gemini')) {
       let n = 0
       let sent = 0
-      for (const it of desk.items.filter((x) => x.status === 'new')) {
+      for (const it of desk.items.filter((x) => x.status === 'new' && x.source !== 'studio')) { // hop thu Studio: src/features/inbox.js
         if (n++ >= DRAFTS_PER_ROUND) break
         try { await draftReply(it) } catch (e) {
           desk.update(it.id, { status: 'error', error: e.message })
@@ -579,8 +579,9 @@ const ctx = {
   accounts: null,
   // khung Studio hien ben phai: doi sang phien cua tai khoan khac
   studio: { use: (partition, url) => useStudio(partition, url), wc: () => studio && studio.webContents, home: STUDIO_URL },
+  get desk() { return desk }, // CommentDesk chung (binh luan API + hop thu Studio), co sau app.whenReady
 }
-const FEATURES = ['accounts', 'posts']
+const FEATURES = ['accounts', 'inbox', 'posts']
 const started = []
 for (const name of FEATURES) {
   const f = require(`./features/${name}`)(ctx)
@@ -630,7 +631,7 @@ if (!app.requestSingleInstanceLock()) {
     const ch = store.settings.youtubeChannel
     if (ch && store.hasSecret(tokenName(ch.id))) state.youtube.channel = ch
     desk = new CommentDesk(app.getPath('userData'))
-    state.comments.items = desk.items.slice(0, 200)
+    state.comments.items = desk.items.filter((x) => x.source !== 'studio').slice(0, 200)
     setInterval(() => commentsRound(false), COMMENT_POLL_MS)
     createWindow()
     for (const fn of started) fn()

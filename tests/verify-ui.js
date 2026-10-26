@@ -68,6 +68,16 @@ function findBrowser() {
         }
         await check(p)
       }
+      // cong dong = tra loi binh luan (hop thu Studio): chon kenh, loc, the binh luan, khung Studio
+      await page.goto(`${URL}?demo#community`)
+      await page.getByRole('heading', { name: 'Cộng đồng' }).waitFor()
+      await page.getByRole('button', { name: 'Lấy bình luận mới (2 kênh)' }).waitFor()
+      assert.equal(await page.getByRole('group', { name: 'Kênh lấy bình luận' }).getByRole('button', { pressed: true }).count(), 2)
+      assert.equal(await page.getByText('Bài cộng đồng').count(), 0, 'trang dang bai cu da bo')
+      await page.getByLabel('Trả lời @ruthann-k2').waitFor()
+      await page.getByRole('button', { name: 'Đã gửi' }).click()
+      await page.getByText('Love ❤️ God bless you too!').waitFor()
+      await check('community-da-gui')
       // mo chi tiet video
       await page.goto(`${URL}?demo#videos`)
       await page.getByRole('button', { name: /Bí ẩn rừng sâu tập 1/ }).click()
