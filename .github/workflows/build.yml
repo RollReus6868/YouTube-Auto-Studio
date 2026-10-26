@@ -83,13 +83,28 @@ jobs:
 
       - name: Chay that app tu ma nguon (Studio gia lap nhung trong cua so)
         run: |
-          xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/flows/run.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-app.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-update.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-upload.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-comments.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-accounts.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-inbox.js
+
+  # ------------------------------------------------------------------ 1b. Linux: luong tu dong tren YouTube gia
+  flows:
+    name: Luong tu dong (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Cai thu vien
+        run: npm ci --no-audit --no-fund
+      - name: Tai khoan, toi uu video, dang bai, trang chu kenh, tra loi binh luan (tests/flows)
+        run: xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/flows/run.js
 
   # ------------------------------------------------------------------ 2. Windows
   windows:
@@ -258,8 +273,8 @@ jobs:
   # ------------------------------------------------------------------ 4. Phat hanh
   release:
     name: Phat hanh GitHub Release
-    needs: [test, windows, macos]
-    if: always() && needs.test.result == 'success' && needs.windows.result == 'success' && (needs.macos.result == 'success' || needs.macos.result == 'skipped') && (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish))
+    needs: [test, flows, windows, macos]
+    if: always() && needs.test.result == 'success' && needs.flows.result == 'success' && needs.windows.result == 'success' && (needs.macos.result == 'success' || needs.macos.result == 'skipped') && (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish))
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

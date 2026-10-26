@@ -24,9 +24,10 @@ app.whenReady().then(async () => {
       const logs = []
       const page = new Page(win.webContents, { timeout: 5000, log: (l, m) => logs.push(`${l} ${m}`), shotDir: path.join(os.tmpdir(), 'ya-flow-shots') })
       mock.events.length = 0
+      const t0 = Date.now()
       try {
         await fn({ page, mock, urls: mock.urls, win, logs, tmp: fs.mkdtempSync(path.join(os.tmpdir(), 'ya-flow-')) })
-        console.log(`  ok   ${f} > ${name}`)
+        console.log(`  ok   ${f} > ${name} (${((Date.now() - t0) / 1000).toFixed(1)}s)`)
       } catch (e) {
         failed++
         console.log(`  FAIL ${f} > ${name}\n${e.stack}\n  url: ${page.url()}\n  buoc: ${e.step || page.step}\n  log: ${logs.slice(-8).join(' | ')}`)
