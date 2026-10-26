@@ -582,7 +582,7 @@ const ctx = {
   studio: { use: (partition, url) => useStudio(partition, url), wc: () => studio && studio.webContents, home: STUDIO_URL },
   get desk() { return desk }, // CommentDesk chung (binh luan API + hop thu Studio), co sau app.whenReady
 }
-const FEATURES = ['accounts', 'inbox', 'optimize', 'posts']
+const FEATURES = ['accounts', 'inbox', 'optimize', 'posts', 'hometab']
 const started = []
 for (const name of FEATURES) {
   const f = require(`./features/${name}`)(ctx)

@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><title>Tùy chỉnh kênh - YouTube Studio</title>
+<!-- Gia lap theo HTML that (html/yt-7, yt-8, yt-9-editing-hometab.html): ten the, id, role, aria-label giu nguyen.
+     Phan chua thay trong HTML that (dong ket qua tim kenh, danh sach kenh ben phai, thong bao) la doan. -->
+<style>
+  * { box-sizing: border-box }
+  body { margin: 0; font: 14px Roboto, Arial, sans-serif; background: #282828; color: #f1f1f1 }
+  ytcp-button, ytcp-button-shape, ytcp-icon-button, yt-icon, ytcp-switch { display: inline-block }
+  ytcp-channel-editing-section, ytcp-shelves-section, ytcp-shelf-list-item, ytcp-home-tab-section, ytcp-text-menu, tp-yt-paper-listbox, tp-yt-paper-item,
+  ytcp-multi-entity-picker, ytcp-multi-picker-entity-list, ytcp-playlist-picker, ytcp-form-input-container { display: block }
+  [hidden] { display: none !important }
+  button { font: inherit; color: inherit; cursor: pointer }
+  .top { height: 56px; display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid #3e3e3e; font-weight: 700 }
+  .side { position: fixed; top: 56px; left: 0; bottom: 0; width: 200px; padding: 12px; color: #aaa }
+  main { margin-left: 200px; padding: 16px 24px 80px }
+  h1 { font-size: 24px; margin: 8px 0 12px }
+  .tabs { display: flex; gap: 24px; border-bottom: 1px solid #3e3e3e } .tabs a { padding: 10px 0; color: #aaa; text-decoration: none } .tabs a.on { color: #fff; border-bottom: 3px solid #fff }
+  .actions { position: fixed; top: 64px; right: 24px; display: flex; gap: 8px }
+  ytcp-button button { border: 0; border-radius: 18px; padding: 8px 14px; background: #3e3e3e; font-weight: 600 }
+  #publish-button button { background: #fff; color: #0f0f0f } ytcp-button button[disabled] { opacity: .35; cursor: default }
+  .row2 { display: flex; align-items: center; justify-content: space-between; max-width: 600px; margin-top: 18px }
+  .description { color: #aaa; font-size: 12px; margin-top: 2px } h2 { font-size: 14px; margin: 0 }
+  button[role=switch] { width: 36px; height: 20px; border-radius: 10px; background: #fff; border: 0 }
+  #shelf-items-container { max-width: 600px; margin-top: 12px }
+  .shelf-placeholder { height: 8px } .shelf-placeholder.over { background: #3ea6ff; height: 4px; margin: 2px 0 }
+  .container.maybe-draggable, .container.mouse-drag { display: flex; gap: 14px; align-items: center; border: 1px solid #3e3e3e; border-radius: 8px; padding: 10px 12px; background: #212121; height: 72px }
+  .dragging { opacity: .4 }
+  .drag-handle-container { cursor: grab; width: 18px; display: grid; place-items: center }
+  .shelf-container { flex: 1; min-width: 0 } header.header { display: flex; align-items: center; justify-content: space-between }
+  .primary-label { font-weight: 700 }
+  .content { display: flex; gap: 6px; margin-top: 6px } .content .th { width: 46px; height: 26px; border-radius: 4px; background: #6b4b2b; font-size: 10px; display: grid; place-items: end; padding: 1px 3px } .content .av { width: 26px; height: 26px; border-radius: 50%; background: #5b3f8f }
+  #shelf-actions-menu { opacity: 0; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; cursor: pointer }
+  ytcp-shelf-list-item:hover #shelf-actions-menu, #shelf-actions-menu.open { opacity: 1 }
+  ytcp-text-menu tp-yt-paper-dialog { position: absolute; z-index: 20; background: #282828; border-radius: 8px; box-shadow: 0 4px 24px #000a; padding: 8px 0; min-width: 240px; display: block }
+  tp-yt-paper-item { padding: 6px 16px; cursor: pointer; white-space: nowrap } tp-yt-paper-item:hover { background: #3e3e3e }
+  tp-yt-paper-item[aria-disabled=true] { color: #717171; cursor: default; background: none } tp-yt-paper-item.sep { border-top: 1px solid #3e3e3e; margin-top: 6px; padding-top: 12px }
+  .scrim { position: fixed; inset: 0; background: #000a; z-index: 30; display: grid; place-items: center }
+  .scrim tp-yt-paper-dialog { background: #212121; border-radius: 16px; width: 880px; max-width: 95vw; height: 600px; display: flex; flex-direction: column; overflow: hidden }
+  #group-editor-header { padding: 16px 24px } #label-text { font-size: 11px; color: #aaa; display: block }
+  #group-name-container { border: 1px solid #aaa; border-radius: 6px; padding: 6px 10px; width: 320px }
+  input { background: none; border: 0; color: #fff; font: inherit; outline: 0; width: 100% }
+  .content-dlg { flex: 1; display: flex; border-top: 1px solid #3e3e3e; min-height: 0 }
+  #left-column { flex: 1; display: flex; flex-direction: column; border-right: 1px solid #3e3e3e } #right-column { width: 310px }
+  .search { display: flex; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #3e3e3e }
+  #no-channel-query-message, #no-match-message { margin: auto; color: #aaa; text-align: center; padding-top: 120px }
+  .row { display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-bottom: 1px solid #3e3e3e } .row .grow { flex: 1 } .header-row { font-size: 12px; color: #aaa }
+  [role=checkbox] { width: 18px; height: 18px; border: 2px solid #aaa; border-radius: 2px; display: inline-block; cursor: pointer } [role=checkbox][aria-checked=true] { background: #fff }
+  #num-entities { padding: 14px 24px; border-bottom: 1px solid #3e3e3e } .entity { padding: 8px 12px; display: flex; gap: 12px }
+  .footer { padding: 12px 24px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid #3e3e3e }
+  ytcp-playlist-pick-dialog .scrim tp-yt-paper-dialog, #inner-dialog { width: 640px }
+  #inner-dialog .header { display: flex; justify-content: space-between; padding: 16px 24px; font-weight: 700 }
+  #inner-dialog .search-row { display: flex; border-bottom: 1px solid #3e3e3e } #inner-dialog .search { flex: 1; border: 0 }
+  .playlists { display: flex; flex-wrap: wrap; gap: 12px; padding: 16px; align-content: flex-start; flex: 1 }
+  ytcp-entity-card { width: 100px; border-radius: 8px; padding: 4px; cursor: pointer; display: block } ytcp-entity-card:hover { outline: 1px solid #aaa }
+  ytcp-entity-card .thumbnail { height: 56px; border-radius: 6px; background: #6b4b2b } ytcp-entity-card .title { font-weight: 600; font-size: 12px; margin-top: 6px } ytcp-entity-card .subtitle { font-size: 11px; color: #aaa; margin-top: 4px }
+  #top-progress { position: fixed; top: 0; left: 0; height: 3px; background: #3ea6ff; width: 0; transition: width .5s; z-index: 50; display: block }
+  ytcp-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #f1f1f1; color: #0f0f0f; padding: 12px 16px; border-radius: 6px; display: flex; gap: 24px } ytcp-toast a { color: #065fd4 }
+</style></head>
+<body>
+<div class="top">Studio</div>
+<nav class="side"><div>Tổng quan</div><div>Nội dung</div><div><b>Tuỳ chỉnh</b></div></nav>
+<main><ytcp-channel-editing-section>
+  <h1>Tùy chỉnh kênh</h1>
+  <div class="tabs"><a href="../editing/profile">Hồ sơ</a><a class="on" href="#">Thẻ Trang chủ</a></div>
+  <div class="actions" id="actions"></div>
+  <ytcp-home-tab-section id="home-tab-section"><div class="row2"><div><header><h2 class="label">Thẻ Trang chủ</h2></header><p class="description"><span>Hiện thẻ Trang chủ của kênh để nêu bật và giới thiệu nội dung cho khán giả của bạn</span></p></div>
+    <ytcp-switch id="home-tab-enabled-switch"><button role="switch" aria-label="Ẩn thẻ Trang chủ." aria-checked="true" aria-disabled="false"></button></ytcp-switch></div></ytcp-home-tab-section>
+  <ytcp-shelves-section><div class="row2 shelves-section-header"><div class="left"><div class="section-label"><span>
+            Bố cục
+          </span></div><div class="description"><span>
+            Tuỳ chỉnh bố cục trang chủ của kênh bằng tối đa 12 phần kênh.
+          </span></div></div><div class="right" id="add-host"></div></div>
+    <div id="shelf-items-container" class="no-shield"><div class="description">Đang tải…</div></div>
+  </ytcp-shelves-section>
+</ytcp-channel-editing-section></main>
+<tp-yt-paper-progress id="top-progress" role="progressbar" hidden></tp-yt-paper-progress>
+<script>
+/*FIXTURE*/
+const F = window.__FIX
+const LIMIT = 12
+const log = (evt) => fetch('/__log', { method: 'POST', body: JSON.stringify({ uc: F.ucId, ...evt }) }).catch(() => {})
+const $ = (s, r = document) => r.querySelector(s)
+const h = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild }
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const ICON = '<svg width="18" height="12" viewBox="0 0 18 12"><path d="M0 3h18M0 9h18" stroke="#fff" stroke-width="2"/></svg>'
+const DOTS = '<svg width="4" height="16" viewBox="0 0 4 16"><circle cx="2" cy="2" r="2" fill="#fff"/><circle cx="2" cy="8" r="2" fill="#fff"/><circle cx="2" cy="14" r="2" fill="#fff"/></svg>'
+// nut kieu Studio: ytcp-button > ytcp-button-shape > button[aria-label] > div chu
+const ytButton = (id, label, disabled) => `<ytcp-button id="${id}" ${disabled ? 'disabled aria-disabled="true"' : 'aria-disabled="false"'}><div class="ytcp-button"><ytcp-button-shape><button title="" aria-label="${esc(label)}" ${disabled ? 'disabled="true" aria-disabled="true"' : 'aria-disabled="false"'}><div class="ytcpButtonShapeImpl__button-text-content">${esc(label)}</div></button></ytcp-button-shape></div></ytcp-button>`
+const setDisabled = (host, d) => { const b = host.querySelector('button'); host.toggleAttribute('disabled', d); host.setAttribute('aria-disabled', String(d)); b.disabled = d; b.setAttribute('aria-disabled', String(d)) }
+
+$('#actions').innerHTML = ytButton('view-channel-button', 'Xem kênh') + ytButton('discard-changes-button', 'Hủy', true) + ytButton('publish-button', 'Xuất bản', true)
+$('#add-host').innerHTML = ytButton('add-section-button', 'Thêm phần kênh').replace('<div class="ytcpButtonShapeImpl__button-text-content">', '<div aria-hidden="true" class="ytcpButtonShapeImpl__icon">+</div><div class="ytcpButtonShapeImpl__button-text-content">')
+
+let published = JSON.parse(JSON.stringify(F.sections))
+let sections = JSON.parse(JSON.stringify(F.sections))
+let dirty = false
+const MOUSE = F.dnd === 'mouse' // bien the: keo bang chuot (khong co HTML5 draggable)
+
+// Tieu de: <h2 id=label>Tiền tố:<span class=primary-label>Tên</span>(N)</h2> (khong co khoang trang, nhu HTML that)
+function labelOf(s) {
+  if (s.type === 'featured') return `Kênh nổi bật:<span class="primary-label">${esc(s.title || '')}</span>(${s.channels.length})`
+  if (s.type === 'playlist') return `Danh sách phát đơn:<span class="primary-label">${esc(s.title || '')}</span>(${s.count})`
+  return `<span class="primary-label">${esc(s.title)}</span>${s.count === undefined ? '' : `(${s.count})`}`
+}
+const plainTitle = (s) => (s.type === 'featured' ? `Kênh nổi bật: (${s.channels.length})` : s.type === 'playlist' ? `Danh sách phát đơn: ${s.title} (${s.count})` : `${s.title}${s.count === undefined ? '' : ` (${s.count})`}`)
+const menuLabel = (s) => (s.type === 'other' ? `Tùy chọn về ${s.title}` : s.type === 'featured' ? `Tùy chọn về ${s.title || ''}` : 'Tùy chọn')
+const TAG = { featured: 'ytcp-shelf-channel-collection', playlist: 'ytcp-shelf-playlist', other: 'ytcp-shelf-predefined-v2' }
+function body(s) {
+  if (s.type === 'featured') return s.channels.map(() => '<div class="thumbnail-container roundThumbnails"><span class="av"></span></div>').join('')
+  if (s.type === 'playlist' && !s.title) return '<span class="description">Giới thiệu một danh sách phát</span>'
+  if (s.note) return `<span class="description">${esc(s.note)}</span>`
+  return Array.from({ length: Math.min(5, s.count || 0) }, (_, i) => `<span class="th">${40 + i}:${10 + i}</span>`).join('')
+}
+function setDirty(d) {
+  dirty = d
+  setDisabled($('#discard-changes-button'), !d)
+  setDisabled($('#publish-button'), !d)
+}
+window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = '' } })
+
+function render() {
+  const list = $('#shelf-items-container')
+  list.innerHTML = ''
+  sections.forEach((s, i) => {
+    list.appendChild(h(`<div class="shelf-placeholder" id="shelf-placeholder-pre-${i}"></div>`))
+    list.appendChild(h(`<${TAG[s.type]} class="shelf-element" data-i="${i}" ${s.hidden ? 'hidden="true"' : ''}><ytcp-shelf-list-item>
+      <div class="container ${MOUSE ? 'mouse-drag' : 'maybe-draggable'}"><span class="drag-handle-container"><yt-icon icon="yt-sys-icons:drag_handle">${ICON}</yt-icon></span>
+      <div class="shelf-container"><header class="header"><div class="icon-wrap"><h2 id="label" class="label">${labelOf(s)}</h2></div>
+        <ytcp-icon-button id="shelf-actions-menu" class="open-menu-button" icon="more-vert" aria-label="${esc(menuLabel(s))}" aria-disabled="false" role="button"><yt-icon class="remove-defaults">${DOTS}</yt-icon></ytcp-icon-button></header>
+      <article class="content-container"><article class="content">${body(s)}</article></article></div></div></ytcp-shelf-list-item></${TAG[s.type]}>`))
+    list.appendChild(h(`<div class="shelf-placeholder" id="shelf-placeholder-post-${i}"></div>`))
+  })
+}
+setTimeout(render, 700) // danh sach tai cham
+
+/* ---- menu (ytcp-text-menu > tp-yt-paper-dialog role=dialog > listbox > tp-yt-paper-item role=option) ---- */
+let menu = null
+function closeMenu() { if (menu) { menu.remove(); menu = null; document.querySelectorAll('#shelf-actions-menu.open').forEach((k) => k.classList.remove('open')) } }
+function openMenu(anchor, items) {
+  closeMenu()
+  const r = anchor.getBoundingClientRect()
+  menu = h('<ytcp-text-menu><tp-yt-paper-dialog id="dialog" class="ytcp-text-menu" role="dialog"><div class="content"><tp-yt-paper-listbox id="paper-list" role="listbox"></tp-yt-paper-listbox></div></tp-yt-paper-dialog></ytcp-text-menu>')
+  const lb = $('tp-yt-paper-listbox', menu)
+  items.forEach((it, n) => {
+    const el = h(`<tp-yt-paper-item id="text-item-${n}" class="selectable-item${it.sep ? ' sep' : ''}" role="option" ${it.disabled ? 'disabled aria-disabled="true"' : 'aria-disabled="false"'} aria-selected="false"><tp-yt-paper-item-body><div class="right-container"><div class="text-content"><yt-formatted-string class="item-text main-text">${esc(it.label)}</yt-formatted-string></div></div></tp-yt-paper-item-body></tp-yt-paper-item>`)
+    el.addEventListener('click', (e) => { e.stopPropagation(); if (it.disabled) return; closeMenu(); it.run() })
+    lb.appendChild(el)
+  })
+  const d = $('tp-yt-paper-dialog', menu)
+  d.style.left = `${r.left + window.scrollX}px`
+  d.style.top = `${r.bottom + window.scrollY + 4}px`
+  document.body.appendChild(menu)
+}
+window.openMenu = openMenu
+document.addEventListener('click', (e) => { if (menu && !menu.contains(e.target)) closeMenu() })
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMenu(); closeDialog() } })
+
+$('#shelf-items-container').addEventListener('click', (e) => {
+  const k = e.target.closest('#shelf-actions-menu')
+  if (!k) return
+  e.stopPropagation()
+  const i = Number(k.closest('.shelf-element').dataset.i)
+  const s = sections[i]
+  setTimeout(() => {
+    k.classList.add('open')
+    openMenu(k, [
+      ...(s.type !== 'other' ? [{ label: 'Chỉnh sửa nội dung trong phần kênh', run: () => (s.type === 'featured' ? channelDialog(i) : null) }] : []),
+      { label: 'Xóa phần kênh', run: () => { sections.splice(i, 1); render(); setDirty(true) } },
+    ])
+  }, 150)
+})
+
+/* ---- "+ Them phan kenh" ---- */
+const ADD_MENU = [
+  ['Video giới thiệu kênh', 'Video nổi bật (dành cho người đăng ký cũ)'],
+  ['Dành cho bạn', 'Video', 'Video phổ biến', 'Video ngắn', 'Video cộng tác'],
+  ['Đang trực tiếp', 'Sự kiện trực tiếp trước đây', 'Sự kiện trực tiếp sắp tới'],
+  ['Danh sách phát đơn', 'Danh sách phát đã tạo', 'Nhiều danh sách phát'],
+  ['Kênh đăng ký', 'Kênh nổi bật'],
+  ['Các đoạn video hàng đầu trong cộng đồng', 'Bài đăng'],
+]
+const REPEATABLE = new Set(['Danh sách phát đơn', 'Nhiều danh sách phát', 'Kênh nổi bật'])
+$('#add-section-button').addEventListener('click', (e) => {
+  e.stopPropagation()
+  const full = sections.filter((s) => !s.hidden).length >= LIMIT
+  const items = []
+  ADD_MENU.forEach((g, gi) => g.forEach((label, li) => {
+    const exists = !REPEATABLE.has(label) && sections.some((s) => s.title === label)
+    items.push({ label, sep: gi && !li, disabled: full || exists, run: () => (label === 'Kênh nổi bật' ? channelDialog(-1) : label === 'Danh sách phát đơn' ? playlistDialog() : addOther(label)) })
+  }))
+  setTimeout(() => openMenu($('#add-section-button'), items), 200)
+})
+function addOther(label) { sections.push({ type: 'other', title: label, count: 0 }); render(); setDirty(true) }
+
+/* ---- hop thoai ---- */
+let scrim = null
+function closeDialog() {
+  if (!scrim) return
+  scrim.remove(); scrim = null
+  // phan "Danh sach phat don" an chua chon danh sach: bo di
+  if (sections.some((s) => s.hidden)) { sections = sections.filter((s) => !s.hidden); render() }
+}
+function dialog(host, inner) {
+  closeDialog()
+  scrim = h(`<div class="scrim"><${host}>${inner}</${host}></div>`)
+  document.body.appendChild(scrim)
+  return scrim
+}
+
+// Hop thoai kenh (ytcp-multi-picker-dialog): sua phan co san (i >= 0) hoac tao phan moi (i = -1)
+function channelDialog(i) {
+  const cur = i >= 0 ? sections[i].channels.slice() : []
+  const start = cur.join('|')
+  const d = dialog('ytcp-multi-picker-dialog', `<ytcp-dialog><tp-yt-paper-dialog id="dialog" class="ytcp-dialog" role="dialog" aria-modal="true">
+    <div class="header"><div class="header-content"><div id="group-editor-header" class="header">
+      <tp-yt-paper-progress class="progress-bar" role="progressbar" value="0" hidden></tp-yt-paper-progress>
+      <ytcp-form-input-container id="group-name-container"><div id="outer"><div id="label"><span id="label-text">Section title</span></div>
+        <div id="child-input"><tp-yt-paper-input id="group-name-input"><input class="tp-yt-paper-input" placeholder="Add section title" value="${esc(i >= 0 ? sections[i].title || '' : '')}"></tp-yt-paper-input></div></div></ytcp-form-input-container>
+    </div></div></div>
+    <div class="content content-dlg"><ytcp-multi-entity-picker style="display:flex;flex:1">
+      <div id="left-column">
+        <div class="search"><yt-icon icon="yt-sys-icons:search">🔍</yt-icon><input id="owned-entity-search-query" hidden><input id="public-entity-search-query" class="text content-header-text" placeholder="Một kênh YouTube bất kỳ"></div>
+        <div id="left-column-content" style="flex:1;display:flex;flex-direction:column">
+          <tp-yt-paper-progress class="progress-bar" hidden role="progressbar" value="0"></tp-yt-paper-progress>
+          <ytcp-multi-picker-entity-list hidden><div class="row header-row"><div class="cell cell-text first-cell grow" id="main-header">Tên kênh</div><div class="cell cell-text align-right" id="additional-header-0">Số người đăng ký</div></div><div id="rows"></div></ytcp-multi-picker-entity-list>
+          <div id="no-match-message" hidden>Không có kết quả trùng khớp nào. Vui lòng thử lại.</div>
+          <div id="no-channel-query-message">Tìm kênh để các kênh đó xuất hiện trên trang chủ của bạn</div>
+        </div>
+      </div>
+      <div id="right-column"><div id="num-entities"><div class="layout horizontal center"><div id="entities-in-group" class="content-header-text">Những kênh trong phần này</div></div></div>
+        <div id="selected-entities"><div id="valid-entities"></div></div></div>
+    </ytcp-multi-entity-picker></div>
+    <div class="footer"><div id="dialog-buttons">${ytButton('cancel-button', 'Hủy')}${ytButton('save-button', 'Xong', true)}</div></div>
+  </tp-yt-paper-dialog></ytcp-dialog>`)
+  const right = $('#valid-entities', d)
+  const paintRight = () => {
+    right.innerHTML = cur.map((n) => `<div class="entity"><yt-icon icon="yt-sys-icons:drag_handle">${ICON}</yt-icon><span class="entity-name">${esc(n)}</span></div>`).join('')
+    setDisabled($('#save-button', d), cur.join('|') === start || !cur.length)
+  }
+  paintRight()
+  const list = $('ytcp-multi-picker-entity-list', d), noMatch = $('#no-match-message', d), noQuery = $('#no-channel-query-message', d), prog = $('#left-column-content tp-yt-paper-progress', d)
+  let timer = 0
+  $('#public-entity-search-query', d).addEventListener('input', (e) => {
+    clearTimeout(timer)
+    const q = e.target.value.trim()
+    list.hidden = true; noMatch.hidden = true; noQuery.hidden = !!q; prog.hidden = !q
+    if (!q) return
+    timer = setTimeout(() => {
+      prog.hidden = true
+      const ql = q.toLowerCase()
+      const hits = F.channelDb.filter((c) => q.includes(c.ucId) || ql.includes(c.handle.toLowerCase()) || (ql.length >= 3 && !/^https?:/.test(ql) && c.name.toLowerCase().includes(ql)))
+      if (!hits.length) { noMatch.hidden = false; return }
+      list.hidden = false
+      $('#rows', d).innerHTML = hits.map((c) => `<div class="row entity-row"><ytcp-checkbox-lit class="checkbox"><div id="checkbox" role="checkbox" tabindex="0" aria-label="${esc(c.name)}" aria-checked="${cur.includes(c.name)}" data-name="${esc(c.name)}"></div></ytcp-checkbox-lit><span class="av"></span><div class="cell cell-text grow">${esc(c.name)}</div><div class="cell cell-text align-right">${esc(c.subs)}</div></div>`).join('')
+      d.querySelectorAll('[role=checkbox]').forEach((cb) => cb.addEventListener('click', () => {
+        const n = cb.dataset.name
+        const on = cur.includes(n)
+        if (on) cur.splice(cur.indexOf(n), 1); else cur.push(n)
+        cb.setAttribute('aria-checked', String(!on))
+        setTimeout(paintRight, 200)
+      }))
+    }, 600)
+  })
+  $('#cancel-button', d).onclick = closeDialog
+  $('#save-button', d).onclick = () => {
+    if ($('#save-button button', d).disabled) return
+    const title = $('#group-name-input input', d).value.trim()
+    if (i >= 0) Object.assign(sections[i], { channels: cur, title })
+    else sections.push({ type: 'featured', title, channels: cur })
+    closeDialog()
+    render()
+    setDirty(true)
+  }
+}
+
+// "Chon mot danh sach phat" (ytcp-playlist-pick-dialog): phan moi tao AN ngay khi chon muc menu,
+// bam the (ytcp-entity-card role=option) la chon + dong; dong ma khong chon thi phan an bi bo.
+function playlistDialog() {
+  sections.push({ type: 'playlist', title: '', count: 0, hidden: true })
+  render()
+  setDirty(true) // nhu HTML that (yt-9): nut Xuat ban bat ngay khi phan moi (an) duoc tao
+  const idx = sections.length - 1
+  const d = dialog('ytcp-playlist-pick-dialog', `<tp-yt-paper-dialog id="inner-dialog" role="dialog">
+    <div class="header"><div id="title">Chọn một danh sách phát</div><ytcp-icon-button id="close" aria-label="Đóng" icon="icons:close" aria-disabled="false" role="button">✕</ytcp-icon-button></div>
+    <ytcp-playlist-picker style="display:flex;flex-direction:column;flex:1"><div class="search-row"><tp-yt-paper-tabs id="tabs" role="tablist" style="display:flex;flex:1">
+      <tp-yt-paper-tab id="search-owned-playlists-tab" role="tab" aria-selected="true" class="search" style="flex:1"><yt-icon icon="yt-sys-icons:search">🔍</yt-icon><input id="search-owned-playlists" placeholder="Danh sách phát của bạn"></tp-yt-paper-tab>
+      <tp-yt-paper-tab id="search-any-tab" role="tab" aria-selected="false" class="search" style="flex:1"><yt-icon id="search" icon="yt-sys-icons:search">🔍</yt-icon><input id="search-any" placeholder="Danh sách phát bất kỳ trên YouTube"></tp-yt-paper-tab>
+    </tp-yt-paper-tabs></div>
+    <tp-yt-paper-progress hidden role="progressbar" value="0"></tp-yt-paper-progress>
+    <div class="playlists" role="listbox"></div></ytcp-playlist-picker></tp-yt-paper-dialog>`)
+  const grid = $('.playlists', d), prog = $('ytcp-playlist-picker tp-yt-paper-progress', d)
+  const paint = (list, empty) => {
+    grid.classList.toggle('empty', !list.length)
+    grid.innerHTML = list.length ? '' : `<div class="description">${empty}</div>`
+    for (const p of list) {
+      const t = h(`<ytcp-entity-card role="option"><div id="content"><div class="thumbnail"></div><div class="title">${esc(p.title)}</div><div class="subtitle">${p.count} video</div><div class="metadata"></div></div></ytcp-entity-card>`)
+      t.addEventListener('click', () => {
+        Object.assign(sections[idx], { title: p.title, count: p.count, hidden: false })
+        scrim.remove(); scrim = null
+        render()
+        setDirty(true)
+        window.scrollTo(0, document.body.scrollHeight)
+      })
+      grid.appendChild(t)
+    }
+  }
+  paint(F.own, 'Bạn chưa có danh sách phát nào')
+  let timer = 0
+  $('#search-any', d).addEventListener('input', (e) => {
+    clearTimeout(timer)
+    const q = e.target.value.trim()
+    prog.hidden = !q
+    if (!q) return paint(F.own, '')
+    timer = setTimeout(() => { prog.hidden = true; paint(F.playlistDb.filter((p) => q.includes(p.id)), 'Không tìm thấy danh sách phát nào') }, 700)
+  })
+  $('#search-owned-playlists', d).addEventListener('input', (e) => paint(F.own.filter((p) => p.title.toLowerCase().includes(e.target.value.toLowerCase())), 'Không có kết quả'))
+  $('#close', d).onclick = closeDialog
+}
+
+/* ---- keo-tha sap xep ---- */
+function moveTo(from, to) {
+  if (from === to || to < 0) return
+  const [s] = sections.splice(from, 1)
+  sections.splice(to, 0, s)
+  render()
+  setDirty(true)
+}
+const shelfIndex = (el) => Number(el.closest('.shelf-element').dataset.i)
+if (!MOUSE) {
+  // HTML5: nhan ≡ thi khung .maybe-draggable thanh draggable; tha len vach .shelf-placeholder (truoc/sau mot phan)
+  let from = -1
+  document.addEventListener('mousedown', (e) => { const hd = e.target.closest('.drag-handle-container'); if (hd) hd.closest('.maybe-draggable').setAttribute('draggable', 'true') })
+  const list = $('#shelf-items-container')
+  list.addEventListener('dragstart', (e) => {
+    const c = e.target.closest('.maybe-draggable')
+    if (!c || c.getAttribute('draggable') !== 'true') return e.preventDefault()
+    from = shelfIndex(c)
+    c.classList.add('dragging')
+    e.dataTransfer.setData('text/plain', String(from))
+  })
+  list.addEventListener('dragover', (e) => { if (from < 0) return; e.preventDefault(); list.querySelectorAll('.over').forEach((x) => x.classList.remove('over')); const p = e.target.closest('.shelf-placeholder'); if (p) p.classList.add('over') })
+  list.addEventListener('drop', (e) => {
+    e.preventDefault()
+    if (from < 0) return
+    const p = e.target.closest('.shelf-placeholder')
+    let to
+    if (p) { const [, kind, n] = /shelf-placeholder-(pre|post)-(\d+)/.exec(p.id); to = Number(n) + (kind === 'post' ? 1 : 0); if (to > from) to-- }
+    else if (e.target.closest('.shelf-element')) to = shelfIndex(e.target)
+    const f = from
+    from = -1
+    if (to !== undefined) { moveTo(f, to); log({ type: 'drag', mode: 'html5', from: f, to }) }
+  })
+  list.addEventListener('dragend', () => { from = -1; list.querySelectorAll('[draggable=true]').forEach((x) => x.setAttribute('draggable', 'false')); list.querySelectorAll('.dragging,.over').forEach((x) => x.classList.remove('dragging', 'over')) })
+} else {
+  // bien the keo bang chuot (sortable tu viet): nhan ≡, di chuot, tha
+  let drag = null
+  const indexAt = (y, skip) => {
+    const cards = [...document.querySelectorAll('.shelf-element:not([hidden])')]
+    for (let k = 0; k < cards.length; k++) { const r = cards[k].getBoundingClientRect(); if (y < r.top + r.height / 2) return k > skip ? k - 1 : k }
+    return cards.length - 1
+  }
+  document.addEventListener('mousedown', (e) => {
+    const hd = e.target.closest('.drag-handle-container')
+    if (!hd) return
+    e.preventDefault()
+    drag = { from: shelfIndex(hd), y: e.clientY, moved: false }
+    hd.closest('.container').classList.add('dragging')
+  })
+  document.addEventListener('mousemove', (e) => { if (drag && Math.abs(e.clientY - drag.y) > 6) drag.moved = true })
+  document.addEventListener('mouseup', (e) => {
+    if (!drag) return
+    const d = drag
+    drag = null
+    document.querySelectorAll('.dragging').forEach((c) => c.classList.remove('dragging'))
+    if (d.moved) { const to = indexAt(e.clientY, d.from); moveTo(d.from, to); log({ type: 'drag', mode: 'mouse', from: d.from, to }) }
+  })
+}
+
+/* ---- Huy / Xuat ban ---- */
+$('#discard-changes-button').onclick = () => { if (!dirty) return; sections = JSON.parse(JSON.stringify(published)); render(); setDirty(false) }
+$('#publish-button').onclick = () => {
+  if (!dirty) return
+  const bar = $('#top-progress')
+  bar.hidden = false
+  requestAnimationFrame(() => { bar.style.width = '100%' })
+  setTimeout(() => {
+    bar.hidden = true
+    bar.style.width = '0'
+    published = JSON.parse(JSON.stringify(sections))
+    setDirty(false)
+    log({ type: 'publish', sections: sections.map(plainTitle), featured: (sections.find((s) => s.type === 'featured') || { channels: [] }).channels })
+    const t = h('<ytcp-toast role="alert"><span>Đã áp dụng nội dung thay đổi</span><a href="#">Chuyển đến kênh</a></ytcp-toast>')
+    document.body.appendChild(t)
+    setTimeout(() => t.remove(), 5000)
+  }, 800)
+}
+</script>
+</body></html>
