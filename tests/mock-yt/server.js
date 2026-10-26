@@ -14,7 +14,8 @@ function loadRoutes() {
     if (!fs.existsSync(file)) continue
     for (const [re, handler] of require(file)) routes.push({ re, handler, dir: path.join(__dirname, d) })
   }
-  return routes
+  // mau dai (cu the hon) truoc: vd /studio/channel/UC.../editing/hometab truoc /studio/channel/UC...(/...)?
+  return routes.sort((a, b) => b.re.source.length - a.re.source.length)
 }
 
 function startMockYt() {
