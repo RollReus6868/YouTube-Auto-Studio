@@ -1,12 +1,15 @@
 {
   "name": "yt-auto-studio",
   "productName": "YTAutoStudio",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Tool desktop tu dong dang video, bai cong dong va tra loi binh luan YouTube (Gemini)",
   "main": "src/main.js",
   "author": "RollReus6868",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/RollReus6868/YouTube-Auto-Studio.git" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RollReus6868/YouTube-Auto-Studio.git"
+  },
   "scripts": {
     "start": "electron .",
     "test": "node tests/unit-test.js && node tests/accounts-test.js && node tests/optimize-template-test.js && node tests/google-test.js && node tests/updater-test.js && node tests/inbox-test.js && node tests/hometab-test.js",
@@ -20,11 +23,28 @@
   "build": {
     "appId": "com.rollreus.ytautostudio",
     "productName": "YTAutoStudio",
-    "directories": { "output": "dist", "buildResources": "build" },
-    "files": ["src/**/*", "ui_dist/**/*", "package.json"],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "ui_dist/**/*",
+      "package.json"
+    ],
     "afterPack": "tools/ky-mac.js",
     "publish": null,
-    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }], "icon": "build/icon.ico" },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
     "nsis": {
       "artifactName": "YTAutoStudio-${version}-windows-setup.exe",
       "oneClick": false,
@@ -37,13 +57,19 @@
       "unicode": true
     },
     "mac": {
-      "target": ["zip"],
+      "target": [
+        "zip"
+      ],
       "category": "public.app-category.productivity",
       "identity": null,
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "artifactName": "YTAutoStudio-${version}-mac-${arch}.${ext}"
     },
-    "linux": { "target": ["dir"] }
+    "linux": {
+      "target": [
+        "dir"
+      ]
+    }
   }
 }

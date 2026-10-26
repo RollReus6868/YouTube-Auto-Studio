@@ -1,6 +1,6 @@
 # YT Auto Studio
 
-Tool desktop (Windows / macOS) cho nhiều kênh YouTube: đăng video theo mẫu mặc định, tối ưu video đã đăng (kèm bình luận ghim), đăng bài, thêm kênh và danh sách phát vào trang chủ các kênh, trả lời bình luận bằng Gemini.
+Tool desktop (Windows / macOS) cho nhiều kênh YouTube: đăng video theo mẫu mặc định, tối ưu video đã đăng (kèm bình luận ghim), đăng bài, thêm kênh và danh sách phát vào trang chủ các kênh, trả lời bình luận bằng Gemini (trang Cộng đồng).
 
 - Video, tiêu đề, mô tả, thẻ, lịch, playlist, thumbnail: qua **YouTube Data API v3** (OAuth, chạy trên máy bạn). Cách lấy API xem trang **Hướng dẫn API** trong tool.
 - Những việc API không làm được (tối ưu trong Studio, ghim bình luận, đăng bài, trang chủ kênh, hộp thư bình luận): tool thao tác trên **YouTube Studio ngay trong cửa sổ**. Mỗi tài khoản Google đăng nhập một lần ở trang **Tài khoản**, tool tự chuyển giữa các kênh. Tool không lưu mật khẩu.

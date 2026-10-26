@@ -29,5 +29,5 @@ export const FEATURE_PAGES: FeaturePage[] = [
   { id: 'community', label: 'Cộng đồng', icon: MessagesSquare, Page: CommunityRepliesPage, browser: true, after: 'presets', demo: inboxDemo },
   { id: 'optimize', label: 'Tối ưu video', icon: Wand2, Page: OptimizePage, after: 'videos', demo: optimizeDemo },
   { id: 'posts', label: 'Đăng bài', icon: SquarePen, Page: PostsPage, after: 'optimize', demo: postsDemo },
-  { id: 'hometab', label: 'Trang chủ kênh', icon: LayoutPanelTop, Page: HomeTabPage, after: 'comments', demo: hometabDemo },
+  { id: 'hometab', label: 'Trang chủ kênh', icon: LayoutPanelTop, Page: HomeTabPage, after: 'community', demo: hometabDemo },
 ]

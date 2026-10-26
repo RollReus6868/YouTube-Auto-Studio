@@ -1,6 +1,6 @@
 import {
   AlertTriangle, ArrowUpCircle, BookOpen, CalendarClock, Copy, Download, Eraser, ExternalLink, FileVideo, FolderOpen, FolderPlus, Globe, Home,
-  ImageIcon, KeyRound, LayoutTemplate, MessageSquareReply, Palette, Plus, RefreshCw, Save, ScrollText, Settings, Sparkles,
+  ImageIcon, KeyRound, LayoutTemplate, Palette, Plus, RefreshCw, Save, ScrollText, Settings, Sparkles,
   SquarePlay, Square, Subtitles, Trash2, Upload, LogIn, LogOut,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
@@ -11,7 +11,6 @@ import {
 } from './kit'
 import { LogDock, LogLine } from './LogDock'
 import { GuidePage } from './GuidePage'
-import { CommentCard, FILTERS, isPending } from './CommentCard'
 import { FEATURE_PAGES } from './pages'
 import { StudioPicker, type AccountsState } from './pages/AccountsPage'
 import { PresetOptimizeCard, defaultOptimizeTemplate } from './pages/OptimizeTemplateEditor'
@@ -505,55 +504,6 @@ function Browser({ state, send }: Backend) {
   )
 }
 
-/* ================= Binh luan ================= */
-function CommentsPage({ state, send, go }: Backend & { go: (p: string) => void }) {
-  const s = state.settings
-  const [filter, setFilter] = useState('pending')
-  const items = state.comments.items.filter((c) => (filter === 'all' ? true : filter === 'pending' ? isPending(c) : c.status === filter))
-  const pending = state.comments.items.filter(isPending).length
-  const connected = !!state.youtube.channel
-  const mode = s?.replyMode === 'auto' ? 'Tự gửi lời khen ngắn' : s?.replyMode === 'off' ? 'Tắt tự động' : 'Duyệt tay'
-  return (
-    <>
-      <PageHeader
-        icon={MessageSquareReply}
-        title="Bình luận"
-        description="Bình luận mới dưới video của kênh. Gemini soạn sẵn câu trả lời, bạn sửa rồi gửi."
-        actions={<>
-          <button onClick={() => go('settings')} className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted/70">{mode}</button>
-          <Pill tone="muted">Đã gửi {state.comments.sentLastHour}/{s?.replyPerHour ?? 20} trong 1 giờ</Pill>
-        </>}
-      />
-      <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 pb-3">
-        {FILTERS.map(([id, label]) => (
-          <button key={id} aria-pressed={filter === id} onClick={() => setFilter(id)}
-            className={cn('rounded-xl border px-3 py-1.5 text-sm font-semibold transition-all', filter === id ? 'border-primary/40 bg-primary/10 text-primary' : 'border-dashed border-border text-muted-foreground hover:bg-muted/50')}>
-            {label}{id === 'pending' && pending ? ` (${pending})` : ''}
-          </button>
-        ))}
-        <span className="flex-1" />
-        {state.comments.at && <span className="text-[11px] text-muted-foreground">Lấy lần cuối {fmtWhen(state.comments.at)}</span>}
-      </div>
-      <PageBody>
-        {!connected ? (
-          <EmptyState icon={MessageSquareReply} text="Đăng nhập kênh YouTube trong Cài đặt để tool đọc bình luận dưới video." />
-        ) : items.length === 0 ? (
-          <EmptyState icon={MessageSquareReply} text={filter === 'pending' ? 'Không có bình luận nào chờ trả lời. Bấm "Lấy bình luận mới" để kiểm tra.' : 'Chưa có bình luận nào ở mục này.'} />
-        ) : items.map((c) => (
-          <CommentCard key={c.id} c={c} canReply={state.secrets.gemini}
-            on={{ send: (text) => send('comment_send', { id: c.id, text }), skip: () => send('comment_skip', c.id), redraft: () => send('comment_redraft', c.id) }} />
-        ))}
-        <p className="text-[11px] text-muted-foreground">Bình luận dưới bài đăng (và mọi kênh đã tick) có ở trang Cộng đồng, qua hộp thư YouTube Studio. Hai trang dùng chung mã bình luận và giới hạn mỗi giờ nên không trả lời trùng. Tool tự kiểm tra bình luận mới mỗi 10 phút khi đang mở.</p>
-      </PageBody>
-      <ActionBar>
-        <Button variant="gradient" size="sm" disabled={!connected || state.comments.busy} onClick={() => send('comments_fetch')}>
-          <RefreshCw className={cn(state.comments.busy && 'animate-spin')} /> {state.comments.busy ? 'Đang lấy và soạn trả lời…' : 'Lấy bình luận mới'}
-        </Button>
-      </ActionBar>
-    </>
-  )
-}
-
 /* ================= Nhat ky ================= */
 function LogsPage({ state, send }: Backend) {
   // dong moi nhat o cuoi, tu cuon xuong tru khi dang cuon len xem dong cu
@@ -779,7 +729,6 @@ export default function App() {
     feature ? <feature.Page {...backend} go={go} />
     : page === 'videos' ? <VideosPage {...backend} go={go} />
     : page === 'presets' ? <PresetsPage {...backend} />
-    : page === 'comments' ? <CommentsPage {...backend} go={go} />
     : page === 'logs' ? <LogsPage {...backend} />
     : page === 'update' ? <UpdatePage {...backend} />
     : page === 'guide' ? <GuidePage {...backend} go={go} />
@@ -794,7 +743,6 @@ export default function App() {
           items={withFeatures([
             { id: 'videos', label: 'Đăng video', icon: Upload },
             { id: 'presets', label: 'Mẫu mặc định', icon: LayoutTemplate },
-            { id: 'comments', label: 'Bình luận', icon: MessageSquareReply },
           ], false)}
           bottomItems={withFeatures([
             { id: 'guide', label: 'Hướng dẫn API', icon: BookOpen },
