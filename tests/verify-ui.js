@@ -8,7 +8,7 @@ const { chromium } = require('playwright-core')
 
 const URL = `http://localhost:${process.env.YA_PORT || 4173}/`
 const OUT = path.join(__dirname, 'screenshots')
-const PAGES = ['videos', 'presets', 'community', 'comments', 'logs', 'update', 'settings']
+const PAGES = ['videos', 'presets', 'community', 'comments', 'guide', 'logs', 'update', 'settings']
 const problems = []
 const overflow = () => {
   const bad = []

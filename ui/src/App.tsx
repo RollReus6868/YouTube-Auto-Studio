@@ -1,5 +1,5 @@
 import {
-  AlertTriangle, ArrowUpCircle, CalendarClock, Copy, Download, Eraser, ExternalLink, FileVideo, FolderOpen, FolderPlus, Globe, Home,
+  AlertTriangle, ArrowUpCircle, BookOpen, CalendarClock, Copy, Download, Eraser, ExternalLink, FileVideo, FolderOpen, FolderPlus, Globe, Home,
   ImageIcon, KeyRound, LayoutTemplate, Megaphone, MessageSquareReply, Palette, Plus, RefreshCw, Save, ScrollText, Settings, Sparkles,
   SquarePlay, Square, Subtitles, Trash2, Upload, LogIn, LogOut, Send, X,
 } from 'lucide-react'
@@ -9,6 +9,7 @@ import {
   ActionBar, AppShell, BrowserPane, Button, Card, Choice, Dialog, EmptyState, Field, GradientProgress, LevelTag, PageBody, PageHeader, Pill, Select,
   Sidebar, TextArea, TextInput, ThemeGrid, ToggleRow, cn, type Tone,
 } from './kit'
+import { GuidePage } from './GuidePage'
 
 const LEVELS: Record<Level, { tone: Tone; label: string }> = {
   info: { tone: 'info', label: 'TIN' },
@@ -849,6 +850,7 @@ export default function App() {
     : page === 'comments' ? <CommentsPage {...backend} go={go} />
     : page === 'logs' ? <LogsPage {...backend} />
     : page === 'update' ? <UpdatePage {...backend} />
+    : page === 'guide' ? <GuidePage {...backend} go={go} />
     : <SettingsPage {...backend} />
   return (
     <AppShell
@@ -863,6 +865,7 @@ export default function App() {
             { id: 'comments', label: 'Bình luận', icon: MessageSquareReply },
           ]}
           bottomItems={[
+            { id: 'guide', label: 'Hướng dẫn API', icon: BookOpen },
             { id: 'logs', label: 'Nhật ký', icon: ScrollText, dot: errors },
             { id: 'update', label: 'Cập nhật', icon: ArrowUpCircle, dot: backend.state.update.status === 'available' },
             { id: 'settings', label: 'Cài đặt', icon: Settings },

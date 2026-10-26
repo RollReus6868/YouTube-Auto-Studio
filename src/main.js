@@ -558,7 +558,7 @@ ipcMain.handle('call', async (_e, cmd, payload) => {
 function createWindow() {
   win = new BrowserWindow({
     width: 1440, height: 900, minWidth: 1100, minHeight: 680,
-    title: 'YT Auto Studio', backgroundColor: '#0a0a0b', autoHideMenuBar: true,
+    title: 'YT Auto Studio', backgroundColor: '#0a0a0b', autoHideMenuBar: true, icon: path.join(__dirname, 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   })
   win.setMenuBarVisibility(false)

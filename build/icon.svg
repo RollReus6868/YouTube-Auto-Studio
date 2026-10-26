@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e0322a"/>
+      <stop offset="0.55" stop-color="#ea5a1c"/>
+      <stop offset="1" stop-color="#f2a62a"/>
+    </linearGradient>
+    <linearGradient id="gl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="208" fill="url(#bg)"/>
+  <rect x="64" y="64" width="896" height="448" rx="208" fill="url(#gl)"/>
+  <!-- khung man hinh -->
+  <rect x="212" y="282" width="600" height="420" rx="96" fill="#fff"/>
+  <!-- nut play -->
+  <path d="M452 392 L452 592 L624 492 Z" fill="#e8441f"/>
+  <!-- mui ten tai len (tu dong) -->
+  <circle cx="770" cy="740" r="132" fill="#1b1b1f"/>
+  <path d="M770 660 L842 742 L796 742 L796 812 L744 812 L744 742 L698 742 Z" fill="#fff"/>
+</svg>
