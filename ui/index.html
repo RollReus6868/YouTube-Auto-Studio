@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>YT Auto Studio</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%23dc4a1f%27/%3E%3Cpath d=%27M12 10v12l10-6z%27 fill=%27white%27/%3E%3C/svg%3E" />
+    <script>
+      // Ap lai chu de da luu truoc khi ve, de khong bi nhay mau luc mo.
+      try {
+        var K = 'yt-auto-studio'
+        if (localStorage.getItem(K + '-mode') !== 'light') document.documentElement.classList.add('dark')
+        var v = JSON.parse(localStorage.getItem(K + '-vars') || '{}')
+        for (var k in v) document.documentElement.style.setProperty(k, v[k])
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

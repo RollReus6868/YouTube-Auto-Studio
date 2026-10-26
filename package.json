@@ -1,0 +1,49 @@
+{
+  "name": "yt-auto-studio",
+  "productName": "YTAutoStudio",
+  "version": "0.1.0",
+  "description": "Tool desktop tu dong dang video, bai cong dong va tra loi binh luan YouTube (Gemini)",
+  "main": "src/main.js",
+  "author": "RollReus6868",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/RollReus6868/youtube-auto-studio.git" },
+  "scripts": {
+    "start": "electron .",
+    "test": "node tests/unit-test.js && node tests/updater-test.js",
+    "build:ui": "npm --prefix ui run build"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
+    "playwright-core": "^1.63.0"
+  },
+  "build": {
+    "appId": "com.rollreus.ytautostudio",
+    "productName": "YTAutoStudio",
+    "directories": { "output": "dist" },
+    "files": ["src/**/*", "ui_dist/**/*", "package.json"],
+    "afterPack": "tools/ky-mac.js",
+    "publish": null,
+    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }] },
+    "nsis": {
+      "artifactName": "YTAutoStudio-${version}-windows-setup.exe",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "YT Auto Studio",
+      "deleteAppDataOnUninstall": false,
+      "unicode": true
+    },
+    "mac": {
+      "target": ["zip"],
+      "category": "public.app-category.productivity",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "artifactName": "YTAutoStudio-${version}-mac-${arch}.${ext}"
+    },
+    "linux": { "target": ["dir"] }
+  }
+}

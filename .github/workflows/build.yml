@@ -1,0 +1,279 @@
+# Build + kiem thu tren may Windows / macOS that, va phat hanh GitHub Release.
+#
+#  push len main / pull request        -> kiem thu + build ca 3 he (khong phat hanh)
+#  Actions > Build & Release > Run workflow, tick "publish" -> tao them Release v<version>
+#  push tag v<version>                  -> tao them Release
+#
+# Ten file trong Release la co dinh; src/updater.js phu thuoc vao chung.
+# Moi lenh kiem thu boc trong tests/ci-run.js: loi thi ket qua hien ngay tren trang tong ket.
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths-ignore: ["**.md"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Phat hanh GitHub Release v<version> sau khi build xanh"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  NODE_VERSION: "22"
+  # Khong ky so: khong co chung chi (ban Mac duoc ky ad-hoc trong tools/ky-mac.js).
+  CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+jobs:
+  # ------------------------------------------------------------------ 1. Linux: kiem tra nhanh
+  test:
+    name: Kiem tra (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Doc phien ban
+        id: ver
+        run: |
+          v=$(node -p "require('./package.json').version")
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "version=$v"
+          if [[ "$GITHUB_REF" == refs/tags/v* && "${GITHUB_REF_NAME#v}" != "$v" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME khong khop version=$v trong package.json"
+            exit 1
+          fi
+          test -s ui_dist/index.html || { echo "::error::thieu ui_dist (chay npm run build:ui)"; exit 1; }
+          grep -q "$v" RELEASE_NOTES.md || { echo "::error::RELEASE_NOTES.md chua nhac toi phien ban $v"; exit 1; }
+
+      - name: Cai thu vien
+        run: npm ci --no-audit --no-fund
+
+      - name: Kiem thu tu cap nhat
+        run: node tests/ci-run.js node tests/updater-test.js
+
+      - name: Kiem thu phan xu ly (quet thu muc, mau, lich)
+        run: node tests/ci-run.js node tests/unit-test.js
+
+      - name: Chay that app tu ma nguon (Studio gia lap nhung trong cua so)
+        run: |
+          xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-app.js
+          xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-update.js
+
+  # ------------------------------------------------------------------ 2. Windows
+  windows:
+    name: Windows (bo cai)
+    needs: test
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      VERSION: ${{ needs.test.outputs.version }}
+      INSTALL_DIR: ${{ github.workspace }}\install test\YT Auto Studio
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Cai thu vien
+        run: npm ci --no-audit --no-fund
+
+      - name: Kiem thu tren Windows
+        run: |
+          node tests/ci-run.js node tests/updater-test.js
+          node tests/ci-run.js node tests/unit-test.js
+
+      - name: Dong goi (electron-builder, bo cai NSIS)
+        run: node tests/ci-run.js npx electron-builder --win --x64 --publish never
+
+      - name: Chay that app da dong goi
+        run: YA_APP=dist/win-unpacked/YTAutoStudio.exe node tests/ci-run.js node tests/e2e-app.js
+
+      - name: Cai dat im lang vao thu muc co dau cach
+        shell: pwsh
+        run: |
+          $setup = "dist\YTAutoStudio-$env:VERSION-windows-setup.exe"
+          if (-not (Test-Path $setup)) { Get-ChildItem dist; throw "khong thay $setup" }
+          # NSIS: /D= phai dung cuoi va KHONG co dau nhay, ke ca khi duong dan co dau cach
+          $p = Start-Process $setup -ArgumentList '/S', "/D=$env:INSTALL_DIR" -Wait -PassThru
+          for ($i = 0; $i -lt 120 -and -not (Test-Path "$env:INSTALL_DIR\Uninstall YTAutoStudio.exe"); $i++) { Start-Sleep 1 }
+          if (-not (Test-Path "$env:INSTALL_DIR\YTAutoStudio.exe")) {
+            Write-Host "::error title=Bo cai loi::ma thoat $($p.ExitCode), khong thay YTAutoStudio.exe trong $env:INSTALL_DIR"
+            throw "app chua duoc cai"
+          }
+          if (-not (Test-Path "$env:INSTALL_DIR\Uninstall YTAutoStudio.exe")) { throw "thieu trinh go cai dat" }
+
+      - name: Chay that app da cai
+        run: YA_APP="$INSTALL_DIR\\YTAutoStudio.exe" node tests/ci-run.js node tests/e2e-app.js
+
+      - name: Tu cap nhat that (app tai bo cai, tu thoat, bo cai ghi de)
+        run: |
+          YA_APP="$INSTALL_DIR\\YTAutoStudio.exe" \
+          YA_UPDATE_FILE="dist/YTAutoStudio-$VERSION-windows-setup.exe" \
+          node tests/ci-run.js node tests/e2e-update.js
+
+      - name: App van chay sau khi tu cap nhat
+        run: YA_APP="$INSTALL_DIR\\YTAutoStudio.exe" node tests/ci-run.js node tests/e2e-app.js
+
+      - name: Go cai dat
+        shell: pwsh
+        run: |
+          Start-Process "$env:INSTALL_DIR\Uninstall YTAutoStudio.exe" -ArgumentList '/S' -Wait
+          for ($i = 0; $i -lt 90 -and (Test-Path "$env:INSTALL_DIR\YTAutoStudio.exe"); $i++) { Start-Sleep 1 }
+          if (Test-Path "$env:INSTALL_DIR\YTAutoStudio.exe") {
+            Write-Host "::error title=Go cai dat loi::YTAutoStudio.exe van con sau 90 giay"
+            throw "go cai dat khong xoa duoc app"
+          }
+          Write-Host "cai / chay / cap nhat / go: OK"
+
+      - name: Gom file phat hanh
+        run: |
+          mkdir -p release
+          cp "dist/YTAutoStudio-$VERSION-windows-setup.exe" release/
+          ls -la release
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows
+          path: release/*
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------ 3. macOS (Apple Silicon + Intel)
+  macos:
+    name: macOS ${{ matrix.arch }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            arch: arm64
+            file_arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+            file_arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      VERSION: ${{ needs.test.outputs.version }}
+      # Khong dat ten la ZIP: lenh zip doc tuy chon tu bien moi truong ten do
+      MAC_ZIP: release/YTAutoStudio-${{ needs.test.outputs.version }}-mac-${{ matrix.arch }}.zip
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Cai thu vien
+        run: npm ci --no-audit --no-fund
+
+      - name: Kiem thu tren macOS
+        run: |
+          node tests/ci-run.js node tests/updater-test.js
+          node tests/ci-run.js node tests/unit-test.js
+
+      - name: Dong goi .app + zip (ky ad-hoc trong tools/ky-mac.js)
+        run: node tests/ci-run.js npx electron-builder --mac --${{ matrix.arch }} --publish never
+
+      - name: Kiem tra kien truc va chu ky
+        run: |
+          APP=$(ls -d dist/mac*/YTAutoStudio.app)
+          echo "APP=$APP" >> "$GITHUB_ENV"
+          file "$APP/Contents/MacOS/YTAutoStudio"
+          file "$APP/Contents/MacOS/YTAutoStudio" | grep -q "${{ matrix.file_arch }}" || { echo "::error::sai kien truc"; exit 1; }
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -dv "$APP" 2>&1 | grep -E "Signature|Identifier|Format" || true
+          mkdir -p release
+          cp "dist/YTAutoStudio-$VERSION-mac-${{ matrix.arch }}.zip" "$MAC_ZIP"
+          ls -la release
+
+      - name: Chay that app da dong goi
+        run: YA_APP="$APP/Contents/MacOS/YTAutoStudio" node tests/ci-run.js node tests/e2e-app.js
+
+      - name: Giai nen nhu nguoi dung + chay lai
+        run: |
+          UNZ="$RUNNER_TEMP/thu muc cai"
+          rm -rf "$UNZ" && mkdir -p "$UNZ"
+          ditto -x -k "$MAC_ZIP" "$UNZ"
+          codesign --verify --deep --strict --verbose=2 "$UNZ/YTAutoStudio.app"
+          YA_APP="$UNZ/YTAutoStudio.app/Contents/MacOS/YTAutoStudio" node tests/ci-run.js node tests/e2e-app.js
+
+      - name: Tu cap nhat that (app tai zip, tu thoat, thay .app)
+        run: |
+          UNZ="$RUNNER_TEMP/thu muc cai"
+          YA_APP="$UNZ/YTAutoStudio.app/Contents/MacOS/YTAutoStudio" YA_UPDATE_FILE="$MAC_ZIP" \
+          node tests/ci-run.js node tests/e2e-update.js
+          YA_APP="$UNZ/YTAutoStudio.app/Contents/MacOS/YTAutoStudio" node tests/ci-run.js node tests/e2e-app.js
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mac-${{ matrix.arch }}
+          path: release/*
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------ 4. Phat hanh
+  release:
+    name: Phat hanh GitHub Release
+    needs: [test, windows, macos]
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.test.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Kiem tra du file + SHA256SUMS
+        run: |
+          cd release
+          ls -la
+          for f in "YTAutoStudio-$VERSION-windows-setup.exe" \
+                   "YTAutoStudio-$VERSION-mac-arm64.zip" "YTAutoStudio-$VERSION-mac-x64.zip"; do
+            test -s "$f" || { echo "::error::thieu file $f"; exit 1; }
+          done
+          sha256sum YTAutoStudio-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Tao Release v${{ env.VERSION }}
+        run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "::error::Release v$VERSION da ton tai. Hay tang version trong package.json roi chay lai."
+            exit 1
+          fi
+          gh release create "v$VERSION" release/* \
+            --title "YT Auto Studio $VERSION" \
+            --notes-file RELEASE_NOTES.md \
+            --target "$GITHUB_SHA" \
+            --latest
+          gh release view "v$VERSION" --json assets --jq '.assets[].name'
