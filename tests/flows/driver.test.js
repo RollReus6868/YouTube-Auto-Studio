@@ -13,6 +13,8 @@ module.exports = [
     assert.equal(await page.eval(() => window.shadowClicked), true)
     await page.click('Xong') // xuat hien sau 400ms
     assert.equal(await page.eval(() => window.done), true)
+    assert.equal(await page.count({ regex: '^(Lưu|Save)$' }), 1, 'regex chi khop dung nut Luu')
+    assert.equal(await page.has({ regex: '^(Không có|None)$' }), false)
     await assert.rejects(page.waitFor('Không có', { timeout: 600 }), /Quá 1 giây vẫn chưa thấy "Không có"/)
   }],
   ['go chu (input + contenteditable), chon file', async ({ page, urls, tmp }) => {

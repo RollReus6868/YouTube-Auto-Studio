@@ -27,7 +27,7 @@ const HELPER = `(() => {
   }
   const label = (el) => [el.getAttribute('aria-label'), el.getAttribute('title'), el.getAttribute('placeholder'), el.innerText !== undefined ? el.innerText : el.textContent]
   const matches = (el, t) => {
-    if (t.text === undefined) return true
+    if (t.text === undefined && !t.regex) return true
     const ls = label(el).map(norm).filter(Boolean)
     if (t.regex) { const re = new RegExp(t.regex, 'i'); return ls.some((l) => re.test(l)) }
     const want = norm(t.text)
