@@ -47,11 +47,30 @@ function startMock(opts = {}) {
     if (p.startsWith('/gemini/models/')) {
       if (req.headers['x-goog-api-key'] !== 'gemini-ok') return json(res, 400, { error: { code: 400, message: 'API key not valid. Please pass a valid API key.', status: 'INVALID_ARGUMENT' } })
       m.lastGemini = JSON.parse(body.toString())
-      return json(res, 200, { candidates: [{ content: { parts: [{ text: m.opts.geminiReply }] } }] })
+      // tra loi binh luan (che do JSON): khen / hoi tuy noi dung
+      let text = m.opts.geminiReply
+      if (m.lastGemini.generationConfig.responseMimeType === 'application/json') {
+        const c = m.lastGemini.contents[0].parts[0].text
+        text = /\?/.test(c) ? '{"loai":"hoi","tra_loi":"Tuần sau nhé bạn!"}' : '{"loai":"khen","tra_loi":"Cảm ơn bạn nhiều <3"}'
+      }
+      return json(res, 200, { candidates: [{ content: { parts: [{ text }] } }] })
     }
 
     if (!authed(req, res)) return
     if (p === '/youtube/v3/channels') return json(res, 200, { items: [{ id: 'UCmock000000000000000000', snippet: { title: 'Kênh Giả Lập', thumbnails: { default: { url: '' } } } }] })
+    if (p === '/youtube/v3/commentThreads') {
+      const own = 'UCmock000000000000000000'
+      const t = (id, author, text, ch, replies = []) => ({ id: `t-${id}`, snippet: { videoId: 'vidA', totalReplyCount: replies.length, topLevelComment: { id, snippet: { authorDisplayName: author, authorChannelId: { value: ch }, textOriginal: text, publishedAt: `2030-01-0${id.length}T00:00:00Z`, likeCount: 1 } } }, replies: { comments: replies } })
+      return json(res, 200, { items: (m.opts.comments || [
+        t('c1', 'Lan', 'Video hay quá, cảm ơn kênh!', 'UClan'),
+        t('c22', 'Minh', 'Tập sau khi nào ra vậy?', 'UCminh'),
+        t('c333', 'Spam', 'Kiếm tiền online tại www.lua.dao', 'UCspam'),
+        t('c4444', 'Chủ kênh', 'Cảm ơn mọi người', own),
+        t('c55555', 'Hoa', 'Đã xem', 'UChoa', [{ snippet: { authorChannelId: { value: own }, textOriginal: 'cảm ơn' } }]),
+      ]) })
+    }
+    if (p === '/youtube/v3/videos' && req.method === 'GET') return json(res, 200, { items: [{ id: 'vidA', snippet: { title: 'Video A' } }] })
+    if (p === '/youtube/v3/comments' && req.method === 'POST') { (m.replies = m.replies || []).push(JSON.parse(body.toString()).snippet); return json(res, 200, { id: 'rep' }) }
     if (p === '/youtube/v3/playlists' && req.method === 'GET') {
       return json(res, 200, { items: m.playlists.map((x) => ({ id: x.id, snippet: { title: x.title } })) })
     }

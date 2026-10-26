@@ -1,10 +1,10 @@
 import {
   AlertTriangle, ArrowUpCircle, CalendarClock, Copy, Download, Eraser, ExternalLink, FileVideo, FolderOpen, FolderPlus, Globe, Home,
   ImageIcon, KeyRound, LayoutTemplate, Megaphone, MessageSquareReply, Palette, Plus, RefreshCw, Save, ScrollText, Settings, Sparkles,
-  SquarePlay, Square, Subtitles, Trash2, Upload, LogIn, LogOut,
+  SquarePlay, Square, Subtitles, Trash2, Upload, LogIn, LogOut, Send, X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { call, demoState, emptyState, isDemo, newPreset, type Job, type Level, type PostItem, type Preset, type Settings as SettingsT, type State, type VideoItem } from './api'
+import { call, demoState, emptyState, isDemo, newPreset, type Comment, type Job, type Level, type PostItem, type Preset, type Settings as SettingsT, type State, type VideoItem } from './api'
 import {
   ActionBar, AppShell, BrowserPane, Button, Card, Choice, Dialog, EmptyState, Field, GradientProgress, LevelTag, PageBody, PageHeader, Pill, Select,
   Sidebar, TextArea, TextInput, ThemeGrid, ToggleRow, cn, type Tone,
@@ -542,23 +542,97 @@ function CommunityPage({ state, send }: Backend) {
 }
 
 /* ================= Binh luan ================= */
-function CommentsPage({ state, go }: Backend & { go: (p: string) => void }) {
+const KIND: Record<string, { label: string; tone: Tone }> = {
+  khen: { label: 'Khen', tone: 'success' }, hoi: { label: 'Câu hỏi', tone: 'info' }, gop_y: { label: 'Góp ý', tone: 'warning' },
+  nhay_cam: { label: 'Nhạy cảm', tone: 'error' }, spam: { label: 'Spam', tone: 'muted' },
+}
+const FILTERS: [string, string][] = [['pending', 'Chờ duyệt'], ['sent', 'Đã gửi'], ['skipped', 'Bỏ qua'], ['all', 'Tất cả']]
+const ago = (iso: string) => {
+  const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
+  return m < 60 ? `${m} phút trước` : m < 1440 ? `${Math.round(m / 60)} giờ trước` : `${Math.round(m / 1440)} ngày trước`
+}
+
+function CommentCard({ c, send, canReply }: { c: Comment; send: Backend['send']; canReply: boolean }) {
+  const [text, setText] = useState(c.draft)
+  useEffect(() => setText(c.draft), [c.draft])
+  const k = KIND[c.kind]
+  return (
+    <article className="space-y-2 rounded-xl border border-border/50 bg-card/40 p-3">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-sm font-bold">{c.author}</span>
+        <span className="text-[11px] text-muted-foreground">{c.publishedAt ? ago(c.publishedAt) : ''}</span>
+        {k && <Pill tone={k.tone}>{k.label}</Pill>}
+        <span className="flex-1" />
+        {c.videoTitle && <Chip icon={FileVideo}>{c.videoTitle}</Chip>}
+      </div>
+      <p className="whitespace-pre-wrap break-words text-sm">{c.text}</p>
+      {c.status === 'sent' ? (
+        <p className="rounded-lg bg-emerald-500/10 p-2.5 text-sm"><span className="font-semibold text-emerald-600 dark:text-emerald-400">Đã trả lời:</span> {c.draft}</p>
+      ) : c.status === 'skipped' ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Pill tone="muted">Bỏ qua{c.note ? `: ${c.note}` : ''}</Pill>
+          <span className="flex-1" />
+          <Button variant="subtle" className="h-7 px-2 text-xs" onClick={() => send('comment_redraft', c.id)} disabled={!canReply}><Sparkles /> Soạn trả lời</Button>
+        </div>
+      ) : (
+        <>
+          {c.error && <Pill tone="error" className="max-w-full">{c.error}</Pill>}
+          <TextArea rows={2} className="min-h-[60px]" value={text} onChange={(e) => setText(e.target.value)} placeholder={c.status === 'new' ? 'Gemini chưa soạn. Bấm "Viết lại" hoặc tự gõ trả lời…' : ''} aria-label={`Trả lời ${c.author}`} />
+          <div className="flex flex-wrap items-center gap-2">
+            {c.kind === 'nhay_cam' && <span className="text-[11px] text-red-600 dark:text-red-400">Bình luận nhạy cảm, hãy đọc kỹ trước khi gửi.</span>}
+            <span className="flex-1" />
+            <Button variant="subtle" className="h-8 px-3 text-xs" onClick={() => send('comment_skip', c.id)}><X /> Bỏ qua</Button>
+            <Button variant="outline" className="h-8 px-3 text-xs" onClick={() => send('comment_redraft', c.id)} disabled={!canReply}><RefreshCw /> Viết lại</Button>
+            <Button variant="default" className="h-8 px-3 text-xs" onClick={() => send('comment_send', { id: c.id, text })} disabled={!text.trim()}><Send /> Gửi</Button>
+          </div>
+        </>
+      )}
+    </article>
+  )
+}
+
+function CommentsPage({ state, send, go }: Backend & { go: (p: string) => void }) {
   const s = state.settings
-  const mode = s?.replyMode === 'auto' ? 'Tự gửi bình luận ngắn, tích cực' : s?.replyMode === 'off' ? 'Đang tắt' : 'Duyệt tay trước khi gửi'
+  const [filter, setFilter] = useState('pending')
+  const items = state.comments.items.filter((c) =>
+    filter === 'all' ? true : filter === 'pending' ? ['new', 'ready', 'error'].includes(c.status) : c.status === filter)
+  const pending = state.comments.items.filter((c) => ['new', 'ready', 'error'].includes(c.status)).length
+  const connected = !!state.youtube.channel
+  const mode = s?.replyMode === 'auto' ? 'Tự gửi lời khen ngắn' : s?.replyMode === 'off' ? 'Tắt tự động' : 'Duyệt tay'
   return (
     <>
-      <PageHeader icon={MessageSquareReply} title="Bình luận" description="Gemini soạn câu trả lời cho bình luận mới, bạn duyệt rồi gửi." />
+      <PageHeader
+        icon={MessageSquareReply}
+        title="Bình luận"
+        description="Bình luận mới dưới video của kênh. Gemini soạn sẵn câu trả lời, bạn sửa rồi gửi."
+        actions={<>
+          <button onClick={() => go('settings')} className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted/70">{mode}</button>
+          <Pill tone="muted">Đã gửi {state.comments.sentLastHour}/{s?.replyPerHour ?? 20} trong 1 giờ</Pill>
+        </>}
+      />
+      <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 pb-3">
+        {FILTERS.map(([id, label]) => (
+          <button key={id} aria-pressed={filter === id} onClick={() => setFilter(id)}
+            className={cn('rounded-xl border px-3 py-1.5 text-sm font-semibold transition-all', filter === id ? 'border-primary/40 bg-primary/10 text-primary' : 'border-dashed border-border text-muted-foreground hover:bg-muted/50')}>
+            {label}{id === 'pending' && pending ? ` (${pending})` : ''}
+          </button>
+        ))}
+        <span className="flex-1" />
+        {state.comments.at && <span className="text-[11px] text-muted-foreground">Lấy lần cuối {fmtWhen(state.comments.at)}</span>}
+      </div>
       <PageBody>
-        <Card title="Cách trả lời hiện tại" hint={<button className="font-semibold text-primary hover:underline" onClick={() => go('settings')}>Sửa trong Cài đặt</button>}>
-          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
-            <dt className="text-muted-foreground">Chế độ</dt><dd className="font-semibold">{mode}</dd>
-            <dt className="text-muted-foreground">Giới hạn</dt><dd className="font-semibold">{s?.replyPerHour ?? 20} trả lời mỗi giờ</dd>
-            <dt className="text-muted-foreground">Gemini</dt><dd className="font-semibold">{state.secrets.gemini ? 'Đã có API key' : 'Chưa nhập API key'}</dd>
-            <dt className="text-muted-foreground">Giọng văn</dt><dd className="line-clamp-3 text-muted-foreground">{s?.replyStyle}</dd>
-          </dl>
-        </Card>
-        <EmptyState icon={MessageSquareReply} text="Bình luận dưới video (qua API) có ở giai đoạn 3, bình luận ở tab Cộng đồng (qua Studio) có ở giai đoạn 5." />
+        {!connected ? (
+          <EmptyState icon={MessageSquareReply} text="Đăng nhập kênh YouTube trong Cài đặt để tool đọc bình luận dưới video." />
+        ) : items.length === 0 ? (
+          <EmptyState icon={MessageSquareReply} text={filter === 'pending' ? 'Không có bình luận nào chờ trả lời. Bấm "Lấy bình luận mới" để kiểm tra.' : 'Chưa có bình luận nào ở mục này.'} />
+        ) : items.map((c) => <CommentCard key={c.id} c={c} send={send} canReply={state.secrets.gemini} />)}
+        <p className="text-[11px] text-muted-foreground">Bình luận dưới bài cộng đồng sẽ có ở giai đoạn 5 (qua YouTube Studio). Tool tự kiểm tra bình luận mới mỗi 10 phút khi đang mở.</p>
       </PageBody>
+      <ActionBar>
+        <Button variant="gradient" size="xl" className="flex-1" disabled={!connected || state.comments.busy} onClick={() => send('comments_fetch')}>
+          <RefreshCw className={cn(state.comments.busy && 'animate-spin')} /> {state.comments.busy ? 'Đang lấy và soạn trả lời…' : 'Lấy bình luận mới'}
+        </Button>
+      </ActionBar>
     </>
   )
 }
@@ -756,7 +830,7 @@ function UpdatePage({ state, send }: Backend) {
   )
 }
 
-const WITH_BROWSER = new Set(['community', 'comments'])
+const WITH_BROWSER = new Set(['community'])
 
 export default function App() {
   const backend = useBackend()

@@ -9,7 +9,8 @@ const updater = require('./updater')
 const scanner = require('./scanner')
 const { buildVideoMeta, validateMeta, planSchedule, CATEGORIES } = require('./metadata')
 const { Store, parseOAuthClient } = require('./store')
-const { Google, endpoints, gemini, descriptionPrompt } = require('./google')
+const { Google, endpoints, gemini, descriptionPrompt, replyPrompt, parseReply } = require('./google')
+const { CommentDesk } = require('./comments')
 const { uploadOne } = require('./uploader')
 
 const MAX_LOGS = 300
@@ -24,6 +25,8 @@ let busy = false
 let release = null // ban moi tim thay tren GitHub
 let stop = false
 let raw = new Map() // id -> du lieu quet day du (duong dan file) cho viec dang
+let desk = null // CommentDesk
+let commentsBusy = false
 const kind = updater.installKind({ exe: process.execPath, packaged: app.isPackaged, platform: process.platform })
 const state = {
   status: 'idle', logs: [],
@@ -36,6 +39,7 @@ const state = {
   youtube: { channel: null, busy: false },
   jobs: {}, // id video -> { status: queued|run|done|error|stopped, step, progress, error, url }
   draft: null, // { id, text, loading, error } mo ta Gemini dang soan
+  comments: { items: [], busy: false, at: '', sentLastHour: 0 },
   categories: CATEGORIES,
 }
 
@@ -377,6 +381,87 @@ function saveDescription({ id, text }) {
   runScan(true)
 }
 
+// ---- binh luan duoi video (API) ---------------------------------------------------------
+const COMMENT_POLL_MS = Number(process.env.YA_COMMENT_POLL_MS) || 10 * 60e3
+const DRAFTS_PER_ROUND = 20
+
+function pushComments() {
+  state.comments = { ...state.comments, items: desk.items.slice(0, 200), sentLastHour: desk.sentLastHour() }
+  push()
+}
+
+async function draftReply(item) {
+  const p = replyPrompt({ style: store.settings.replyStyle, channel: store.settings.channel || (state.youtube.channel && state.youtube.channel.title), videoTitle: item.videoTitle, author: item.author, text: item.text })
+  const out = await gemini({ key: store.getSecret('gemini'), model: store.settings.geminiModel, system: p.system, prompt: p.prompt, json: true, fetchFn: net.fetch, ep: endpoints() })
+  const r = parseReply(out)
+  if (r.kind === 'spam' || !r.reply) return desk.update(item.id, { status: 'skipped', kind: r.kind, draft: '', note: 'Gemini đánh giá là spam' })
+  return desk.update(item.id, { status: 'ready', kind: r.kind, draft: r.reply, error: '' })
+}
+
+async function sendReply(id, text) {
+  const item = desk.get(id)
+  text = String(text || '').trim().replace(/[<>]/g, '')
+  if (!item || !text) return false
+  if (!desk.canSend(store.settings.replyPerHour)) {
+    log('warn', `Đã gửi đủ ${store.settings.replyPerHour} trả lời trong 1 giờ qua (giới hạn trong Cài đặt). Thử lại sau.`)
+    return false
+  }
+  try {
+    await google().reply(id, text)
+    desk.markSent(id, text)
+    return true
+  } catch (e) {
+    desk.update(id, { status: 'error', error: e.message })
+    log('error', `Không gửi được trả lời cho ${item.author}: ${e.message}`)
+    return false
+  }
+}
+
+// Lay binh luan moi -> Gemini soan nhap -> (che do tu gui) gui loi khen ngan
+async function commentsRound(manual = false) {
+  if (commentsBusy || !state.youtube.channel) return
+  if (!manual && store.settings.replyMode === 'off') return
+  commentsBusy = true
+  state.comments.busy = true
+  pushComments()
+  try {
+    const g = google()
+    const list = await g.channelComments(state.youtube.channel.id)
+    const fresh = list.filter((c) => !desk.get(c.commentId))
+    const titles = fresh.length ? await g.videoTitles(fresh.map((c) => c.videoId)) : {}
+    const added = desk.merge(list, { channelId: state.youtube.channel.id, titles, skipWords: store.settings.skipWords })
+    if (added || manual) log('info', `Bình luận: ${added} bình luận mới.`)
+    state.comments.at = new Date().toISOString()
+    pushComments()
+    if (store.settings.replyMode !== 'off' && store.hasSecret('gemini')) {
+      let n = 0
+      let sent = 0
+      for (const it of desk.items.filter((x) => x.status === 'new')) {
+        if (n++ >= DRAFTS_PER_ROUND) break
+        try { await draftReply(it) } catch (e) {
+          desk.update(it.id, { status: 'error', error: e.message })
+          if (e.reason === 'badKey' || e.reason === 'quota' || e.reason === 'model') { log('error', `Gemini: ${e.message}`); break }
+        }
+        pushComments()
+        const cur = desk.get(it.id)
+        if (store.settings.replyMode === 'auto' && CommentDesk.autoOk(cur) && desk.canSend(store.settings.replyPerHour)) {
+          if (await sendReply(cur.id, cur.draft)) sent++
+          pushComments()
+        }
+      }
+      if (sent) log('ok', `Đã tự gửi ${sent} trả lời cho bình luận khen.`)
+    } else if (store.settings.replyMode !== 'off' && desk.items.some((x) => x.status === 'new')) {
+      log('warn', 'Chưa có Gemini API key nên chưa soạn được trả lời (Cài đặt → Gemini API).')
+    }
+  } catch (e) {
+    log('error', `Không lấy được bình luận: ${e.message}`)
+  } finally {
+    commentsBusy = false
+    state.comments.busy = false
+    pushComments()
+  }
+}
+
 // ---- lenh tu giao dien --------------------------------------------------------------
 async function chooseRoot() {
   const r = await dialog.showOpenDialog(win, { title: 'Chọn thư mục gốc chứa video và bài viết', properties: ['openDirectory', 'createDirectory'] })
@@ -416,6 +501,15 @@ const commands = {
   describe: (id) => describe(id),
   draft_close: () => { state.draft = null },
   save_description: (p) => !busy && saveDescription(p || {}),
+  comments_fetch: () => commentsRound(true),
+  comment_send: async (p) => { if (await sendReply(p && p.id, p && p.text)) log('ok', 'Đã gửi trả lời.'); pushComments() },
+  comment_skip: (id) => { desk.update(id, { status: 'skipped', note: 'Bạn bỏ qua' }); pushComments() },
+  comment_redraft: async (id) => {
+    const it = desk.get(id)
+    if (!it) return
+    try { await draftReply(it) } catch (e) { desk.update(id, { status: 'error', error: e.message }) }
+    pushComments()
+  },
   pane: (r) => setPane(r),
   clear: () => { state.logs = [] },
   scan: () => runScan(),
@@ -490,6 +584,9 @@ if (!app.requestSingleInstanceLock()) {
     store = new Store(app.getPath('userData'), safeStorage)
     refreshSettings()
     if (store.hasSecret('youtubeToken')) state.youtube.channel = store.settings.youtubeChannel || null
+    desk = new CommentDesk(app.getPath('userData'))
+    state.comments.items = desk.items.slice(0, 200)
+    setInterval(() => commentsRound(false), COMMENT_POLL_MS)
     createWindow()
     if (store.settings.root) runScan(true)
     setInterval(refreshStudio, 2000)

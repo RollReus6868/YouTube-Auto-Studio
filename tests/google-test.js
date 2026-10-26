@@ -120,6 +120,48 @@ test('gemini', async () => {
   } finally { await m.close() }
 })
 
+test('binh luan: lay, loc, soan, gioi han, tu gui', async () => {
+  const { CommentDesk } = require('../src/comments')
+  const { replyPrompt, parseReply } = require('../src/google')
+  const m = await startMock()
+  try {
+    const g = new Google({ client, ep: endpoints(m.url), tokens: { refresh_token: 'ref-1' } })
+    const own = 'UCmock000000000000000000'
+    const list = await g.channelComments(own)
+    assert.equal(list.length, 5)
+    assert.equal(list.find((c) => c.commentId === 'c55555').ownerReplied, true)
+    const titles = await g.videoTitles(list.map((c) => c.videoId))
+    assert.deepEqual(titles, { vidA: 'Video A' })
+    const dir = tmp()
+    const desk = new CommentDesk(dir)
+    assert.equal(desk.merge(list, { channelId: own, titles, skipWords: 'kiếm tiền' }), 3, 'bo binh luan cua kenh va da tra loi')
+    assert.equal(desk.merge(list, { channelId: own, titles }), 0, 'khong them lai')
+    assert.equal(desk.get('c333').status, 'skipped')
+    assert.equal(desk.get('c1').videoTitle, 'Video A')
+    assert.equal(new CommentDesk(dir).items.length, 3, 'luu lai sau khi mo lai')
+
+    const p = replyPrompt({ style: 'xưng mình', channel: 'Kênh A', videoTitle: 'Video A', author: 'Lan', text: 'hay quá' })
+    assert(p.system.includes('xưng mình') && p.prompt.includes('hay quá'))
+    const r = parseReply(await gemini({ key: 'gemini-ok', model: 'x', ...p, json: true, ep: endpoints(m.url) }))
+    assert.deepEqual(r, { kind: 'khen', reply: 'Cảm ơn bạn nhiều ❤️' })
+    assert.equal(m.lastGemini.generationConfig.responseMimeType, 'application/json')
+    assert.deepEqual(parseReply('```json\n{"loai":"spam","tra_loi":""}\n```'), { kind: 'spam', reply: '' })
+    assert.equal(parseReply('{"loai":"la","tra_loi":"x"}').kind, 'hoi', 'loai la -> cho duyet tay')
+
+    desk.update('c1', { status: 'ready', kind: 'khen', draft: 'Cảm ơn bạn!' })
+    desk.update('c22', { status: 'ready', kind: 'hoi', draft: 'Tuần sau nhé' })
+    assert(CommentDesk.autoOk(desk.get('c1')) && !CommentDesk.autoOk(desk.get('c22')))
+    assert(!CommentDesk.autoOk({ kind: 'khen', draft: 'a'.repeat(300) }), 'loi khen dai cung cho duyet')
+    await g.reply('c1', 'Cảm ơn bạn!')
+    assert.deepEqual(m.replies[0], { parentId: 'c1', textOriginal: 'Cảm ơn bạn!' })
+    const now = Date.now()
+    desk.markSent('c1', 'Cảm ơn bạn!', now)
+    assert(desk.canSend(2, now) && !desk.canSend(1, now))
+    assert(desk.canSend(1, now + 3601e3), 'qua 1 gio thi gui tiep duoc')
+    assert.equal(desk.get('c1').status, 'sent')
+  } finally { await m.close() }
+})
+
 ;(async () => {
   let failed = 0
   for (const [name, fn] of tests) {

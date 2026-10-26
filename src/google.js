@@ -278,14 +278,55 @@ class Google {
   }
 }
 
+// ---- binh luan duoi video --------------------------------------------------------
+// Tra ve cac luot binh luan moi nhat tren kenh: [{ threadId, commentId, videoId, author,
+// authorChannelId, text, publishedAt, likeCount, ownerReplied }]
+Google.prototype.channelComments = async function channelComments(channelId, { pages = 2 } = {}) {
+  const out = []
+  let page = ''
+  for (let i = 0; i < pages; i++) {
+    const q = new URLSearchParams({ part: 'snippet,replies', allThreadsRelatedToChannelId: channelId, maxResults: '100', order: 'time', textFormat: 'plainText' })
+    if (page) q.set('pageToken', page)
+    const r = await this.api('GET', `commentThreads?${q}`)
+    for (const t of r.items || []) {
+      const top = t.snippet.topLevelComment.snippet
+      const replies = (t.replies && t.replies.comments) || []
+      out.push({
+        threadId: t.id, commentId: t.snippet.topLevelComment.id, videoId: t.snippet.videoId || top.videoId || '',
+        author: top.authorDisplayName, authorChannelId: (top.authorChannelId && top.authorChannelId.value) || '',
+        text: top.textOriginal || top.textDisplay || '', publishedAt: top.publishedAt, likeCount: top.likeCount || 0,
+        replyCount: t.snippet.totalReplyCount || 0,
+        ownerReplied: replies.some((c) => c.snippet.authorChannelId && c.snippet.authorChannelId.value === channelId),
+      })
+    }
+    if (!(page = r.nextPageToken)) break
+  }
+  return out
+}
+
+Google.prototype.videoTitles = async function videoTitles(ids) {
+  const titles = {}
+  const uniq = [...new Set(ids.filter(Boolean))]
+  for (let i = 0; i < uniq.length; i += 50) {
+    const r = await this.api('GET', `videos?part=snippet&id=${uniq.slice(i, i + 50).join(',')}`)
+    for (const v of r.items || []) titles[v.id] = v.snippet.title
+  }
+  return titles
+}
+
+Google.prototype.reply = function reply(parentId, text) {
+  return this.api('POST', 'comments?part=snippet', { json: { snippet: { parentId, textOriginal: text } } })
+}
+
 const MIME = { '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.mkv': 'video/x-matroska', '.avi': 'video/x-msvideo', '.webm': 'video/webm', '.m4v': 'video/x-m4v', '.wmv': 'video/x-ms-wmv', '.flv': 'video/x-flv', '.mpeg': 'video/mpeg', '.mpg': 'video/mpeg', '.3gp': 'video/3gpp', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png' }
 const mimeOf = (f) => MIME[path.extname(f).toLowerCase()] || 'application/octet-stream'
 const sleep = (ms) => new Promise((r) => setTimeout(r, process.env.YA_FAST_RETRY ? 10 : ms))
 
 // ---- Gemini -----------------------------------------------------------------
-async function gemini({ key, model, prompt, system, fetchFn = fetch, ep = endpoints() }) {
+async function gemini({ key, model, prompt, system, json = false, fetchFn = fetch, ep = endpoints() }) {
   if (!key) throw new ApiError('Chưa nhập Gemini API key (Cài đặt).')
   const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.8 } }
+  if (json) body.generationConfig.responseMimeType = 'application/json'
   if (system) body.systemInstruction = { parts: [{ text: system }] }
   let res
   try {
@@ -318,4 +359,28 @@ function descriptionPrompt({ title, name, notes, channel, language, current }) {
   ].filter(Boolean).join('\n')
 }
 
-module.exports = { Google, ApiError, endpoints, explain, gemini, descriptionPrompt, mimeOf, SCOPE, CHUNK }
+// Loi nhac cho Gemini tra loi binh luan. Gemini tra ve JSON { loai, tra_loi }.
+const KINDS = ['khen', 'hoi', 'gop_y', 'nhay_cam', 'spam']
+function replyPrompt({ style, channel, videoTitle, author, text }) {
+  return {
+    system: [
+      `Bạn là chủ kênh YouTube${channel ? ` "${channel}"` : ''}, đang trả lời bình luận của khán giả.`,
+      `Quy tắc của chủ kênh: ${style || 'Trả lời thân thiện, ngắn gọn.'}`,
+      'Trả lời bằng ngôn ngữ của bình luận. Không bịa thông tin về kênh hay video. Không dùng dấu < hoặc >.',
+      'Phân loại bình luận vào đúng một nhóm: khen (khen ngợi, cảm ơn, cảm xúc tích cực), hoi (câu hỏi), gop_y (góp ý, phê bình), nhay_cam (chính trị, tôn giáo, xúc phạm, tranh cãi, thông tin cá nhân), spam (quảng cáo, link lạ, vô nghĩa).',
+      'Với spam thì tra_loi để rỗng.',
+      'Chỉ trả về JSON dạng {"loai": "...", "tra_loi": "..."}.',
+    ].join('\n'),
+    prompt: `Video: ${videoTitle || '(không rõ)'}\nNgười bình luận: ${author}\nBình luận: ${text}`,
+  }
+}
+
+function parseReply(out) {
+  const m = /\{[\s\S]*\}/.exec(out)
+  let j = {}
+  try { j = JSON.parse(m ? m[0] : out) } catch (_) { return { kind: 'hoi', reply: out.trim().replace(/[<>]/g, '') } }
+  const kind = KINDS.includes(j.loai) ? j.loai : 'hoi'
+  return { kind, reply: String(j.tra_loi || '').trim().replace(/<3/g, '❤️').replace(/[<>]/g, '') }
+}
+
+module.exports = { Google, ApiError, endpoints, explain, gemini, descriptionPrompt, replyPrompt, parseReply, KINDS, mimeOf, SCOPE, CHUNK }

@@ -77,6 +77,7 @@ export type PostItem = {
   warnings: string[]
 }
 export type Job = { status: 'queued' | 'run' | 'done' | 'error' | 'stopped'; title?: string; step: string; progress: number; error: string; url: string; warnings?: string[] }
+export type Comment = { id: string; videoId: string; videoTitle: string; author: string; text: string; publishedAt: string; likeCount: number; status: 'new' | 'ready' | 'sent' | 'skipped' | 'error'; kind: string; draft: string; error: string; note: string }
 export type Draft = { id: string; text: string; loading: boolean; error: string }
 export type State = {
   status: 'idle' | 'run' | 'update'
@@ -89,6 +90,7 @@ export type State = {
   youtube: { channel: { id: string; title: string; thumb?: string } | null; busy: boolean }
   jobs: Record<string, Job>
   draft: Draft | null
+  comments: { items: Comment[]; busy: boolean; at: string; sentLastHour: number }
   categories: [string, string][]
   logs: { t: string; level: Level; msg: string }[]
 }
@@ -162,6 +164,15 @@ export const demoState: State = {
     v2: { status: 'run', step: 'upload', progress: 42, error: '', url: '' },
   },
   draft: null,
+  comments: {
+    busy: false, at: '2026-10-26T12:00:00Z', sentLastHour: 3,
+    items: [
+      { id: 'c1', videoId: 'v', videoTitle: 'Bí ẩn rừng sâu tập 1', author: 'Lan Nguyễn', text: 'Tập này hay quá, chờ tập sau mãi!', publishedAt: new Date(Date.now() - 25 * 60e3).toISOString(), likeCount: 4, status: 'ready', kind: 'khen', draft: 'Cảm ơn bạn đã theo dõi nhé, tập sau ra tối thứ 5 nha ❤️', error: '', note: '' },
+      { id: 'c2', videoId: 'v', videoTitle: 'Bí ẩn rừng sâu tập 1', author: 'Minh Trần', text: 'Nhạc nền trong video tên gì vậy ad?', publishedAt: new Date(Date.now() - 3 * 3600e3).toISOString(), likeCount: 1, status: 'ready', kind: 'hoi', draft: 'Mình dùng nhạc trong thư viện âm thanh của YouTube nhé bạn.', error: '', note: '' },
+      { id: 'c3', videoId: 'v', videoTitle: 'Bí ẩn rừng sâu tập 2', author: 'Hoa', text: 'Giọng đọc hơi nhỏ so với nhạc.', publishedAt: new Date(Date.now() - 26 * 3600e3).toISOString(), likeCount: 0, status: 'new', kind: '', draft: '', error: '', note: '' },
+      { id: 'c4', videoId: 'v', videoTitle: 'Bí ẩn rừng sâu tập 2', author: 'An', text: 'Hay!', publishedAt: new Date(Date.now() - 50 * 3600e3).toISOString(), likeCount: 0, status: 'sent', kind: 'khen', draft: 'Cảm ơn bạn nhiều!', error: '', note: '' },
+    ],
+  },
   categories: CATEGORIES,
   logs: [
     { t: '12:00:02', level: 'ok', msg: 'Thư mục gốc: D:\\YouTube-DangBai' },
@@ -175,6 +186,7 @@ export const emptyState: State = {
   secrets: { gemini: false, geminiEncrypted: false, oauth: null },
   scan: { root: '', videos: [], posts: [], errors: [], at: '' },
   studio: { channelId: '', url: '', visible: false }, youtube: { channel: null, busy: false }, jobs: {}, draft: null,
+  comments: { items: [], busy: false, at: '', sentLastHour: 0 },
   categories: CATEGORIES, logs: [],
 }
 

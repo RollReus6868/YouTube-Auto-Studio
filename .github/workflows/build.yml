@@ -78,6 +78,7 @@ jobs:
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-app.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-update.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-upload.js
+          xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-comments.js
 
   # ------------------------------------------------------------------ 2. Windows
   windows:

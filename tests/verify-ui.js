@@ -61,7 +61,7 @@ function findBrowser() {
         await page.waitForTimeout(250)
         assert.equal((await page.evaluate(() => document.documentElement.className)).includes('dark'), mode === 'dark')
         const panes = await page.locator('[data-pane]').count()
-        assert.equal(panes, ['community', 'comments'].includes(p) ? 1 : 0, `${tag} ${p}: khung Studio`)
+        assert.equal(panes, p === 'community' ? 1 : 0, `${tag} ${p}: khung Studio`)
         if (panes) {
           const box = await page.locator('[data-pane]').boundingBox()
           assert(box.width >= 380 && box.height >= 400, `${tag}: khung Studio qua nho ${JSON.stringify(box)}`)
