@@ -13,7 +13,7 @@
   header .logo { font-weight: 700; font-size: 18px } header .search { flex: 1; max-width: 520px; height: 36px; border-radius: 18px; background: #3a3a3a; padding: 8px 16px; color: #aaa }
   .layout { display: flex; height: calc(100vh - 56px) }
   nav { width: 220px; padding: 12px; border-right: 1px solid #3e3e3e }
-  nav .me { text-align: center; padding: 12px 0 }
+  nav .me { display: block; text-align: center; padding: 12px 0 }
   nav .me .av { width: 88px; height: 88px; border-radius: 50%; background: #6b4f2a; margin: 0 auto 8px }
   nav a { display: block; padding: 10px 12px; color: #fff; text-decoration: none; border-radius: 8px }
   nav a.on { background: #3a3a3a }
@@ -69,7 +69,7 @@
 <header><span class="logo">▶ Studio</span><div class="search">Tìm kiếm trên kênh của bạn</div></header>
 <div class="layout">
   <nav>
-    <div class="me"><div class="av"></div><div><b>Kênh của bạn</b></div><div style="color:#aaa">Dark Faith 2nd</div></div>
+    <ytcp-navigation-drawer class="me"><div class="av"></div><div id="entity-label-container"><div id="entity-type"><b>Kênh của bạn</b></div><div class="entity-name-container"><div id="entity-name" style="color:#aaa">Dark Faith 2nd</div></div></div></ytcp-navigation-drawer>
     <a href="#">Tổng quan</a><a href="#">Nội dung</a><a href="#">Số liệu phân tích</a><a href="#" class="on">Cộng đồng</a><a href="#">Ngôn ngữ</a><a href="#">Kiếm tiền</a><a href="#">Cài đặt</a><a href="#">Gửi ý kiến phản hồi</a>
   </nav>
   <div id="main">
