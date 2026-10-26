@@ -9,7 +9,7 @@
   "repository": { "type": "git", "url": "https://github.com/RollReus6868/YouTube-Auto-Studio.git" },
   "scripts": {
     "start": "electron .",
-    "test": "node tests/unit-test.js && node tests/accounts-test.js && node tests/optimize-template-test.js && node tests/google-test.js && node tests/updater-test.js && node tests/inbox-test.js",
+    "test": "node tests/unit-test.js && node tests/accounts-test.js && node tests/optimize-template-test.js && node tests/google-test.js && node tests/updater-test.js && node tests/inbox-test.js && node tests/hometab-test.js",
     "build:ui": "npm --prefix ui run build"
   },
   "devDependencies": {
