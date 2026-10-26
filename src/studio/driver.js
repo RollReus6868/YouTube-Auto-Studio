@@ -161,6 +161,8 @@ class Page {
   async click(t, opts = {}) {
     t = target(t)
     await this.waitFor(t, opts)
+    // cho trang ve xong 2 khung hinh: cua so an vua tai xong co luc bo mat cu bam dau tien
+    await this.eval(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))).catch(() => {})
     const r = await this.eval((x) => window.__ya.rect(x), t)
     if (!r) throw new StepError(`Không thấy ${describe(t)} để bấm.`, this.step)
     if (r.covered || opts.dom) {
