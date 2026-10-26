@@ -47,6 +47,8 @@ module.exports = (ctx) => {
     })
     const wc = win.webContents
     wc.setAudioMuted(true)
+    // Studio chan roi trang khi con thay doi chua luu (beforeunload): cua so an khong co ai bam "Roi trang"
+    wc.on('will-prevent-unload', (e) => e.preventDefault())
     wc.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) wc.loadURL(url); return { action: 'deny' } })
     const page = new Page(wc, { timeout: 20000, shotDir: ctx.logFile('loi-trang'), shouldStop: ctx.stopped })
     const l = { win, page, chain: Promise.resolve(), pending: 0, timer: null }

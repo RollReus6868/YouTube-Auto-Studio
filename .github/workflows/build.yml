@@ -78,6 +78,7 @@ jobs:
           node tests/ci-run.js node tests/accounts-test.js
           node tests/ci-run.js node tests/inbox-test.js
           node tests/ci-run.js node tests/optimize-template-test.js
+          node tests/ci-run.js node tests/hometab-test.js
           node tests/ci-run.js node tests/google-test.js
 
       - name: Chay that app tu ma nguon (Studio gia lap nhung trong cua so)
