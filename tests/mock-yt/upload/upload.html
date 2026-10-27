@@ -1,0 +1,21 @@
+<!doctype html><meta charset="utf-8"><title>Nội dung của kênh - YouTube Studio</title>
+<!-- Trang Noi dung cua kenh voi ?d=ud: hop thoai "Tai video len" (dialog.js) tu mo. Bien the 'up-nodialog':
+     ?d=ud khong mo hop thoai, phai bam Tao -> Tai video len. Cac bien the khac: xem dialog.js. -->
+<style>
+  body { margin: 0; font: 13px Roboto, Arial, sans-serif; background: #282828; color: #fff }
+  header { height: 56px; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid #3e3e3e }
+  header .sp { flex: 1 }
+  main { padding: 16px 24px }
+</style>
+<script src="/__file/optimize/data.js"></script>
+<script>window.__UP = /*DATA*/null || { uc: '', cookieCh: '' }</script>
+<script src="/__file/upload/dialog.js"></script>
+<header><b>▶ Studio</b><input placeholder="Tìm kiếm trên kênh của bạn" style="width:360px"><span class="sp"></span><span id="create-host" style="position:relative"></span></header>
+<main><h1 id="page-title">Nội dung của kênh</h1><p class="description" id="page-sub">Video</p></main>
+<script>
+const EN = OPT.load('up-en', false)
+document.title = EN ? 'Channel content - YouTube Studio' : 'Nội dung của kênh - YouTube Studio'
+document.getElementById('page-title').textContent = EN ? 'Channel content' : 'Nội dung của kênh'
+UPLOAD.createButton(document.getElementById('create-host'))
+if (/[?&]d=ud\b/.test(location.search) && !OPT.load('up-nodialog', false)) setTimeout(UPLOAD.open, 400)
+</script>

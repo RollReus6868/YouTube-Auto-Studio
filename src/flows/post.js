@@ -591,4 +591,4 @@ async function createPost(page, input, { urls, log = () => {}, onStep = () => {}
   }
 }
 
-module.exports = { createPost, LABELS, scheduleTime, dateText, timeText }
+module.exports = { createPost, LABELS, scheduleTime, dateText, timeText, chooseFiles }

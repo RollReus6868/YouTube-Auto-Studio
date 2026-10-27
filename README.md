@@ -2,8 +2,8 @@
 
 Tool desktop (Windows / macOS) cho nhiều kênh YouTube: đăng video theo mẫu mặc định, tối ưu video đã đăng (kèm bình luận ghim), đăng bài, thêm kênh và danh sách phát vào trang chủ các kênh, trả lời bình luận bằng Gemini (trang Cộng đồng).
 
-- Video, tiêu đề, mô tả, thẻ, lịch, playlist, thumbnail: qua **YouTube Data API v3** (OAuth, chạy trên máy bạn). Cách lấy API xem trang **Hướng dẫn API** trong tool.
-- Những việc API không làm được (tối ưu trong Studio, ghim bình luận, đăng bài, trang chủ kênh, hộp thư bình luận): tool thao tác trên **YouTube Studio ngay trong cửa sổ**. Mỗi tài khoản Google đăng nhập một lần ở trang **Tài khoản**, tool tự chuyển giữa các kênh. Tool không lưu mật khẩu.
+- Mọi việc trên YouTube (đăng video, tối ưu trong Studio, ghim bình luận, đăng bài, trang chủ kênh, hộp thư bình luận): tool thao tác trên **YouTube Studio** trong cửa sổ chạy ngầm, như bạn tự bấm. Video đăng bằng chính hộp thoại **Tải video lên** của Studio, không cần Google Cloud / YouTube Data API. Mỗi tài khoản Google đăng nhập một lần ở trang **Tài khoản**, tool tự chuyển giữa các kênh. Tool không lưu mật khẩu.
+- Gemini (viết mô tả, trả lời bình luận): cần Gemini API key, xem trang **Hướng dẫn** trong tool.
 - Giao diện theo phong cách [Youwee](https://github.com/vanloctech/youwee) (MIT).
 
 ## Cài đặt
@@ -77,20 +77,11 @@ Biến dùng trong mẫu: `{ten_video}` `{tieu_de}` `{so_tap}` `{ngay}` `{ten_ke
 
 ## Kết nối kênh YouTube (làm một lần)
 
-1. Vào [Google Cloud Console](https://console.cloud.google.com/), tạo dự án mới (ví dụ `tool-dang-youtube`).
-2. **APIs & Services → Library**: tìm **YouTube Data API v3**, bấm **Enable**.
-3. **APIs & Services → OAuth consent screen**: chọn **External**, điền tên app và email, thêm email của bạn vào **Test users**. Sau đó bấm **Publish app** (chuyển sang *In production*) để đăng nhập không hết hạn sau 7 ngày.
-4. **APIs & Services → Credentials → Create credentials → OAuth client ID**, loại **Desktop app**, tải file JSON.
-5. Trong tool: **Cài đặt → Kết nối YouTube API → Nhập file JSON**, rồi **Đăng nhập kênh**. Google báo "ứng dụng chưa được xác minh" thì bấm **Nâng cao → Đi tới ... (không an toàn)**, vì đây là app của chính bạn.
-6. Muốn video đăng lên được để Công khai: nộp đơn [YouTube API Services Audit](https://support.google.com/youtube/contact/yt_api_form) cho dự án này.
+1. Trang **Tài khoản**: thêm tài khoản Google, đăng nhập trong khung Studio, tick các kênh tool được dùng.
+2. Trang **Đăng video**: chọn kênh ở ô **Kênh đăng video**. Tool mở hộp thoại tải lên của Studio, điền tiêu đề, mô tả (nối sau mô tả mặc định của kênh), hình thu nhỏ, danh sách phát, các mục trong **Hiện thêm** theo **Mẫu Studio** của mẫu mặc định, màn hình kết thúc, chế độ hiển thị hoặc lịch đăng, rồi chờ tải lên xong.
+3. Kênh chưa xác minh số điện thoại thì không đặt được hình thu nhỏ: xác minh tại [youtube.com/verify](https://youtube.com/verify). YouTube giới hạn số video tải lên mỗi ngày; chạm giới hạn thì tool dừng hàng đợi.
 
 Gemini API key lấy ở [Google AI Studio](https://aistudio.google.com/apikey), dán vào **Cài đặt → Gemini API**.
-
-## Lưu ý về API YouTube
-
-- Video tải lên từ dự án Google Cloud **chưa qua kiểm duyệt** (YouTube API Services Audit) bị khóa ở chế độ Riêng tư.
-- Hạn mức mặc định 10.000 đơn vị/ngày, mỗi video khoảng 1.600 đơn vị (khoảng 6 video/ngày).
-- Để OAuth app ở "In production" để đăng nhập không hết hạn sau 7 ngày.
 
 ## Dữ liệu và nhật ký
 

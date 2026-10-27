@@ -182,31 +182,30 @@ module.exports = (ctx) => {
     await optimizeMany(key, todo)
   }
 
-  // ---- tu toi uu sau khi dang (preset.optimizeAfterUpload) ----
-  // main.js goi ctx.afterUpload sau moi video dang xong. Video duoc xep hang cho toi khi qua gio
-  // dang + 15 phut (cho YouTube xu ly xong), roi tu toi uu bang mau Studio cua preset (preset.optimize,
-  // cac muc API da dat thi giu nguyen). Preset/hang cho cu khong co mau: dung mau cua kenh nhu truoc.
+  // ---- tu toi uu sau khi dang ----
+  // main.js goi ctx.afterUpload sau moi video dang xong voi mau `tpl` (src/optimize-template.js afterUploadTemplate):
+  // hop thoai tai len da dat cac muc cua mau Studio, nen chi con thich / binh luan / ghim (preset.optimizeAfterUpload)
+  // va cac muc chua dat duoc trong hop thoai. Video duoc xep hang cho toi khi qua gio dang + 15 phut (cho YouTube xu ly).
   const pendingFile = () => ctx.logFile('optimize-pending.json')
   const readPending = () => { try { return JSON.parse(fs.readFileSync(pendingFile(), 'utf8')) } catch (_) { return [] } }
   const writePending = (list) => fs.writeFileSync(pendingFile(), JSON.stringify(list, null, 1))
   const AFTER_MS = 15 * 60e3
-  ctx.afterUpload = ({ videoId, title, publishAt, preset, channelId } = {}) => {
-    if (!preset || !preset.optimizeAfterUpload || !videoId || !channelId) return
+  ctx.afterUpload = ({ videoId, title, publishAt, tpl, presetId, channelId } = {}) => {
+    if (!tpl || !videoId || !channelId) return
     try { // khong bao gio lam hong buoc dang video
       const due = Math.max(Date.now(), (publishAt && Date.parse(publishAt)) || 0) + AFTER_MS
-      const entry = { channelKey: channelId, id: videoId, title: title || videoId, due }
-      if (preset.optimize) Object.assign(entry, { presetId: preset.id || '', tpl: ot.withoutApiFields(preset.optimize) })
+      const entry = { channelKey: channelId, id: videoId, title: title || videoId, due, presetId: presetId || '', tpl: ot.normalizeTemplate(tpl) }
       writePending(readPending().filter((x) => x.id !== videoId).concat([entry]))
       ctx.log('info', `Đã xếp "${title || videoId}" vào hàng chờ tự tối ưu (lúc ${new Date(due).toLocaleString('vi-VN')}).`)
     } catch (e) { ctx.log('warn', `Không xếp được video vào hàng chờ tối ưu: ${e.message}`) }
   }
-  // Mau cho video trong hang cho: preset hien tai (nguoi dung co the da sua mau sau khi dang),
-  // preset da xoa thi mau chup luc dang, khong co ca hai -> null (mau cua kenh).
+  // Mau cho video trong hang cho: tpl luc dang, cac muc cua no lay gia tri moi nhat cua preset (nguoi dung co the
+  // da sua preset sau khi dang); khong co tpl (hang cho rat cu) -> null (mau cua kenh).
   function pendingTemplate(x) {
+    if (!x.tpl) return null
     const ps = (ctx.store && ctx.store.settings.presets) || []
     const p = x.presetId && ps.find((q) => q.id === x.presetId)
-    if (p && p.optimize) return ot.withoutApiFields(p.optimize)
-    return x.tpl ? ot.withoutApiFields(x.tpl) : null
+    return ot.refreshPending(x.tpl, p && p.optimize)
   }
   async function processPending(now = Date.now()) {
     if (S.busy || !ctx.withChannel) return 0

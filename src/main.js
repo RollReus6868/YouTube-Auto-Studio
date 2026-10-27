@@ -1,5 +1,6 @@
 // YT Auto Studio - cua so chinh: thanh ben | cot dieu khien | (tuy trang) YouTube Studio
-// nhung ngay ben phai (WebContentsView) cho cac viec API cua YouTube khong ho tro.
+// nhung ngay ben phai (WebContentsView). Moi viec tren YouTube (dang video, toi uu, binh luan, dang bai...)
+// chay trong cua so Studio an cua tung tai khoan (ctx.withChannel, src/features/accounts.js).
 const { app, BrowserWindow, WebContentsView, ipcMain, shell, net, dialog, safeStorage } = require('electron')
 const fs = require('fs')
 const path = require('path')
@@ -8,12 +9,12 @@ const { pathToFileURL } = require('url')
 const updater = require('./updater')
 const scanner = require('./scanner')
 const { buildVideoMeta, validateMeta, planSchedule, CATEGORIES } = require('./metadata')
-const { Store, parseOAuthClient } = require('./store')
-const { Google, endpoints, gemini, descriptionPrompt } = require('./google')
+const { Store, dropApiData } = require('./store')
+const { endpoints, gemini, descriptionPrompt } = require('./google')
 const { CommentDesk } = require('./comments')
 const { uploadOne } = require('./uploader')
 const { googleSession, REJECTED, REJECTED_TEXT } = require('./studio/session')
-const { tokenName, migrateApiToken, checkApiChannel } = require('./accounts')
+const { channelOf } = require('./studio/driver')
 
 const MAX_LOGS = 300
 const STUDIO_URL = process.env.YA_STUDIO_URL || 'https://studio.youtube.com/'
@@ -39,10 +40,10 @@ const state = {
   version: app.getVersion(),
   update: { status: 'idle', latest: '', notes: '', progress: 0, error: '', manual: kind === 'manual' },
   settings: null,
-  secrets: { gemini: false, geminiEncrypted: false, oauth: null },
+  secrets: { gemini: false, geminiEncrypted: false },
   scan: { root: '', videos: [], posts: [], errors: [], at: '' },
   studio: { channelId: '', channelName: '', url: '', visible: false },
-  youtube: { channel: null, busy: false },
+  upload: { channelKey: '', channels: [] }, // kenh dang video (trang Dang video) + cac kenh da tick o trang Tai khoan
   jobs: {}, // id video -> { status: queued|run|done|error|stopped, step, progress, error, url }
   draft: null, // { id, text, loading, error } mo ta Gemini dang soan
   comments: { items: [], busy: false, at: '', sentLastHour: 0 },
@@ -83,14 +84,7 @@ function saveLog(level, msg) {
 // ---- cai dat ------------------------------------------------------------------------
 function refreshSettings() {
   state.settings = store.settings
-  let oauth = null
-  try { oauth = store.hasSecret('oauthClient') ? JSON.parse(store.getSecret('oauthClient')) : null } catch (_) { /* hong */ }
-  state.secrets = {
-    gemini: store.hasSecret('gemini'),
-    geminiEncrypted: store.secretEncrypted('gemini'),
-    // chi gui ten du an va phan dau client_id; khong gui client_secret ra giao dien
-    oauth: oauth ? { project_id: oauth.project_id, client_id: oauth.client_id.replace(/^(.{12}).*(\.apps\.googleusercontent\.com)$/, '$1…$2') } : null,
-  }
+  state.secrets = { gemini: store.hasSecret('gemini'), geminiEncrypted: store.secretEncrypted('gemini') }
 }
 
 // ---- quet thu muc -------------------------------------------------------------------
@@ -130,7 +124,7 @@ function runScan(quiet = false) {
       return {
         id: v.id, dir: v.dir, folder: v.folder, name: v.name, size: v.size || 0,
         video: v.video ? path.basename(v.video) : '', thumbUrl: fileUrl(v.thumbnail),
-        subtitles: v.subtitles.map((s) => ({ file: path.basename(s.file), lang: s.lang || meta.language })),
+        subtitles: v.subtitles.map((s) => ({ file: path.basename(s.file), lang: s.lang || '' })),
         preset: preset.name, meta: { ...meta, thumbnail: undefined, subtitles: undefined },
         errors: problems, warnings: v.warnings.concat(p.warning ? [p.warning] : []),
       }
@@ -264,77 +258,23 @@ async function updateInstall() {
   }
 }
 
-// ---- YouTube API --------------------------------------------------------------------
-function oauthClient() {
-  try { return store.hasSecret('oauthClient') ? JSON.parse(store.getSecret('oauthClient')) : null } catch (_) { return null }
-}
-// Token API cua kenh `ch` (mac dinh: kenh dang video chon o Cai dat), luu o khoa 'ytToken:<UC>'
-function google(ch = state.youtube.channel) {
-  const client = oauthClient()
-  if (!client) throw new Error('Chưa nhập OAuth client (Cài đặt → Kết nối YouTube API).')
-  const name = ch ? tokenName(ch.id) : ''
-  let tokens = null
-  try { tokens = name && store.hasSecret(name) ? JSON.parse(store.getSecret(name)) : null } catch (_) { /* hong */ }
-  return new Google({ client, tokens, fetchFn: net.fetch, ep: endpoints(), onTokens: (t) => name && store.setSecret(name, JSON.stringify(t)) })
-}
-// Trong kiem thu (YA_GOOGLE_MOCK) "trinh duyet" chi la mot lan fetch di theo chuyen huong
-async function openLogin(url) {
-  if (process.env.YA_GOOGLE_MOCK) {
-    const r = await fetch(url, { redirect: 'manual' })
-    await fetch(r.headers.get('location')).then((x) => x.text())
-  } else await shell.openExternal(url)
-}
-
-// p.ucId: kenh nguoi dung chon o Cai dat (de trong = kenh bat ky chon tren trang Google).
-// Token chi duoc luu khi Google tra ve DUNG kenh do.
-async function ytLogin(p) {
-  state.youtube.busy = true
-  push()
-  try {
-    const want = p && p.ucId ? (ctx.accounts && ctx.accounts.find(p.ucId)) || { ucId: p.ucId, name: p.ucId } : null
-    const hint = want && want.accountId ? ctx.accounts.email(want.accountId) : ''
-    const client = oauthClient()
-    if (!client) throw new Error('Chưa nhập OAuth client (Cài đặt → Kết nối YouTube API).')
-    const g = new Google({ client, fetchFn: net.fetch, ep: endpoints() })
-    log('info', `Đã mở trang đăng nhập Google trong trình duyệt. ${want ? `Chọn kênh "${want.name}"` : 'Chọn tài khoản có kênh'} và bấm Cho phép.`)
-    await g.login(openLogin, { loginHint: hint })
-    const ch = await g.myChannel()
-    const bad = checkApiChannel(ch, want)
-    if (bad) return log('error', bad) // bo token vua nhan
-    store.setSecret(tokenName(ch.id), JSON.stringify(g.tokens))
-    const list = (store.settings.apiChannels || []).filter((c) => c.id !== ch.id).concat([{ id: ch.id, title: ch.title }])
-    store.save({ apiChannels: list, youtubeChannel: ch })
-    state.youtube.channel = ch
-    refreshSettings()
-    log('ok', `Đã kết nối API kênh "${ch.title}".`)
-  } catch (e) {
-    log('error', `Không đăng nhập được kênh: ${e.message}`)
-  } finally {
-    state.youtube.busy = false
+// ---- kenh dang video ------------------------------------------------------------------
+// Danh sach = cac kenh da tick o trang Tai khoan; nho kenh da chon (settings.uploadChannel).
+function syncUploadChannels() {
+  const list = (ctx.accounts ? ctx.accounts.channels() : []).map((c) => ({ key: c.key, name: c.name, handle: c.handle || '', ucId: c.ucId || '', avatar: c.avatar || '' }))
+  let key = state.upload.channelKey || store.settings.uploadChannel || ''
+  // khoa cu (UC, hoac "tai-khoan:Ten kenh" truoc khi biet UC) -> kenh tuong ung; khong con -> kenh dau tien
+  if (list.length && !list.some((c) => c.key === key)) key = (list.find((c) => (c.ucId && c.ucId === key) || key.endsWith(`:${c.name}`)) || list[0]).key
+  if (JSON.stringify(list) !== JSON.stringify(state.upload.channels) || key !== state.upload.channelKey) {
+    state.upload = { channelKey: key, channels: list }
     push()
   }
 }
-
-// Chon kenh dang video trong cac kenh da ket noi API
-function ytUse(ucId) {
-  const ch = (store.settings.apiChannels || []).find((c) => c.id === ucId)
-  if (!ch || !store.hasSecret(tokenName(ucId))) return
-  store.save({ youtubeChannel: ch })
-  state.youtube.channel = ch
+function setUploadChannel(key) {
+  state.upload.channelKey = String(key || '')
+  store.save({ uploadChannel: state.upload.channelKey })
   refreshSettings()
-  log('ok', `Kênh đăng video: "${ch.title}".`)
-}
-
-function ytLogout(ucId) {
-  const id = ucId || (state.youtube.channel && state.youtube.channel.id)
-  if (!id) return
-  store.setSecret(tokenName(id), '')
-  const list = (store.settings.apiChannels || []).filter((c) => c.id !== id)
-  const active = state.youtube.channel && state.youtube.channel.id !== id ? state.youtube.channel : list[0] || null
-  store.save({ apiChannels: list, youtubeChannel: active })
-  state.youtube.channel = active
-  refreshSettings()
-  log('info', 'Đã ngắt kết nối API của kênh.')
+  push()
 }
 
 function setJob(id, patch) {
@@ -342,37 +282,51 @@ function setJob(id, patch) {
   push()
 }
 
+// Dang cac video da chon len kenh dang video, lan luot, bang hop thoai tai len cua Studio trong cua so an
+// cua tai khoan (src/flows/upload.js). Dung giua chung khi dang tai len se de lai ban nhap trong Studio,
+// nen bam Dung luc dang tai len thi dung sau video do.
+let uploading = false
+let stopAfter = false
 async function runUploads(ids) {
-  if (!state.youtube.channel) return log('warn', 'Hãy đăng nhập kênh YouTube trước (Cài đặt → Đăng nhập kênh).')
+  syncUploadChannels()
+  const key = state.upload.channelKey
+  const ch = key && ctx.accounts && ctx.accounts.find(key)
+  if (!ch) return log('warn', 'Hãy chọn kênh đăng video (trang Đăng video). Kênh lấy từ trang Tài khoản: đăng nhập Google rồi tick kênh.')
+  if (!ctx.withChannel) return log('error', 'Chưa có tài khoản Google nào (trang Tài khoản).')
   const list = (ids && ids.length ? ids : [...raw.keys()]).filter((id) => raw.get(id) && raw.get(id).ok && (!state.jobs[id] || state.jobs[id].status !== 'done'))
   if (!list.length) return log('warn', 'Không có video nào sẵn sàng để đăng.')
-  let g
-  try { g = google() } catch (e) { return log('error', e.message) }
   busy = true
   stop = false
+  stopAfter = false
   state.status = 'run'
   for (const id of list) setJob(id, { status: 'queued', step: '', progress: 0, error: '', url: '', title: raw.get(id).meta.title })
-  log('info', `Bắt đầu đăng ${list.length} video.`)
+  log('info', `Bắt đầu đăng ${list.length} video lên kênh "${ch.name}".`)
   let ok = 0
   try {
     for (const id of list) {
-      if (stop) { setJob(id, { status: 'stopped' }); continue }
+      if (stop || stopAfter) { setJob(id, { status: 'stopped' }); continue }
       const item = raw.get(id)
-      setJob(id, { status: 'run', step: 'upload', progress: 0 })
+      const preset = store.presetFor({ info: item.info })
+      setJob(id, { status: 'run', step: 'open', progress: 0 })
+      uploading = true
       try {
-        const r = await uploadOne(g, item, {
-          root: store.settings.root, log, shouldStop: () => stop,
-          onStep: (step, progress) => setJob(id, progress === undefined ? { step } : { step, progress }),
-        })
-        addHistory({ folder: item.folder, movedTo: r.folder, id: r.id, url: r.url, title: item.meta.title, at: new Date().toISOString() })
+        const r = await ctx.withChannel(key, (page) => uploadOne(page, item, {
+          urls: URLS, uc: channelOf(page.url()) || ch.ucId, root: store.settings.root, preset, channelName: ch.name, log,
+          onStep: (step) => setJob(id, { step }),
+          onProgress: (progress) => setJob(id, { progress }),
+        }), { label: `dang-video-${item.name || id}` })
+        addHistory({ folder: item.folder, movedTo: r.folder, id: r.id, url: r.url, title: item.meta.title, channel: ch.ucId || key, at: new Date().toISOString() })
         setJob(id, { status: 'done', step: '', progress: 100, url: r.url, warnings: r.warnings })
-        if (ctx.afterUpload) ctx.afterUpload({ videoId: r.id, title: item.meta.title, publishAt: item.meta.publishAt, preset: store.presetFor({ info: item.info }), channelId: state.youtube.channel.id })
+        if (r.after && ctx.afterUpload) ctx.afterUpload({ videoId: r.id, title: item.meta.title, publishAt: r.schedule || item.meta.publishAt, tpl: r.after, presetId: preset.id || '', channelId: key })
         ok++
       } catch (e) {
-        setJob(id, { status: e.reason === 'stopped' ? 'stopped' : 'error', error: e.message })
-        log(e.reason === 'stopped' ? 'warn' : 'error', `${item.meta.title}: ${e.message}`)
-        // het han muc / mat dang nhap: cac video sau cung se loi, dung han
-        if (['quotaExceeded', 'uploadLimitExceeded', 'invalid_grant', 'youtubeSignupRequired', 'accessNotConfigured'].includes(e.reason)) stop = true
+        const stopped = stop && /dừng theo yêu cầu/.test(e.message)
+        setJob(id, { status: stopped ? 'stopped' : 'error', error: e.message })
+        log(stopped ? 'warn' : 'error', `${item.meta.title}: ${e.message}`)
+        // gioi han tai len hang ngay / mat dang nhap: cac video sau cung se loi, dung han
+        if (/giới hạn tải lên|upload limit|chưa đăng nhập|đăng nhập lại/i.test(e.message)) stopAfter = true
+      } finally {
+        uploading = false
       }
     }
   } finally {
@@ -392,7 +346,7 @@ async function describe(id) {
   try {
     const text = await gemini({
       key: store.getSecret('gemini'), model: store.settings.geminiModel, fetchFn: net.fetch, ep: endpoints(),
-      prompt: descriptionPrompt({ title: item.meta.title, name: item.name, notes: item.info.ghi_chu, channel: store.settings.channel, language: item.meta.language, current: item.info.mo_ta }),
+      prompt: descriptionPrompt({ title: item.meta.title, name: item.name, notes: item.info.ghi_chu, channel: store.settings.channel, language: (store.presetFor({ info: item.info }).optimize || {}).language || '', current: item.info.mo_ta }),
     })
     state.draft = { id, text: text.replace(/[<>]/g, ''), loading: false, error: '' }
   } catch (e) {
@@ -436,29 +390,18 @@ function setRoot(root) {
   runScan()
 }
 
-async function importOAuth(file) {
-  if (!file) {
-    const r = await dialog.showOpenDialog(win, { title: 'Chọn file JSON của OAuth client (Desktop app)', filters: [{ name: 'JSON', extensions: ['json'] }], properties: ['openFile'] })
-    if (r.canceled || !r.filePaths[0]) return
-    file = r.filePaths[0]
-  }
-  try {
-    const c = parseOAuthClient(fs.readFileSync(file, 'utf8'))
-    store.setSecret('oauthClient', JSON.stringify(c))
-    refreshSettings()
-    log('ok', `Đã nhập OAuth client của dự án ${c.project_id || '(không tên)'}.`)
-  } catch (e) {
-    log('error', `Không nhập được OAuth client: ${e.message}`)
-  }
-}
-
 const commands = {
   hello: () => {},
-  stop: () => { stop = true },
-  yt_login: (p) => !busy && !state.youtube.busy && ytLogin(p),
-  yt_logout: (ucId) => !busy && ytLogout(ucId),
-  yt_use: (ucId) => !busy && ytUse(ucId),
+  stop: () => {
+    if (uploading && !stopAfter) {
+      stopAfter = true
+      log('info', 'Sẽ dừng sau khi video đang tải lên xong (dừng giữa chừng sẽ để lại bản nháp trong Studio).')
+      return
+    }
+    stop = true
+  },
   upload: (ids) => !busy && runUploads(ids),
+  upload_channel: (key) => !busy && setUploadChannel(key),
   describe: (id) => describe(id),
   draft_close: () => { state.draft = null },
   save_description: (p) => !busy && saveDescription(p || {}),
@@ -483,8 +426,6 @@ const commands = {
     refreshSettings()
     if (clean.presets || clean.defaultPreset || clean.channel !== undefined) runScan(true)
   },
-  oauth_import: (file) => importOAuth(file),
-  oauth_clear: () => { store.setSecret('oauthClient', ''); refreshSettings(); log('info', 'Đã xóa OAuth client.') },
   gemini_set: (key) => {
     key = String(key || '').trim()
     if (!key) return
@@ -562,14 +503,14 @@ if (!app.requestSingleInstanceLock()) {
   app.on('window-all-closed', () => app.quit())
   app.whenReady().then(() => {
     store = new Store(app.getPath('userData'), safeStorage)
+    // ban cu dang qua YouTube Data API: bo OAuth client / token, kenh dang video cu thanh kenh mac dinh
+    if (dropApiData(store)) log('info', 'Đã bỏ dữ liệu YouTube Data API cũ (OAuth, token): video giờ đăng bằng hộp thoại tải lên của YouTube Studio.')
     refreshSettings()
-    migrateApiToken(store)
-    refreshSettings() // token 0.3 -> token cua kenh
-    const ch = store.settings.youtubeChannel
-    if (ch && store.hasSecret(tokenName(ch.id))) state.youtube.channel = ch
     desk = new CommentDesk(app.getPath('userData'))
     createWindow()
     for (const fn of started) fn()
+    syncUploadChannels()
+    setInterval(syncUploadChannels, 3000).unref()
     if (store.settings.root) runScan(true)
     setInterval(refreshStudio, 2000)
     if (!process.env.YA_NO_UPDATE_CHECK) updateCheck()

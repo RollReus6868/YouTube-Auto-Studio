@@ -1,9 +1,11 @@
-// Dang mot video tu dau den cuoi: tai len -> thumbnail -> playlist -> phu de -> chuyen
-// thu muc vao da-dang/. Loi o buoc phu (thumbnail, playlist, phu de) chi canh bao, khong
-// lam hong video da tai. Khong require('electron') de kiem thu bang node.
+// Dang mot video tu dau den cuoi bang hop thoai tai len cua YouTube Studio (src/flows/upload.js):
+// tai len + chi tiet + mau Studio cua preset + phu de + che do hien thi -> chuyen thu muc vao da-dang/.
+// Loi o buoc phu chi canh bao, khong lam hong video da tai. Khong require('electron') de kiem thu bang node.
 const fs = require('fs')
 const path = require('path')
 const { DIRS } = require('./scanner')
+const { uploadVideo } = require('./flows/upload')
+const { afterUploadTemplate } = require('./optimize-template')
 
 // Thu muc dich khong trung ten: "ten", "ten (2)", ...
 function freeName(dir, name) {
@@ -27,50 +29,49 @@ function moveDone(root, folder, lines) {
   return { moved: true, folder: target }
 }
 
-// item: { folder, video, meta (co thumbnail, subtitles: [{file, lang}]) }
-async function uploadOne(google, item, { root, log = () => {}, onStep = () => {}, shouldStop = () => false } = {}) {
+// Viec cho hop thoai tai len, tu ket qua buildVideoMeta (src/metadata.js) + mau Studio cua preset
+function jobOf(item, uc, template = null, channelName = '') {
   const m = item.meta
-  const warnings = []
-  onStep('upload', 0)
-  const res = await google.uploadVideo(item.video, m, { onProgress: (p) => onStep('upload', p), shouldStop })
-  const id = res.id
-  const url = `https://youtu.be/${id}`
+  return {
+    uc, file: item.video, title: m.title, description: m.description, tags: m.tags,
+    playlists: m.playlist ? [m.playlist] : [], madeForKids: !!m.madeForKids, thumbnail: m.thumbnail || null,
+    subtitles: m.subtitles || [], privacy: m.privacy, publishAt: m.publishAt || null,
+    notifySubscribers: m.notifySubscribers !== false, template, channelName,
+  }
+}
+
+const PRIVACY = { public: 'Công khai', unlisted: 'Không công khai', private: 'Riêng tư' }
+const FIELD_NAMES = {
+  playlists: 'danh sách phát', paidPromotion: 'quảng cáo trả tiền', ai: 'sử dụng AI', tags: 'thẻ', language: 'ngôn ngữ', recordingDate: 'ngày quay',
+  location: 'vị trí', license: 'giấy phép', embeddable: 'cho phép nhúng', notify: 'thông báo người đăng ký', remix: 'phối lại Shorts', category: 'danh mục',
+  comments: 'bình luận', endScreen: 'màn hình kết thúc',
+}
+
+// page: Page da o dung kenh (ctx.withChannel). item: { folder, video, meta (co thumbnail, subtitles: [{file, lang}]) }
+// preset: mau dang (mau Studio preset.optimize dat trong hop thoai; preset.optimizeAfterUpload: thich / binh luan / ghim sau).
+// Tra ve { id, url, warnings, folder, moved, schedule, missed, after } - after: mau toi uu chay sau khi dang (null = khong can)
+async function uploadOne(page, item, { urls, uc, root, preset = {}, channelName = '', log = () => {}, onStep = () => {}, onProgress = () => {}, upload = uploadVideo } = {}) {
+  const m = item.meta
+  const job = jobOf(item, uc, preset.optimize || null, channelName)
+  const r = await upload(page, job, { urls, log: (level, msg) => log(level, `${m.title}: ${msg}`), onStep, onProgress })
+  const { id, url } = r
+  const warnings = [...r.warnings]
+  const missed = r.missed || []
   log('ok', `Đã tải lên "${m.title}": ${url}`)
-  // Du an Google Cloud chua qua kiem duyet: YouTube khoa video o che do Rieng tu
-  if (m.privacy !== 'private' && res.status && res.status.privacyStatus === 'private') {
-    warnings.push('YouTube đã khóa video ở chế độ Riêng tư vì dự án Google Cloud chưa qua kiểm duyệt API (YouTube API Services Audit).')
-  }
-
-  if (m.thumbnail) {
-    onStep('thumbnail')
-    try { await google.setThumbnail(id, m.thumbnail) } catch (e) {
-      warnings.push(e.status === 403 ? 'Không đặt được thumbnail: kênh cần xác minh số điện thoại để dùng thumbnail tùy chỉnh.' : `Không đặt được thumbnail: ${e.message}`)
-    }
-  }
-  if (m.playlist) {
-    onStep('playlist')
-    try {
-      const pl = await google.ensurePlaylist(m.playlist, m.publishAt ? 'public' : m.privacy)
-      await google.addToPlaylist(pl, id)
-    } catch (e) { warnings.push(`Không thêm vào playlist "${m.playlist}": ${e.message}`) }
-  }
-  for (const s of m.subtitles || []) {
-    onStep('subtitles')
-    try { await google.addCaption(id, s.file, s.lang || m.language || 'vi') } catch (e) { warnings.push(`Không thêm phụ đề ${path.basename(s.file)}: ${e.message}`) }
-  }
-  for (const w of warnings) log('warn', `${m.title}: ${w}`)
-
+  const after = afterUploadTemplate(preset.optimize, missed.filter((k) => k !== 'notify'), { after: !!preset.optimizeAfterUpload, playlists: job.playlists, tags: job.tags })
+  const left = missed.filter((k) => k !== 'notify')
+  if (left.length) warnings.push(`Chưa đặt được trong hộp thoại tải lên: ${left.map((k) => FIELD_NAMES[k] || k).join(', ')} (tool sẽ đặt lại trong Studio sau khi đăng).`)
   const lines = [
     `Video: ${url}`,
     `Studio: https://studio.youtube.com/video/${id}/edit`,
     `Tiêu đề: ${m.title}`,
     `Đăng lúc: ${new Date().toLocaleString('vi-VN')}`,
-    m.publishAt ? `Lên lịch công khai: ${new Date(m.publishAt).toLocaleString('vi-VN')}` : `Chế độ: ${m.privacy}`,
+    r.schedule ? `Lên lịch công khai: ${new Date(r.schedule).toLocaleString('vi-VN')}` : `Chế độ: ${PRIVACY[m.privacy] || m.privacy}`,
     ...warnings.map((w) => `Lưu ý: ${w}`),
   ]
   const mv = root ? moveDone(root, item.folder, lines) : { moved: false, folder: item.folder }
   if (root && !mv.moved) log('warn', `Không chuyển được thư mục vào ${DIRS.done}/ (${mv.error}). Hãy tự chuyển để lần sau không đăng lại.`)
-  return { id, url, warnings, folder: mv.folder, moved: mv.moved }
+  return { id, url, warnings, folder: mv.folder, moved: mv.moved, schedule: r.schedule || null, missed, after }
 }
 
-module.exports = { uploadOne, moveDone, freeName }
+module.exports = { uploadOne, jobOf, moveDone, freeName }

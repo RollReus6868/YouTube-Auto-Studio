@@ -74,7 +74,7 @@ jobs:
       - name: Kiem thu tu cap nhat
         run: node tests/ci-run.js node tests/updater-test.js
 
-      - name: Kiem thu phan xu ly (quet thu muc, mau, lich, Google API gia lap)
+      - name: Kiem thu phan xu ly (quet thu muc, mau, lich, Gemini gia lap)
         run: |
           node tests/ci-run.js node tests/unit-test.js
           node tests/ci-run.js node tests/accounts-test.js
@@ -104,7 +104,7 @@ jobs:
           cache: npm
       - name: Cai thu vien
         run: npm ci --no-audit --no-fund
-      - name: Tai khoan, toi uu video, dang bai, trang chu kenh, tra loi binh luan (tests/flows)
+      - name: Tai khoan, dang video, toi uu video, dang bai, trang chu kenh, tra loi binh luan (tests/flows)
         run: xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/flows/run.js
 
   # ------------------------------------------------------------------ 2. Windows

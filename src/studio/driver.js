@@ -197,11 +197,26 @@ class Page {
   }
 
   // Go chu vao o (input / textarea / contenteditable). clear: xoa noi dung cu truoc.
-  async type(t, text, { clear = true, ...opts } = {}) {
+  // end: (khi clear = false) dua con tro ve cuoi o truoc khi go (vd viet tiep sau mo ta co san)
+  async type(t, text, { clear = true, end = false, ...opts } = {}) {
     t = target(t)
     await this.waitFor(t, opts)
     await this.click(t, { after: 150 })
     await this.eval((x) => window.__ya.focus(x), t)
+    if (!clear && end) {
+      await this.eval((x) => {
+        let el = document.activeElement
+        while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement
+        if (!el) return
+        if ('value' in el && el.setSelectionRange) { el.setSelectionRange(el.value.length, el.value.length); return }
+        const r = document.createRange()
+        r.selectNodeContents(el)
+        r.collapse(false)
+        const s = window.getSelection()
+        s.removeAllRanges()
+        s.addRange(r)
+      }, t)
+    }
     // Khong dung phim Backspace: sendInputEvent chay bat dong bo, co luc toi SAU insertText
     // va xoa mat ky tu cuoi. insertText thay the vung dang chon; o trong thi xoa bang execCommand.
     if (clear) {
@@ -216,7 +231,8 @@ class Page {
       while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement
       if (!el) return true
       const v = 'value' in el ? el.value : el.textContent
-      return c ? v.replace(/\s+$/, '') === w : v.includes(w)
+      // go them (c = false): bo qua khoang trang / xuong dong (o soan thao tach dong thanh <div>, textContent mat \n)
+      return c ? v.replace(/\s+$/, '') === w : v.replace(/\s+/g, '').includes(w.replace(/\s+/g, ''))
     }, [want, clear], { timeout: 3000, what: `ô nhập nhận đủ chữ "${want.slice(0, 40)}"` }).catch(() => {})
     await sleep(150)
   }

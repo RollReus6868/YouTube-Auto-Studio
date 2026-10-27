@@ -199,25 +199,4 @@ class Accounts {
   }
 }
 
-// ---- token YouTube API theo tung kenh (R4) ---------------------------------------------
-// Moi kenh mot token OAuth, luu trong khoa bi mat 'ytToken:<UC>'. settings.apiChannels =
-// cac kenh da ket noi API; settings.youtubeChannel = kenh dung de dang video.
-const tokenName = (ucId) => `ytToken:${ucId}`
-
-// Ban 0.3: mot token 'youtubeToken' + settings.youtubeChannel -> token cua kenh do
-function migrateApiToken(store) {
-  const ch = store.settings.youtubeChannel
-  if (!Array.isArray(store.settings.apiChannels)) store.save({ apiChannels: ch && store.hasSecret('youtubeToken') ? [{ id: ch.id, title: ch.title }] : [] })
-  if (!store.hasSecret('youtubeToken')) return false
-  if (ch && ch.id && !store.hasSecret(tokenName(ch.id))) store.setSecret(tokenName(ch.id), store.getSecret('youtubeToken'))
-  store.setSecret('youtubeToken', '')
-  return true
-}
-
-// Sau khi dang nhap API: kenh Google tra ve co dung kenh nguoi dung da chon khong
-function checkApiChannel(got, want) {
-  if (!want || !want.ucId || got.id === want.ucId) return null
-  return `Bạn đã chọn kênh "${got.title}" trên trang Google, không phải kênh "${want.name}" (${want.ucId}). Hãy bấm "Đăng nhập kênh" lại và chọn đúng kênh "${want.name}".`
-}
-
-module.exports = { Accounts, slugId, isUc, channelKey, sameChannel, cleanAvatar, LEGACY_PARTITION, KEY, tokenName, migrateApiToken, checkApiChannel }
+module.exports = { Accounts, slugId, isUc, channelKey, sameChannel, cleanAvatar, LEGACY_PARTITION, KEY }

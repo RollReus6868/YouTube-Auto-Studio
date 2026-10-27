@@ -61,7 +61,7 @@ function ListInput({ value, onChange, placeholder, label }: { value: string[]; o
     onBlur={() => onChange([...new Set(text.split(/[,\n]/).map((t) => t.trim()).filter(Boolean))])} />
 }
 
-// hide: an cac muc da dat o noi khac (vd trang Mau mac dinh dat qua API). wide: 2 cot tu man hinh xl.
+// hide: an cac muc da dat o noi khac (vd mo ta o trang Mau mac dinh). wide: 2 cot tu man hinh xl.
 export function OptimizeTemplateEditor({ value: t, onChange, channelName = 'Dark Bible Study', sample = 'The Tower of Babel: Humanity’s First Rebellion Against God', compact, wide, hide = [] }: {
   value: OptimizeTemplate; onChange: (t: OptimizeTemplate) => void; channelName?: string; sample?: string; compact?: boolean; wide?: boolean; hide?: (keyof OptimizeTemplate)[]
 }) {
@@ -159,27 +159,24 @@ export function OptimizeTemplateEditor({ value: t, onChange, channelName = 'Dark
 }
 
 // Cac muc trong Studio cua preset (trang Mau mac dinh): preset.optimize, luu cung nut "Lưu mẫu".
-// An cac muc preset da dat qua API luc dang (src/optimize-template.js API_FIELDS: luc chay giu nguyen).
-export const PRESET_API_FIELDS: (keyof OptimizeTemplate)[] = ['category', 'language', 'license', 'embeddable', 'ai', 'description']
+// Tool dat cac muc nay ngay trong hop thoai tai len cua Studio (src/flows/upload.js); mo ta lay o phan Chi tiet o tren.
+// Cong tac: sau khi dang -> thich / binh luan / ghim (va dat lai muc nao hop thoai chua dat duoc).
+export const PRESET_HIDDEN_FIELDS: (keyof OptimizeTemplate)[] = ['description']
 export function PresetOptimizeCard({ value, onChange, enabled, onToggle, channelName, className }: {
   value: OptimizeTemplate; onChange: (t: OptimizeTemplate) => void; enabled: boolean; onToggle: (v: boolean) => void; channelName?: string; className?: string
 }) {
   return (
-    <Card className={className} title="Các mục trong YouTube Studio" hint="API không đặt được, tool tự làm trong Studio sau khi đăng">
+    <Card className={className} title="Mẫu Studio" hint="đặt ngay trong hộp thoại tải lên của YouTube Studio">
       <div className="space-y-3">
-        <ToggleRow title="Sau khi đăng: tối ưu bằng mẫu" hint="Khi video đã công khai được 15 phút, tool tự mở Studio để đặt các mục dưới đây, rồi thích + bình luận + ghim." checked={enabled} onChange={onToggle} />
-        <div className={cn('flex items-start gap-2 rounded-lg p-2.5 text-[11px] leading-relaxed', enabled ? 'bg-primary/5 text-muted-foreground' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400')}>
-          <Info className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', enabled ? 'text-primary' : '')} />
+        <div className="flex items-start gap-2 rounded-lg bg-primary/5 p-2.5 text-[11px] leading-relaxed text-muted-foreground">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
           <p>
-            {enabled
-              ? <>Cần đăng nhập kênh ở trang <b>Tài khoản</b>. </>
-              : <><b>Đang tắt:</b> các mục dưới đây vẫn được lưu cùng mẫu nhưng chỉ chạy khi bật công tắc ở trên. </>}
-            Danh mục, ngôn ngữ, giấy phép, cho phép nhúng, nội dung AI và mô tả đã đặt qua API ở phần trên nên không lặp lại ở đây (Studio giữ nguyên).
+            Tool chọn danh sách phát, các mục trong <b>Hiện thêm</b> và màn hình kết thúc theo mẫu này ngay khi tải video lên. Mục nào chưa đặt được
+            thì tool báo trong kết quả và đặt lại trong Studio sau khi đăng. Mô tả lấy ở phần <b>Chi tiết</b> ở trên, nối sau mô tả mặc định của kênh.
           </p>
         </div>
-        <div className={cn('transition-opacity', !enabled && 'opacity-60')}>
-          <OptimizeTemplateEditor value={value} onChange={onChange} channelName={channelName || undefined} hide={PRESET_API_FIELDS} wide />
-        </div>
+        <ToggleRow title="Sau khi đăng: thích, bình luận, ghim" hint="Khi video đã công khai được 15 phút, tool mở trang xem video để thích + bình luận + ghim theo phần “Sau khi lưu” bên dưới." checked={enabled} onChange={onToggle} />
+        <OptimizeTemplateEditor value={value} onChange={onChange} channelName={channelName || undefined} hide={PRESET_HIDDEN_FIELDS} wide />
       </div>
     </Card>
   )

@@ -1,7 +1,7 @@
 import {
   AlertTriangle, ArrowUpCircle, BookOpen, CalendarClock, Copy, Download, Eraser, ExternalLink, FileVideo, FolderOpen, FolderPlus, Globe, Home,
-  ImageIcon, KeyRound, LayoutTemplate, Palette, Plus, RefreshCw, Save, ScrollText, Settings, Sparkles,
-  SquarePlay, Square, Subtitles, Trash2, Upload, LogIn, LogOut,
+  ImageIcon, LayoutTemplate, Palette, Plus, RefreshCw, Save, ScrollText, Settings, Sparkles,
+  Square, Subtitles, Trash2, Upload,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { call, demoState, emptyState, isDemo, newPreset, type Job, type Preset, type Settings as SettingsT, type State, type VideoItem } from './api'
@@ -16,7 +16,6 @@ import { StudioPicker, type AccountsState } from './pages/AccountsPage'
 import { PresetOptimizeCard, defaultOptimizeTemplate } from './pages/OptimizeTemplateEditor'
 
 const PRIVACY: Record<Preset['privacy'], string> = { public: 'Công khai', unlisted: 'Không công khai', private: 'Riêng tư' }
-const LANGS: [string, string][] = [['vi', 'Tiếng Việt'], ['en', 'Tiếng Anh'], ['ja', 'Tiếng Nhật'], ['ko', 'Tiếng Hàn'], ['zh', 'Tiếng Trung'], ['th', 'Tiếng Thái'], ['fr', 'Tiếng Pháp'], ['es', 'Tiếng Tây Ban Nha']]
 const MODELS: [string, string][] = [['gemini-2.5-flash', 'Gemini 2.5 Flash (nhanh, rẻ)'], ['gemini-2.5-pro', 'Gemini 2.5 Pro (kỹ hơn)'], ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash-Lite (rẻ nhất)']]
 const VARS = ['{ten_video}', '{tieu_de}', '{so_tap}', '{ngay}', '{ten_kenh}', '{hashtag}', '{playlist}']
 
@@ -89,7 +88,12 @@ function FolderBar({ state, send }: Backend) {
 }
 
 /* ================= Dang video ================= */
-const STEPS: Record<string, string> = { upload: 'Đang tải lên', thumbnail: 'Đang đặt thumbnail', playlist: 'Đang thêm vào playlist', subtitles: 'Đang thêm phụ đề' }
+// cac buoc cua src/flows/upload.js (hop thoai tai len cua Studio)
+const STEPS: Record<string, string> = {
+  open: 'Đang mở hộp thoại tải lên', file: 'Đang chọn file video', details: 'Đang điền chi tiết', thumbnail: 'Đang đặt hình thu nhỏ',
+  playlist: 'Đang chọn danh sách phát', more: 'Đang đặt các mục nâng cao', subtitles: 'Đang thêm phụ đề', endscreen: 'Đang thêm màn hình kết thúc',
+  visibility: 'Đang chọn chế độ hiển thị', schedule: 'Đang lên lịch', wait: 'Đang chờ tải lên xong', publish: 'Đang lưu',
+}
 
 function JobLine({ job, send }: { job: Job; send: Backend['send'] }) {
   if (job.status === 'queued') return <Pill tone="muted">Đang chờ đăng</Pill>
@@ -97,7 +101,7 @@ function JobLine({ job, send }: { job: Job; send: Backend['send'] }) {
     return (
       <div className="space-y-1">
         <GradientProgress value={job.progress} />
-        <p className="text-[11px] text-muted-foreground">{STEPS[job.step] || 'Đang xử lý'}{job.step === 'upload' ? ` · ${job.progress}%` : '…'}</p>
+        <p className="text-[11px] text-muted-foreground">{STEPS[job.step] || 'Đang xử lý'}… · đã tải lên {job.progress}%</p>
       </div>
     )
   }
@@ -114,7 +118,7 @@ function JobLine({ job, send }: { job: Job; send: Backend['send'] }) {
 }
 
 function VideoCard({ v, job, open, onToggle, busy, connected, send }: {
-  v: VideoItem; job?: Job; open: boolean; onToggle: () => void; busy: boolean; connected: boolean; send: Backend['send']
+  v: VideoItem; job?: Job; open: boolean; onToggle: () => void; busy: boolean; connected: boolean; send: Backend['send'] // connected: da chon kenh dang video
 }) {
   const bad = v.errors.length > 0
   const active = job && (job.status === 'run' || job.status === 'queued')
@@ -201,7 +205,8 @@ function DraftDialog({ state, send }: Backend) {
 function VideosPage({ state, send, go }: Backend & { go: (p: string) => void }) {
   const [open, setOpen] = useState<string | null>(null)
   const ready = state.scan.videos.filter((v) => !v.errors.length && state.jobs[v.id]?.status !== 'done')
-  const connected = !!state.youtube.channel
+  const up = state.upload
+  const connected = up.channels.some((c) => c.key === up.channelKey)
   const busy = state.status !== 'idle'
   const finished = Object.entries(state.jobs).filter(([id, j]) => j.status === 'done' && !state.scan.videos.some((v) => v.id === id))
   return (
@@ -209,11 +214,19 @@ function VideosPage({ state, send, go }: Backend & { go: (p: string) => void }) 
       <PageHeader
         icon={Upload}
         title="Đăng video"
-        description="Mỗi thư mục con trong videos/ là một video. Tool điền sẵn tiêu đề, mô tả, thẻ và lịch theo mẫu mặc định."
+        description="Mỗi thư mục con trong videos/ là một video. Tool đăng bằng hộp thoại tải lên của YouTube Studio, điền tiêu đề, mô tả, thẻ và lịch theo mẫu mặc định."
         actions={<>
           <UpdateBadge state={state} go={() => go('update')} />
-          {connected ? <Pill tone="success" className="max-w-[220px]">{state.youtube.channel!.title}</Pill>
-            : <button onClick={() => go('settings')} className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted/70">Chưa đăng nhập kênh</button>}
+          {up.channels.length ? (
+            <div className="w-72 max-w-full shrink-0">
+              <Select
+                label="Kênh đăng video"
+                value={up.channelKey}
+                onChange={(v) => send('upload_channel', v)}
+                options={up.channels.map((c) => [c.key, c.handle ? `${c.name} (${c.handle})` : c.name])}
+              />
+            </div>
+          ) : <button onClick={() => go('accounts')} className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted/70">Chưa có kênh: đăng nhập Google ở trang Tài khoản</button>}
         </>}
       />
       <div className="shrink-0 space-y-3 px-4 pb-3">
@@ -254,7 +267,7 @@ function VideosPage({ state, send, go }: Backend & { go: (p: string) => void }) 
         {busy ? (
           <Button variant="danger" size="sm" onClick={() => send('stop')}><Square /> Dừng sau video đang tải</Button>
         ) : (
-          <Button variant="gradient" size="sm" disabled={!connected || !ready.length} title={connected ? '' : 'Đăng nhập kênh YouTube trong Cài đặt trước'} onClick={() => send('upload')}>
+          <Button variant="gradient" size="sm" disabled={!connected || !ready.length} title={connected ? '' : 'Chọn kênh đăng video (đăng nhập Google và tick kênh ở trang Tài khoản)'} onClick={() => send('upload')}>
             <Upload /> {ready.length ? `Đăng ${ready.length} video` : 'Đăng video'}
           </Button>
         )}
@@ -365,11 +378,9 @@ function PresetsPage({ state, send }: Backend) {
                 <Field label="Thẻ (cách nhau bằng dấu phẩy)" hint={<span className={cn(tagLen > 500 && 'text-red-500')}>{tagLen}/500 ký tự</span>}>
                   <TagInput value={tagText} onChange={(tags) => set({ tags })} />
                 </Field>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <Field label="Danh mục"><Select label="Danh mục" value={p.categoryId} onChange={(v) => set({ categoryId: v })} options={state.categories} /></Field>
-                  <Field label="Ngôn ngữ video"><Select label="Ngôn ngữ video" value={p.language} onChange={(v) => set({ language: v })} options={LANGS} /></Field>
-                  <Field label="Playlist (tên)"><TextInput value={p.playlist} onChange={(e) => set({ playlist: e.target.value })} placeholder="Không thêm" /></Field>
-                </div>
+                <Field label="Danh sách phát (tên)" hint="Tool tick danh sách phát này trong hộp thoại tải lên, chưa có thì tạo mới.">
+                  <TextInput value={p.playlist} onChange={(e) => set({ playlist: e.target.value })} placeholder="Không thêm" />
+                </Field>
               </div>
             </Card>
             <Card title="Đối tượng người xem">
@@ -382,9 +393,6 @@ function PresetsPage({ state, send }: Backend) {
                   { value: 'no', label: 'Không, nội dung không dành cho trẻ em' },
                 ]}
               />
-            </Card>
-            <Card title="Nội dung thay đổi">
-              <ToggleRow title="Có nội dung do AI tạo hoặc chỉnh sửa trông như thật" hint="Mục “Nội dung bị thay đổi” trong Studio. Bật nếu video có người, sự việc hoặc địa điểm thật được tạo/sửa bằng AI." checked={p.syntheticMedia} onChange={(v) => set({ syntheticMedia: v })} />
             </Card>
           </div>
           <div className="space-y-3">
@@ -424,18 +432,11 @@ function PresetsPage({ state, send }: Backend) {
                     )}
                   </div>
                 )}
-                {p.schedule.mode !== 'now' && <p className="text-[11px] text-muted-foreground">Video lên lịch được tải lên ở chế độ Riêng tư, đến giờ YouTube tự chuyển sang Công khai.</p>}
+                {p.schedule.mode !== 'now' && <p className="text-[11px] text-muted-foreground">Tool chọn “Lên lịch” trong hộp thoại tải lên (ngày + giờ), đến giờ YouTube tự chuyển sang Công khai.</p>}
               </div>
             </Card>
             <Card title="Tùy chọn khác">
-              <div className="space-y-3">
-                <Field label="Giấy phép">
-                  <Select label="Giấy phép" value={p.license} onChange={(v) => set({ license: v as Preset['license'] })} options={[['youtube', 'Giấy phép chuẩn của YouTube'], ['creativeCommon', 'Creative Commons - Ghi công']]} />
-                </Field>
-                <ToggleRow title="Cho phép nhúng" checked={p.embeddable} onChange={(v) => set({ embeddable: v })} />
-                <ToggleRow title="Thông báo cho người đăng ký" hint="Gửi thông báo khi video được đăng." checked={p.notifySubscribers} onChange={(v) => set({ notifySubscribers: v })} />
-                <ToggleRow title="Hiện số lượt thích" checked={p.publicStatsViewable} onChange={(v) => set({ publicStatsViewable: v })} />
-              </div>
+              <ToggleRow title="Thông báo cho người đăng ký" hint="Mục “Xuất bản lên nguồn cấp dữ liệu Kênh đăng ký và thông báo cho người đăng ký” trong Hiện thêm." checked={p.notifySubscribers} onChange={(v) => set({ notifySubscribers: v })} />
             </Card>
             <Card title="Xem trước" hint="với video mẫu “Bí ẩn rừng sâu”, tập 1">
               <div className="space-y-2">
@@ -533,37 +534,6 @@ const pickDraft = (s: SettingsT | null): Draft => ({
   replyMode: s?.replyMode ?? 'review', replyPerHour: s?.replyPerHour ?? 20, skipWords: s?.skipWords ?? '',
 })
 
-// Token API theo tung kenh: chon kenh (biet ma UC o trang Tai khoan) -> dang nhap tren trinh duyet ->
-// tool chi nhan khi Google tra ve dung kenh do. Kenh dang video = kenh dung cho Dang video / Binh luan.
-function ApiChannels({ state, send }: Pick<Backend, 'state' | 'send'>) {
-  const [want, setWant] = useState('')
-  const accs = (state.f.accounts as AccountsState | undefined)?.list ?? []
-  const opts: [string, string][] = [['', 'Kênh bất kỳ (chọn trên Google)'], ...accs.flatMap((a) => a.channels.filter((c) => c.ucId).map((c) => [c.ucId, `${c.name} · ${a.label}`] as [string, string]))]
-  const connected = state.settings?.apiChannels ?? []
-  const active = state.youtube.channel
-  return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        {active ? <Pill tone="success" className="max-w-full">Kênh {active.title}</Pill> : <Pill tone="muted">Chưa đăng nhập kênh</Pill>}
-        {active && <span className="text-[11px] text-muted-foreground">kênh đăng video</span>}
-      </div>
-      {connected.filter((c) => c.id !== active?.id).map((c) => (
-        <div key={c.id} className="flex items-center gap-2 text-xs">
-          <span className="min-w-0 flex-1 truncate font-semibold">{c.title}</span>
-          <Button variant="outline" className="h-7 px-2 text-xs" disabled={state.status !== 'idle'} onClick={() => send('yt_use', c.id)}>Dùng để đăng video</Button>
-          <Button variant="subtle" className="h-7 px-2 text-xs" disabled={state.status !== 'idle'} onClick={() => send('yt_logout', c.id)}><LogOut /> Ngắt</Button>
-        </div>
-      ))}
-      <div className="flex flex-wrap items-center gap-2">
-        <Select label="Kênh cần kết nối API" className="h-8 min-w-0 flex-1 basis-48 text-xs" value={want} onChange={setWant} options={opts} />
-        <Button variant="default" className="h-8 px-3" disabled={!state.secrets.oauth || state.youtube.busy} onClick={() => send('yt_login', want ? { ucId: want } : undefined)}><LogIn /> {state.youtube.busy ? 'Đang chờ bạn đăng nhập…' : 'Đăng nhập kênh'}</Button>
-        {active && <Button variant="subtle" className="h-8 px-3" disabled={state.status !== 'idle'} onClick={() => send('yt_logout', active.id)}><LogOut /> Ngắt kết nối</Button>}
-      </div>
-      <p className="text-[11px] text-muted-foreground">Mỗi kênh một lần đăng nhập. Chọn kênh ở trên (danh sách lấy từ trang Tài khoản), trên trang Google chọn đúng kênh đó. Tool từ chối nếu bạn chọn nhầm kênh.</p>
-    </div>
-  )
-}
-
 function SettingsPage({ state, send }: Backend) {
   // so sanh theo noi dung: backend gui state moi lien tuc, khong duoc xoa chu dang go
   const savedKey = JSON.stringify(pickDraft(state.settings))
@@ -576,7 +546,7 @@ function SettingsPage({ state, send }: Backend) {
   const models = MODELS.some(([v]) => v === d.geminiModel) ? MODELS : [[d.geminiModel, d.geminiModel] as [string, string], ...MODELS]
   return (
     <>
-      <PageHeader icon={Settings} title="Cài đặt" description="Thư mục làm việc, kết nối YouTube và Gemini, cách trả lời bình luận." actions={dirty ? <Pill tone="warning">Chưa lưu</Pill> : undefined} />
+      <PageHeader icon={Settings} title="Cài đặt" description="Thư mục làm việc, Gemini API, cách trả lời bình luận. Kênh YouTube đăng nhập ở trang Tài khoản." actions={dirty ? <Pill tone="warning">Chưa lưu</Pill> : undefined} />
       <PageBody>
         <div className="grid gap-3 xl:grid-cols-2">
           <div className="space-y-3">
@@ -590,24 +560,6 @@ function SettingsPage({ state, send }: Backend) {
                 <Field label="Tên kênh" hint="Dùng cho biến {ten_kenh} trong mẫu mô tả.">
                   <TextInput value={d.channel} onChange={(e) => set({ channel: e.target.value })} placeholder="Kênh của tôi" />
                 </Field>
-              </div>
-            </Card>
-            <Card title="Kết nối YouTube API" hint={<SquarePlay className="inline h-3.5 w-3.5" />}>
-              <div className="space-y-3">
-                <p className="text-xs text-muted-foreground">
-                  Tạo OAuth client loại <b className="text-foreground">Desktop app</b> trong Google Cloud (bật YouTube Data API v3), tải file JSON rồi nhập vào đây.
-                  File chỉ lưu trên máy bạn.
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  {state.secrets.oauth ? <Pill tone="success" className="max-w-full">Dự án {state.secrets.oauth.project_id || '(không tên)'} · {state.secrets.oauth.client_id}</Pill> : <Pill tone="muted">Chưa nhập OAuth client</Pill>}
-                  <span className="flex-1" />
-                  <Button variant="outline" className="h-8 px-3" onClick={() => send('oauth_import')}><KeyRound /> {state.secrets.oauth ? 'Nhập lại' : 'Nhập file JSON'}</Button>
-                  {state.secrets.oauth && <Button variant="subtle" className="h-8 px-3" onClick={() => send('oauth_clear')}><Trash2 /> Xóa</Button>}
-                </div>
-                <Button variant="subtle" className="h-8 px-3 text-xs" onClick={() => send('open_url', 'https://console.cloud.google.com/apis/credentials')}><ExternalLink /> Mở Google Cloud Console</Button>
-                <hr className="gradient-divider" />
-                <ApiChannels state={state} send={send} />
-                <p className="text-[11px] text-muted-foreground">Đăng nhập mở trong trình duyệt mặc định. Google có thể cảnh báo “ứng dụng chưa được xác minh”: bấm Nâng cao → Đi tới (không an toàn) vì đây là app của chính bạn.</p>
               </div>
             </Card>
             <Card title="Gemini API" hint={<Sparkles className="inline h-3.5 w-3.5" />}>
@@ -746,7 +698,7 @@ export default function App() {
             { id: 'presets', label: 'Mẫu mặc định', icon: LayoutTemplate },
           ], false)}
           bottomItems={withFeatures([
-            { id: 'guide', label: 'Hướng dẫn API', icon: BookOpen },
+            { id: 'guide', label: 'Hướng dẫn', icon: BookOpen },
             { id: 'logs', label: 'Nhật ký', icon: ScrollText, dot: errors },
             { id: 'update', label: 'Cập nhật', icon: ArrowUpCircle, dot: backend.state.update.status === 'available' },
             { id: 'settings', label: 'Cài đặt', icon: Settings },

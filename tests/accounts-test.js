@@ -133,24 +133,6 @@ test('tai khoan chi co mot kenh: tu tick', () => {
   assert.equal(m.channels().length, 1)
 })
 
-test('token API ban 0.3 -> token cua kenh; kiem dung kenh sau khi dang nhap', () => {
-  const s = new Store(tmp(), fakeCrypt)
-  s.save({ youtubeChannel: { id: 'UCmock000000000000000000', title: 'Kênh A' } })
-  s.setSecret('youtubeToken', '{"refresh_token":"r"}')
-  assert(A.migrateApiToken(s))
-  assert(!s.hasSecret('youtubeToken'))
-  assert.equal(s.getSecret(A.tokenName('UCmock000000000000000000')), '{"refresh_token":"r"}')
-  assert.deepEqual(s.settings.apiChannels, [{ id: 'UCmock000000000000000000', title: 'Kênh A' }])
-  assert(!A.migrateApiToken(s))
-  const fresh = new Store(tmp(), fakeCrypt)
-  A.migrateApiToken(fresh)
-  assert.deepEqual(fresh.settings.apiChannels, [])
-
-  assert.equal(A.checkApiChannel({ id: 'UCa', title: 'A' }, null), null)
-  assert.equal(A.checkApiChannel({ id: 'UCa', title: 'A' }, { ucId: 'UCa', name: 'A' }), null)
-  assert.match(A.checkApiChannel({ id: 'UCb', title: 'Kênh B' }, { ucId: 'UCa', name: 'Kênh A' }), /chọn kênh "Kênh B".*không phải kênh "Kênh A"/)
-})
-
 ;(async () => {
   let failed = 0
   for (const [name, fn] of tests) {

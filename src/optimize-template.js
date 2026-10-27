@@ -111,13 +111,60 @@ function setTemplate(templates, key, t) {
   return out
 }
 
-// Cac muc mau tai len (preset) da dat qua API luc dang: chay toi uu sau khi dang thi giu nguyen
-// trong Studio de khong ghi de gia tri cua API.
-const API_FIELDS = ['category', 'language', 'license', 'embeddable', 'ai', 'description']
-function withoutApiFields(t) {
-  const out = normalizeTemplate(t)
-  for (const k of API_FIELDS) out[k] = k === 'language' || k === 'description' ? '' : 'keep'
-  return out
+// Mau "giu nguyen het" (khong dung toi muc nao, khong thich / binh luan / ghim)
+function keepAll() {
+  const out = {}
+  for (const k of Object.keys(ONE_OF)) out[k] = 'keep'
+  return normalizeTemplate({ ...out, playlists: [], playlistAuto: 0, extraTags: [], location: '', category: 'keep', language: '', like: false, description: '', comment: '', pin: false })
+}
+
+// Mau toi uu chay SAU khi dang (src/features/optimize.js). Hop thoai tai len cua Studio da dat cac muc cua mau
+// (src/flows/upload.js) nen chi con: cac muc chua dat duoc trong hop thoai (missed) va - khi preset bat
+// "sau khi dang: tu toi uu" (after) - thich / binh luan / ghim o trang xem video.
+// extra: { playlists, tags } cua video (preset / info.txt) de dat lai cung muc danh sach phat / the.
+// Khong con gi de lam -> null.
+function afterUploadTemplate(template, missed = [], { after = false, playlists = [], tags = [] } = {}) {
+  const src = normalizeTemplate(template)
+  const out = keepAll()
+  for (const k of missed) {
+    if (k === 'playlists') { out.playlists = [...new Set([...list(playlists), ...src.playlists])]; out.playlistAuto = src.playlistAuto }
+    else if (k === 'tags') { out.tagsMode = src.tagsMode; out.extraTags = [...new Set([...list(tags).map((x) => x.replace(/,/g, ' ')), ...src.extraTags])] }
+    else if (['paidPromotion', 'ai', 'recordingDate', 'license', 'embeddable', 'remix', 'comments', 'endScreen', 'category', 'location', 'language'].includes(k)) out[k] = src[k]
+  }
+  if (after) { out.like = src.like; out.comment = src.comment; out.pin = src.pin }
+  const res = normalizeTemplate(out)
+  return touchedFields(res).length ? res : null
+}
+
+// Video trong hang cho tu toi uu: nguoi dung co the sua preset sau khi dang -> cac muc mau `tpl` dang dat
+// (va thich / binh luan / ghim) lay gia tri moi nhat cua preset; danh sach phat / the giu theo video.
+function refreshPending(tpl, presetTemplate) {
+  const t = normalizeTemplate(tpl)
+  if (!presetTemplate) return t
+  const p = normalizeTemplate(presetTemplate)
+  for (const k of ['paidPromotion', 'ai', 'remix', 'endScreen', 'recordingDate', 'license', 'embeddable', 'comments', 'category']) if (t[k] !== 'keep') t[k] = p[k]
+  for (const k of ['location', 'language', 'description']) if (t[k]) t[k] = p[k]
+  if (t.like || t.comment || t.pin) { t.like = p.like; t.comment = p.comment; t.pin = p.pin }
+  return normalizeTemplate(t)
+}
+
+// Preset cu (ban dang qua YouTube Data API) co cac muc nay; hop thoai tai len khong co cho rieng nen chuyen sang
+// mau Studio cua preset (preset.optimize) - chi khi khac mac dinh cu va mau dang de "giu nguyen" - roi bo khoi preset.
+//   categoryId (mac dinh cu '22' = Moi nguoi va blog, cung la mac dinh cua Studio), language (ma 'vi'/'en'... ;
+//   'vi' la mac dinh cu, 'en' trung ngon ngu mac dinh "Tieng Anh (Hoa Ky)" cua kenh -> khong dat lai), license,
+//   embeddable, syntheticMedia (true -> AI = Co). publicStatsViewable khong con (Studio khong co o nay luc tai len).
+const LANGUAGE_OF_CODE = { vi: 'Tiếng Việt', en: 'Tiếng Anh', ja: 'Tiếng Nhật', ko: 'Tiếng Hàn', zh: 'Tiếng Trung (Giản thể)', th: 'Tiếng Thái', fr: 'Tiếng Pháp', es: 'Tiếng Tây Ban Nha', de: 'Tiếng Đức', pt: 'Tiếng Bồ Đào Nha (Brazil)', hi: 'Tiếng Hindi', id: 'Tiếng Indonesia' }
+const API_PRESET_FIELDS = ['categoryId', 'language', 'license', 'embeddable', 'syntheticMedia', 'publicStatsViewable']
+function migrateApiPreset(p, optimize) {
+  const t = normalizeTemplate(optimize)
+  const src = p || {}
+  if (src.categoryId !== undefined && String(src.categoryId) !== '22' && CATEGORY_NAMES[src.categoryId] && t.category === 'keep') t.category = String(src.categoryId)
+  const code = String(src.language || '').toLowerCase()
+  if (code && !['vi', 'en'].includes(code) && LANGUAGE_OF_CODE[code] && !t.language) t.language = LANGUAGE_OF_CODE[code]
+  if (src.license === 'creativeCommon' && t.license === 'keep') t.license = 'creativeCommon'
+  if (src.embeddable === false && t.embeddable === 'keep') t.embeddable = 'no'
+  if (src.syntheticMedia === true && t.ai === 'keep') t.ai = 'yes'
+  return t
 }
 
 // Mau Studio cho preset cu (chua co preset.optimize): da bat "sau khi dang: toi uu" thi lay mau
@@ -301,6 +348,6 @@ function compareFields(read, template, { title = '' } = {}) {
 
 module.exports = {
   CATEGORY_NAMES, CATEGORY_NAMES_EN, STUDIO_LANGUAGES, LANGUAGE_EN, optionNames, calendarMonthLabels, parseMonthLabel, visibilityKind, canCommentVisibility, COMMENT_VARS, defaultTemplate, normalizeTemplate, templateFor, setTemplate,
-  API_FIELDS, withoutApiFields, presetSeed,
+  keepAll, afterUploadTemplate, refreshPending, API_PRESET_FIELDS, migrateApiPreset, presetSeed,
   renderComment, tagsToAdd, tagLength, fmtStudioDate, parseStudioDate, recordingDateFor, touchedFields, markOptimized, isOptimized, compareFields,
 }

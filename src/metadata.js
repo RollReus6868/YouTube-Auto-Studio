@@ -1,8 +1,8 @@
 // Mau mac dinh (preset) kieu hop thoai tai len cua YouTube Studio, dien mau tieu de /
 // mo ta va tinh gio dang. Khong require('electron') nen kiem thu duoc bang node thuong.
-const { defaultTemplate, normalizeTemplate } = require('./optimize-template')
+const { defaultTemplate, normalizeTemplate, API_PRESET_FIELDS, migrateApiPreset } = require('./optimize-template')
 
-// Danh muc YouTube (videoCategories, vung VN) - id la so YouTube dung trong API.
+// Danh muc YouTube (id so cua YouTube) - mau Studio cua preset chon danh muc theo id nay.
 const CATEGORIES = [
   ['1', 'Phim và hoạt hình'], ['2', 'Ô tô và xe cộ'], ['10', 'Âm nhạc'], ['15', 'Thú cưng và động vật'],
   ['17', 'Thể thao'], ['19', 'Du lịch và sự kiện'], ['20', 'Trò chơi'], ['22', 'Mọi người và blog'],
@@ -18,19 +18,13 @@ function defaultPreset(id = 'mac-dinh', name = 'Mặc định') {
     title: '{ten_video}',
     description: '{ten_video}\n\n{hashtag}',
     tags: [],
-    categoryId: '22',
-    language: 'vi',
-    playlist: '',
+    playlist: '', // ten danh sach phat (chua co thi tool tao trong hop thoai tai len)
     madeForKids: false,
-    syntheticMedia: false,
-    license: 'youtube', // youtube | creativeCommon
-    embeddable: true,
     notifySubscribers: true,
-    publicStatsViewable: true,
-    privacy: 'private', // public | unlisted | private (khi len lich: luon private toi gio dang)
+    privacy: 'private', // public | unlisted | private (khi len lich: Studio de rieng tu toi gio dang)
     schedule: { mode: 'now', times: ['19:00'], intervalHours: 24 }, // now | times | interval
-    optimizeAfterUpload: false, // sau khi dang: tu toi uu trong Studio bang mau `optimize` cua preset (src/features/optimize.js)
-    optimize: defaultTemplate(), // cac muc chi co trong Studio (src/optimize-template.js)
+    optimizeAfterUpload: false, // sau khi dang: thich / binh luan / ghim (+ dat lai muc chua dat duoc) - src/features/optimize.js
+    optimize: defaultTemplate(), // mau Studio: cac muc dat trong hop thoai tai len (src/optimize-template.js, src/flows/upload.js)
   }
 }
 
@@ -45,6 +39,11 @@ function normalizePreset(p, seed) {
   if (!out.schedule.times.length) out.schedule.times = ['19:00']
   out.optimizeAfterUpload = out.optimizeAfterUpload === true
   out.optimize = normalizeTemplate(p && p.optimize && typeof p.optimize === 'object' ? p.optimize : seed)
+  // preset cu (dang qua API): danh muc / ngon ngu / giay phep / nhung / AI chuyen sang mau Studio roi bo
+  if (p && API_PRESET_FIELDS.some((k) => k in p)) {
+    out.optimize = migrateApiPreset(p, out.optimize)
+    for (const k of API_PRESET_FIELDS) delete out[k]
+  }
   return out
 }
 
@@ -83,20 +82,18 @@ function buildVideoMeta(item, preset, extra = {}) {
   const privacy = ['public', 'unlisted', 'private'].includes(info.hien_thi) ? info.hien_thi : p.privacy
   return {
     title, description, tags,
-    categoryId: p.categoryId, language: p.language,
     playlist: info.playlist || p.playlist,
     madeForKids: info.tre_em !== undefined ? info.tre_em : p.madeForKids,
-    syntheticMedia: p.syntheticMedia, license: p.license, embeddable: p.embeddable,
-    notifySubscribers: p.notifySubscribers, publicStatsViewable: p.publicStatsViewable,
-    // API: video len lich phai de private kem publishAt, toi gio YouTube tu chuyen cong khai
-    privacy: publishAt ? 'private' : privacy,
+    notifySubscribers: p.notifySubscribers,
+    // len lich (publishAt): hop thoai tai len chon "Len lich", Studio de rieng tu toi gio dang roi tu cong khai
+    privacy,
     publishAt,
     thumbnail: item.thumbnail || null,
     subtitles: item.subtitles || [],
   }
 }
 
-// Kiem tra theo gioi han cua YouTube Data API. Tra ve danh sach loi (rong = hop le).
+// Kiem tra theo gioi han cua YouTube (tieu de, mo ta, the). Tra ve danh sach loi (rong = hop le).
 function validateMeta(m) {
   const errs = []
   if (!m.title) errs.push('Thiếu tiêu đề.')

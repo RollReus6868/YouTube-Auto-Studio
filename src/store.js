@@ -16,7 +16,7 @@ const DEFAULTS = {
   replyMode: 'review', // review | auto | off
   replyPerHour: 20,
   skipWords: '',
-  youtubeChannel: null, // { id, title } kenh da dang nhap qua OAuth
+  uploadChannel: '', // khoa kenh (UC ID) dang video qua hop thoai tai len cua Studio (trang Dang video)
 }
 
 class Store {
@@ -91,14 +91,23 @@ class Store {
   secretEncrypted(name) { const e = this.readSecrets()[name]; return !!(e && e.enc) }
 }
 
-// File client OAuth tai tu Google Cloud (loai "Desktop app"): { installed: { client_id, client_secret, ... } }
-function parseOAuthClient(text) {
-  let j
-  try { j = JSON.parse(text) } catch (_) { throw new Error('File không phải JSON hợp lệ.') }
-  const c = j.installed || j.web
-  if (!c || !c.client_id || !c.client_secret) throw new Error('Không thấy client_id / client_secret. Hãy tải file JSON của OAuth client loại "Desktop app".')
-  if (j.web && !j.installed) throw new Error('Đây là OAuth client loại "Web application". Hãy tạo loại "Desktop app" rồi tải lại file JSON.')
-  return { client_id: c.client_id, client_secret: c.client_secret, project_id: c.project_id || '' }
+// Ban cu dang video qua YouTube Data API: bo OAuth client, token tung kenh va danh sach kenh API (khong con dung).
+// Kenh dang video cu (youtubeChannel) thanh kenh dang video mac dinh. Tra ve so muc da bo.
+function dropApiData(store) {
+  const secrets = Object.keys(store.readSecrets()).filter((k) => k === 'oauthClient' || k === 'youtubeToken' || k.startsWith('ytToken:'))
+  for (const k of secrets) store.setSecret(k, '')
+  const s = store.settings
+  const had = 'youtubeChannel' in s || 'apiChannels' in s
+  if (had) {
+    const old = s.youtubeChannel && /^UC[\w-]{10,}$/.test(s.youtubeChannel.id || '') ? s.youtubeChannel.id : ''
+    const next = { ...s }
+    delete next.youtubeChannel
+    delete next.apiChannels
+    if (!next.uploadChannel && old) next.uploadChannel = old
+    store.settings = next
+    store.save({})
+  }
+  return secrets.length + (had ? 1 : 0)
 }
 
-module.exports = { Store, DEFAULTS, parseOAuthClient }
+module.exports = { Store, DEFAULTS, dropApiData }

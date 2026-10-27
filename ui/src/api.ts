@@ -44,19 +44,13 @@ export type Preset = {
   title: string
   description: string
   tags: string[]
-  categoryId: string
-  language: string
   playlist: string
   madeForKids: boolean
-  syntheticMedia: boolean
-  license: 'youtube' | 'creativeCommon'
-  embeddable: boolean
   notifySubscribers: boolean
-  publicStatsViewable: boolean
   privacy: 'public' | 'unlisted' | 'private'
   schedule: Schedule
-  optimizeAfterUpload?: boolean // sau khi dang: tu toi uu trong Studio bang preset.optimize
-  optimize?: OptimizeTemplate // cac muc chi co trong Studio (ban cu chua co -> mau goc)
+  optimizeAfterUpload?: boolean // sau khi dang: thich / binh luan / ghim (va dat lai muc hop thoai tai len chua dat duoc)
+  optimize?: OptimizeTemplate // cac muc dat trong hop thoai tai len cua Studio (ban cu chua co -> mau goc)
 }
 export type Settings = {
   root: string
@@ -68,15 +62,12 @@ export type Settings = {
   replyMode: 'review' | 'auto' | 'off'
   replyPerHour: number
   skipWords: string
-  youtubeChannel: { id: string; title: string } | null
-  apiChannels?: { id: string; title: string }[] // cac kenh da ket noi API (moi kenh mot token)
+  uploadChannel: string // kenh dang video (khoa kenh o trang Tai khoan)
 }
 export type VideoMeta = {
   title: string
   description: string
   tags: string[]
-  categoryId: string
-  language: string
   playlist: string
   madeForKids: boolean
   privacy: Preset['privacy']
@@ -117,6 +108,7 @@ export type PostItem = {
   explanation?: string
 }
 export type Job = { status: 'queued' | 'run' | 'done' | 'error' | 'stopped'; title?: string; step: string; progress: number; error: string; url: string; warnings?: string[] }
+export type UploadChannel = { key: string; name: string; handle: string; ucId: string; avatar: string }
 export type Comment = { id: string; videoId: string; videoTitle: string; author: string; text: string; publishedAt: string; likeCount: number; status: 'new' | 'ready' | 'sent' | 'skipped' | 'error'; kind: string; draft: string; error: string; note: string }
 export type Draft = { id: string; text: string; loading: boolean; error: string }
 export type State = {
@@ -124,10 +116,10 @@ export type State = {
   version: string
   update: Update
   settings: Settings | null
-  secrets: { gemini: boolean; geminiEncrypted: boolean; oauth: { project_id: string; client_id: string } | null }
+  secrets: { gemini: boolean; geminiEncrypted: boolean }
   scan: { root: string; videos: VideoItem[]; posts: PostItem[]; errors: string[]; at: string }
   studio: { channelId: string; channelName?: string; url: string; visible: boolean }
-  youtube: { channel: { id: string; title: string; thumb?: string } | null; busy: boolean }
+  upload: { channelKey: string; channels: UploadChannel[] } // kenh dang video = cac kenh da tick o trang Tai khoan
   jobs: Record<string, Job>
   draft: Draft | null
   comments: { items: Comment[]; busy: boolean; at: string; sentLastHour: number }
@@ -157,9 +149,8 @@ export const newPreset = (id: string, name: string): Preset => ({
   id, name,
   title: '{ten_video}',
   description: '{ten_video}\n\n{hashtag}',
-  tags: [], categoryId: '22', language: 'vi', playlist: '',
-  madeForKids: false, syntheticMedia: false, license: 'youtube', embeddable: true,
-  notifySubscribers: true, publicStatsViewable: true, privacy: 'private',
+  tags: [], playlist: '',
+  madeForKids: false, notifySubscribers: true, privacy: 'private',
   schedule: { mode: 'now', times: ['19:00'], intervalHours: 24 },
   optimizeAfterUpload: false,
   optimize: defaultOptimizeTemplate(),
@@ -168,27 +159,26 @@ export const newPreset = (id: string, name: string): Preset => ({
 const demoSettings: Settings = {
   root: 'D:\\YouTube-DangBai', channel: 'Kênh Của Tôi',
   presets: [
-    { ...newPreset('mac-dinh', 'Video dài'), title: '{ten_video} | Tập {so_tap}', description: '{tieu_de}\n\nĐăng ngày {ngay} trên {ten_kenh}.\n\n{hashtag}', tags: ['phim hay', 'review phim', 'tóm tắt phim'], categoryId: '1', privacy: 'public', schedule: { mode: 'times', times: ['19:00'], intervalHours: 24 }, optimizeAfterUpload: true },
+    { ...newPreset('mac-dinh', 'Video dài'), title: '{ten_video} | Tập {so_tap}', description: '{tieu_de}\n\nĐăng ngày {ngay} trên {ten_kenh}.\n\n{hashtag}', tags: ['phim hay', 'review phim', 'tóm tắt phim'], privacy: 'public', schedule: { mode: 'times', times: ['19:00'], intervalHours: 24 }, optimizeAfterUpload: true },
     { ...newPreset('shorts', 'Shorts'), title: '{ten_video} #shorts', tags: ['shorts'], privacy: 'public' },
   ],
   defaultPreset: 'mac-dinh', geminiModel: 'gemini-2.5-flash',
   replyStyle: 'Trả lời thân thiện, ngắn gọn (1–2 câu), xưng "mình", gọi khán giả là "bạn".',
-  replyMode: 'review', replyPerHour: 20, skipWords: '', youtubeChannel: { id: 'UCxxxxxxxxxxxxxxxxxxxxxx', title: 'Kênh Của Tôi' },
-  apiChannels: [{ id: 'UCxxxxxxxxxxxxxxxxxxxxxx', title: 'Kênh Của Tôi' }, { id: 'UCC0AJ_NoUOq5718yK4_ehBw', title: 'Dark Bible Stories' }],
+  replyMode: 'review', replyPerHour: 20, skipWords: '', uploadChannel: 'UCxxxxxxxxxxxxxxxxxxxxxx',
 }
 
 const meta = (title: string, publishAt: string | null): VideoMeta => ({
   title, description: `${title}\n\nĐăng ngày 28/10/2026 trên Kênh Của Tôi.\n\n#phimhay #reviewphim #tómtắtphim`,
-  tags: ['phim hay', 'review phim', 'tóm tắt phim'], categoryId: '1', language: 'vi', playlist: 'Tóm tắt phim', madeForKids: false,
+  tags: ['phim hay', 'review phim', 'tóm tắt phim'], playlist: 'Tóm tắt phim', madeForKids: false,
   privacy: publishAt ? 'private' : 'public', publishAt,
 })
 
 // Chi dung khi xem thu giao dien trong trinh duyet (them ?demo vao dia chi).
 export const demoState: State = {
   status: 'idle', version: '0.1.0',
-  update: { ...noUpdate, status: 'available', latest: '0.2.0', notes: '- Đăng video qua API YouTube\n- Gemini viết mô tả' },
+  update: { ...noUpdate, status: 'available', latest: '0.2.0', notes: '- Đăng video bằng hộp thoại tải lên của YouTube Studio\n- Gemini viết mô tả' },
   settings: demoSettings,
-  secrets: { gemini: true, geminiEncrypted: true, oauth: { project_id: 'tool-dang-youtube', client_id: '123456789012…apps.googleusercontent.com' } },
+  secrets: { gemini: true, geminiEncrypted: true },
   scan: {
     root: demoSettings.root, errors: [], at: '2026-10-26T12:00:00Z',
     videos: [
@@ -202,10 +192,16 @@ export const demoState: State = {
     ],
   },
   studio: { channelId: 'UCxxxxxxxxxxxxxxxxxxxxxx', url: 'https://studio.youtube.com/channel/UCxxxxxxxxxxxxxxxxxxxxxx', visible: false },
-  youtube: { channel: { id: 'UCxxxxxxxxxxxxxxxxxxxxxx', title: 'Kênh Của Tôi' }, busy: false },
+  upload: {
+    channelKey: 'UCxxxxxxxxxxxxxxxxxxxxxx',
+    channels: [
+      { key: 'UCxxxxxxxxxxxxxxxxxxxxxx', name: 'Kênh Của Tôi', handle: '@kenhcuatoi', ucId: 'UCxxxxxxxxxxxxxxxxxxxxxx', avatar: '' },
+      { key: 'UCC0AJ_NoUOq5718yK4_ehBw', name: 'Dark Bible Stories', handle: '@DarkBibleStories', ucId: 'UCC0AJ_NoUOq5718yK4_ehBw', avatar: '' },
+    ],
+  },
   jobs: {
     v1: { status: 'done', step: '', progress: 100, error: '', url: 'https://youtu.be/abc123' },
-    v2: { status: 'run', step: 'upload', progress: 42, error: '', url: '' },
+    v2: { status: 'run', step: 'details', progress: 42, error: '', url: '' },
   },
   draft: null,
   comments: {
@@ -227,9 +223,9 @@ export const demoState: State = {
 
 export const emptyState: State = {
   status: 'idle', version: '', update: noUpdate, settings: null,
-  secrets: { gemini: false, geminiEncrypted: false, oauth: null },
+  secrets: { gemini: false, geminiEncrypted: false },
   scan: { root: '', videos: [], posts: [], errors: [], at: '' },
-  studio: { channelId: '', url: '', visible: false }, youtube: { channel: null, busy: false }, jobs: {}, draft: null,
+  studio: { channelId: '', url: '', visible: false }, upload: { channelKey: '', channels: [] }, jobs: {}, draft: null,
   comments: { items: [], busy: false, at: '', sentLastHour: 0 },
   categories: CATEGORIES, logs: [], f: {},
 }

@@ -5,7 +5,7 @@ const os = require('os')
 const path = require('path')
 const sc = require('../src/scanner')
 const md = require('../src/metadata')
-const { Store, parseOAuthClient } = require('../src/store')
+const { Store, dropApiData } = require('../src/store')
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ya-ut-'))
 const tests = []
@@ -200,9 +200,9 @@ test('mau tieu de / mo ta', () => {
   // bien rong (khong co the, khong co so tap) -> chuoi rong, khong bao "chua dien"
   const e = md.buildVideoMeta({ name: 'X', info: { vars: {} } }, md.defaultPreset())
   assert.deepEqual([e.title, e.description, md.validateMeta(e)], ['X', 'X', []])
-  // len lich -> private + publishAt, ngay lay theo gio dang
+  // len lich -> publishAt (hop thoai tai len chon "Len lich"), ngay lay theo gio dang
   const s = md.buildVideoMeta(item, { ...preset, privacy: 'public' }, { publishAt: new Date(2026, 10, 5, 19).toISOString() })
-  assert.equal(s.privacy, 'private')
+  assert.equal(s.publishAt, new Date(2026, 10, 5, 19).toISOString())
   assert.match(s.description, /05\/11\/2026/)
   // info.txt ghi de
   const o = md.buildVideoMeta({ ...item, info: { tieu_de: 'Riêng', the: 'a,b', hien_thi: 'unlisted', vars: {} } }, preset)
@@ -274,12 +274,35 @@ test('khoa bi mat', () => {
   assert(!plain.secretEncrypted('k'))
 })
 
-test('file OAuth client', () => {
-  const c = parseOAuthClient(JSON.stringify({ installed: { client_id: 'id.apps.googleusercontent.com', client_secret: 's', project_id: 'p' } }))
-  assert.deepEqual(c, { client_id: 'id.apps.googleusercontent.com', client_secret: 's', project_id: 'p' })
-  assert.throws(() => parseOAuthClient('{'), /JSON/)
-  assert.throws(() => parseOAuthClient(JSON.stringify({ web: { client_id: 'a', client_secret: 'b' } })), /Desktop app/)
-  assert.throws(() => parseOAuthClient('{}'), /client_id/)
+test('bo du lieu YouTube Data API cu: OAuth, token, kenh API -> kenh dang video mac dinh', () => {
+  const dir = tmp()
+  fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ youtubeChannel: { id: 'UCcu00000000000000000000', title: 'Kênh cũ' }, apiChannels: [{ id: 'UCcu00000000000000000000', title: 'Kênh cũ' }] }))
+  const s = new Store(dir)
+  for (const k of ['oauthClient', 'youtubeToken', 'ytToken:UCcu00000000000000000000', 'gemini']) s.setSecret(k, 'x')
+  assert.equal(dropApiData(s), 4)
+  assert.deepEqual(Object.keys(s.readSecrets()), ['gemini'], 'giu Gemini key')
+  const again = new Store(dir)
+  assert.equal(again.settings.uploadChannel, 'UCcu00000000000000000000')
+  assert(!('youtubeChannel' in again.settings) && !('apiChannels' in again.settings))
+  assert.equal(dropApiData(again), 0, 'chay lai khong lam gi')
+  // da chon kenh dang video thi giu nguyen
+  fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ uploadChannel: 'UCmoi00000000000000000000', youtubeChannel: { id: 'UCcu00000000000000000000' } }))
+  const third = new Store(dir)
+  dropApiData(third)
+  assert.equal(third.settings.uploadChannel, 'UCmoi00000000000000000000')
+})
+
+test('preset cu (dang qua API): muc khac mac dinh chuyen sang mau Studio, bo khoi preset', () => {
+  const old = { ...md.defaultPreset('p', 'Cũ'), categoryId: '27', language: 'ja', license: 'creativeCommon', embeddable: false, syntheticMedia: true, publicStatsViewable: false, optimize: { ai: 'keep', category: 'keep', license: 'keep', embeddable: 'keep', language: '' } }
+  const p = md.normalizePreset(old)
+  for (const k of ['categoryId', 'language', 'license', 'embeddable', 'syntheticMedia', 'publicStatsViewable']) assert(!(k in p), k)
+  assert.deepEqual([p.optimize.category, p.optimize.language, p.optimize.license, p.optimize.embeddable, p.optimize.ai], ['27', 'Tiếng Nhật', 'creativeCommon', 'no', 'yes'])
+  // gia tri mac dinh cu (Moi nguoi va blog, tieng Viet / tieng Anh, giay phep chuan, cho nhung, khong AI): khong dat gi them
+  const plain = md.normalizePreset({ ...md.defaultPreset(), categoryId: '22', language: 'en', license: 'youtube', embeddable: true, syntheticMedia: false, optimize: { category: 'keep', language: '', ai: 'keep' } })
+  assert.deepEqual([plain.optimize.category, plain.optimize.language, plain.optimize.ai], ['keep', '', 'keep'])
+  // mau da dat san thi mau thang
+  const set = md.normalizePreset({ categoryId: '27', optimize: { category: '10' } })
+  assert.equal(set.optimize.category, '10')
 })
 
 ;(async () => {

@@ -1,7 +1,7 @@
 // Bai kiem cho src/flows/optimize.js tren trang gia tests/mock-yt/optimize
 const assert = require('assert')
 const { listVideos, optimizeVideo, inspectVideo, commentAndPin } = require('../../src/flows/optimize')
-const { defaultTemplate } = require('../../src/optimize-template')
+const { defaultTemplate, afterUploadTemplate } = require('../../src/optimize-template')
 
 const UC = 'UC6roez1tiwHbdhvLWBvLRmQ'
 const VID = 'vyiSqHByq24'
@@ -393,28 +393,29 @@ module.exports.push(['tinh nang: quet, toi uu da chon, nho video da toi uu', asy
   await f.commands.optimize_list(UC)
   assert.equal(S.videos.find((v) => v.id === VID).status, 'done')
   assert.deepEqual(S.videos.find((v) => v.id === 'Prem0000001').missing.slice(-3), ['thích', 'bình luận', 'ghim'])
-  // tu toi uu sau khi dang: xep hang cho, toi gio thi chay
+  // tu toi uu sau khi dang (mau tu uploader: afterUploadTemplate): xep hang cho, toi gio thi chay
   mock.events.length = 0
-  ctx.afterUpload({ videoId: 'NeverProp01', title: 'God Was Never Their Property', preset: { optimizeAfterUpload: false }, channelId: UC })
-  ctx.afterUpload({ videoId: 'NeverProp01', title: 'God Was Never Their Property', preset: { optimizeAfterUpload: true }, channelId: UC })
+  const pendRead = () => JSON.parse(fs.readFileSync(path.join(tmp, 'optimize-pending.json'), 'utf8'))
+  ctx.afterUpload({ videoId: 'NeverProp01', title: 'God Was Never Their Property', channelId: UC })
+  assert(!fs.existsSync(path.join(tmp, 'optimize-pending.json')), 'khong co mau (khong con gi de lam) -> khong xep')
+  ctx.afterUpload({ videoId: 'NeverProp01', title: 'God Was Never Their Property', tpl: afterUploadTemplate(defaultTemplate(), [], { after: true }), channelId: UC })
   assert.equal(await f.processPending(Date.now()), 0, 'chua toi gio (cho YouTube xu ly)')
   assert.equal(await f.processPending(Date.now() + 16 * 60e3), 1, logs.slice(-5).join('\n'))
   assert(JSON.parse(fs.readFileSync(path.join(tmp, 'optimized.json'), 'utf8'))[UC].NeverProp01)
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(tmp, 'optimize-pending.json'), 'utf8')), [])
-  assert.equal((await events(mock, 'save')).length, 1)
-  assert.deepEqual((await events(mock, 'comment')).map((e) => e.text), ['God Was Never Their Property: John 1 and Black Faith | Dark Bible Study'], 'preset chua co mau -> mau cua kenh')
-  // preset co mau Studio rieng: dung mau cua preset, cac muc API da dat (AI, danh muc...) giu nguyen
+  assert.deepEqual(pendRead(), [])
+  assert.equal((await events(mock, 'save')).length, 0, 'hop thoai tai len da dat cac muc -> khong luu lai')
+  assert.deepEqual((await events(mock, 'comment')).map((e) => e.text), ['God Was Never Their Property: John 1 and Black Faith'])
+  // muc hop thoai chua dat duoc (missed) -> dat lai sau khi dang; preset sua sau khi dang -> gia tri moi nhat
   mock.events.length = 0
-  const preset = { id: 'p1', optimizeAfterUpload: true, optimize: { ...defaultTemplate(), ai: 'no', category: '27', license: 'creativeCommon', embeddable: 'no', remix: 'audio', comment: 'Mẫu preset: {tieu_de}' } }
-  ctx.afterUpload({ videoId: 'Maccabee001', title: 'Who Decides?', preset, channelId: UC })
-  const pend = JSON.parse(fs.readFileSync(path.join(tmp, 'optimize-pending.json'), 'utf8'))
-  assert.deepEqual([pend[0].presetId, pend[0].tpl.ai, pend[0].tpl.category, pend[0].tpl.remix], ['p1', 'keep', 'keep', 'audio'], 'luu id preset + mau tren hang cho')
-  // nguoi dung sua preset sau khi dang -> dung ban moi nhat cua preset
-  saved.presets = [{ ...preset, optimize: { ...preset.optimize, comment: 'Mẫu mới: {tieu_de}' } }]
+  const preset = { id: 'p1', optimizeAfterUpload: true, optimize: { ...defaultTemplate(), ai: 'no', category: '27', license: 'creativeCommon', remix: 'audio', comment: 'Mẫu preset: {tieu_de}' } }
+  ctx.afterUpload({ videoId: 'Maccabee001', title: 'Who Decides?', tpl: afterUploadTemplate(preset.optimize, ['remix', 'category'], { after: true }), presetId: 'p1', channelId: UC })
+  const pend = pendRead()
+  assert.deepEqual([pend[0].presetId, pend[0].tpl.ai, pend[0].tpl.category, pend[0].tpl.remix, pend[0].tpl.license], ['p1', 'keep', '27', 'audio', 'keep'], 'chi cac muc chua dat duoc')
+  saved.presets = [{ ...preset, optimize: { ...preset.optimize, remix: 'none', comment: 'Mẫu mới: {tieu_de}' } }]
   assert.equal(await f.processPending(Date.now() + 16 * 60e3), 1, logs.slice(-5).join('\n'))
   const [sv] = await events(mock, 'save')
-  assert.equal(sv.data.remix, 'Chỉ cho phép phối lại âm thanh')
-  assert.deepEqual([sv.data.ai, sv.data.category, sv.data.license, sv.data.embed], ['', 'Mọi người và blog', 'Giấy phép chuẩn của YouTube', true], 'muc API giu nguyen')
+  assert.equal(sv.data.remix, 'Không cho phép phối lại', 'gia tri moi nhat cua preset')
+  assert.deepEqual([sv.data.ai, sv.data.category, sv.data.license], ['', 'Giáo dục', 'Giấy phép chuẩn của YouTube'], 'muc da dat trong hop thoai giu nguyen')
   assert.deepEqual((await events(mock, 'comment')).map((e) => e.text), [`Mẫu mới: ${S.videos.find((v) => v.id === 'Maccabee001').title}`])
   // ghim khong an tren YouTube: khong bao thanh cong gia -> "chua toi uu", thieu "ghim" (lan sau ghim lai)
   await flags(page, urls, { 'opt-pinfail': 'silent' })

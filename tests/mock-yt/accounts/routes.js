@@ -17,7 +17,7 @@ const ACCOUNTS = {
       { name: '28k s', handle: '@28ks-p5n', subs: 'Không có người đăng ký', uc: uc('28ksp5n'), noImg: true },
       { name: 'Dark Faith 2nd', handle: '@DarkFaith9999', subs: '49.300 người đăng ký', uc: uc('DarkFaith9999') },
       { name: 'Dark Bible Study', handle: '@DarkBibleStudy999', subs: '362 người đăng ký', uc: uc('DarkBibleStudy999') },
-      // kenh nay co token API trong google-mock (UCmock...)
+      // UC co dinh (cac bai kiem dung UCmock...)
       { name: 'Dark Bible Stories', handle: '@BibleStoriies', subs: '207.000 người đăng ký', uc: 'UCmock000000000000000000' },
       { name: 'Simple Bible Animation', handle: '@BibleSimpleAnimation68', subs: '579 người đăng ký', uc: uc('BibleSimpleAnimation68') },
       // kenh da xoa nhung van la nguoi quan ly (co trong HTML that): khong duoc chon

@@ -221,13 +221,28 @@ test('mau tai len: Store chuyen preset cu + luu mau Studio cung preset', () => {
   fs.rmSync(dir, { recursive: true, force: true })
 })
 
-test('sau khi dang: muc da dat qua API thi giu nguyen trong Studio', () => {
-  assert.deepEqual([...ot.API_FIELDS].sort(), ['ai', 'category', 'description', 'embeddable', 'language', 'license'])
-  const t = ot.withoutApiFields({ ...ot.defaultTemplate(), category: '27', language: 'Tiếng Việt', license: 'youtube', embeddable: 'no', ai: 'yes', description: 'Mô tả', playlists: ['P'], comments: 'off', remix: 'audio' })
-  assert.deepEqual([t.category, t.language, t.license, t.embeddable, t.ai, t.description], ['keep', '', 'keep', 'keep', 'keep', ''])
-  assert.deepEqual([t.playlists, t.comments, t.remix, t.paidPromotion, t.tagsMode, t.endScreen], [['P'], 'off', 'audio', 'no', 'title', 'latest'], 'muc chi co trong Studio giu nguyen gia tri')
-  assert(!ot.touchedFields(t).some((k) => ot.API_FIELDS.includes(k)), 'khong dung toi muc API')
-  assert.equal(ot.withoutApiFields(null).ai, 'keep')
+test('sau khi dang: chi con thich / binh luan / ghim va cac muc hop thoai tai len chua dat duoc', () => {
+  const tpl = { ...ot.defaultTemplate(), category: '27', license: 'creativeCommon', extraTags: ['x'], playlists: ['P'], comment: 'Cảm ơn {tieu_de}' }
+  // dat du trong hop thoai, khong bat "sau khi dang" -> khong can chay gi
+  assert.equal(ot.afterUploadTemplate(tpl, []), null)
+  // bat -> chi thich / binh luan / ghim, cac muc khac giu nguyen
+  const a = ot.afterUploadTemplate(tpl, [], { after: true })
+  assert.deepEqual(ot.touchedFields(a).sort(), ['comment', 'like'])
+  assert.deepEqual([a.comment, a.pin], ['Cảm ơn {tieu_de}', true])
+  // muc chua dat duoc -> dat lai theo mau (danh sach phat / the cua video di kem)
+  const m = ot.afterUploadTemplate(tpl, ['category', 'license', 'tags', 'playlists', 'endScreen', 'notify'], { playlists: ['Của preset'], tags: ['a, b', 'c'] })
+  assert.deepEqual(ot.touchedFields(m).sort(), ['category', 'endScreen', 'license', 'playlists', 'tags'])
+  assert.deepEqual([m.category, m.license, m.endScreen, m.playlistAuto], ['27', 'creativeCommon', 'latest', 3])
+  assert.deepEqual(m.playlists, ['Của preset', 'P'])
+  assert.deepEqual([m.tagsMode, m.extraTags], ['title', ['a  b', 'c', 'x'].map((x) => x.replace(/\s+/g, ' '))])
+  assert.equal(m.like, false, 'khong bat sau khi dang: khong thich / binh luan')
+  // preset sua sau khi dang: cac muc dang dat lay gia tri moi; muc giu nguyen van giu; danh sach phat theo video
+  const now = { ...tpl, category: '10', license: 'youtube', remix: 'all', comment: 'Mới {tieu_de}', pin: false, playlists: ['Khác'] }
+  const r = ot.refreshPending(m, now)
+  assert.deepEqual([r.category, r.license, r.endScreen, r.remix, r.playlists, r.like], ['10', 'youtube', 'latest', 'keep', ['Của preset', 'P'], false])
+  const r2 = ot.refreshPending(a, now)
+  assert.deepEqual([r2.comment, r2.pin, r2.category], ['Mới {tieu_de}', false, 'keep'])
+  assert.deepEqual(ot.refreshPending(a, null), a, 'preset da xoa: dung mau luc dang')
 })
 
 ;(async () => {

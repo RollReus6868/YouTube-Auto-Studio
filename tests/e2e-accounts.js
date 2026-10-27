@@ -1,7 +1,7 @@
-// Chay that app voi Studio gia (tests/mock-yt) + Google API gia: phien 0.3 thanh "Tai khoan 1",
+// Chay that app voi Studio gia (tests/mock-yt): phien 0.3 thanh "Tai khoan 1", du lieu YouTube API cu bi bo,
 // them tai khoan -> dang nhap trong khung -> "Xong, dong lai" -> doc kenh -> tick kenh ->
 // ctx.withChannel (cua so an, chuyen kenh, kiem UC) -> khung Studio theo kenh chon ->
-// token API theo kenh (dung kenh moi nhan) -> dang xuat / xoa.
+// kenh dang video (trang Dang video) lay tu cac kenh da tick -> dang xuat / xoa.
 //   xvfb-run -a node tests/e2e-accounts.js
 const assert = require('assert')
 const fs = require('fs')
@@ -9,7 +9,6 @@ const os = require('os')
 const path = require('path')
 const { run, sleep } = require('./lib')
 const { startMockYt } = require('./mock-yt/server')
-const { startMock } = require('./google-mock')
 
 const waitFor = async (fn, what, ms = 30000) => {
   for (let t = 0; t < ms; t += 250) { if (await fn()) return; await sleep(250) }
@@ -18,7 +17,6 @@ const waitFor = async (fn, what, ms = 30000) => {
 
 ;(async () => {
   const yt = await startMockYt()
-  const gm = await startMock()
   // du lieu cua ban 0.3: phien Studio 'persist:youtube' + token API cua mot kenh
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ya-tk-e2e-'))
   fs.mkdirSync(path.join(dataDir, 'Partitions', 'youtube'), { recursive: true })
@@ -27,23 +25,24 @@ const waitFor = async (fn, what, ms = 30000) => {
   fs.writeFileSync(path.join(dataDir, 'secrets.json'), JSON.stringify({ youtubeToken: { enc: false, v: b64(JSON.stringify({ refresh_token: 'ref-1', access_token: 'acc-1', expires_at: Date.now() + 3600e3 })) } }))
   const env = {
     YA_STUDIO_BASE: yt.urls.studio, YA_YOUTUBE_BASE: yt.urls.youtube, YA_STUDIO_URL: `${yt.urls.studio}/`,
-    YA_GOOGLE_MOCK: gm.url, YA_NO_UPDATE_CHECK: '1', YA_LANE_IDLE_MS: '4000',
+    YA_NO_UPDATE_CHECK: '1', YA_LANE_IDLE_MS: '4000',
   }
   run(9401, env, async ({ ui, browser }) => {
     const call = (cmd, payload) => ui.evaluate(([c, p]) => window.ya.call(c, p), [cmd, payload])
     const acc = async (id) => (await call('hello')).f.accounts.list.find((a) => a.id === id)
     const pages = () => browser.contexts().flatMap((c) => c.pages())
-    const logs = async () => (await call('hello')).logs.map((l) => `${l.level} ${l.msg}`)
 
-    // 1) di tru: phien cu thanh "Tai khoan 1" (giu ten phien), token cu thanh token cua kenh, bo loginMode
+    // 1) di tru: phien cu thanh "Tai khoan 1" (giu ten phien), bo loginMode; token / kenh API cu bi bo,
+    // kenh dang video cu thanh kenh dang video mac dinh
     await ui.getByRole('button', { name: 'Tài khoản', exact: true }).click()
     await ui.getByRole('heading', { name: 'Tài khoản', exact: true }).waitFor()
     let st = await call('hello')
     assert.deepEqual(st.f.accounts.list.map((a) => [a.id, a.partition]), [['tk-1', 'persist:youtube']])
-    assert.deepEqual(st.settings.apiChannels, [{ id: 'UCcu00000000000000000000', title: 'Kênh cũ' }])
-    assert.equal(st.youtube.channel.id, 'UCcu00000000000000000000')
+    assert(!('apiChannels' in st.settings) && !('youtubeChannel' in st.settings), Object.keys(st.settings).join())
+    assert.equal(st.settings.uploadChannel, 'UCcu00000000000000000000')
     const secrets = JSON.parse(fs.readFileSync(path.join(dataDir, 'secrets.json'), 'utf8'))
-    assert(!secrets.youtubeToken && secrets['ytToken:UCcu00000000000000000000'], Object.keys(secrets).join())
+    assert.deepEqual(Object.keys(secrets), [], 'bo token API cu')
+    assert(st.logs.some((l) => /Đã bỏ dữ liệu YouTube Data API cũ/.test(l.msg)), st.logs.map((l) => l.msg).join('\n'))
     assert(st.logs.some((l) => /Phiên YouTube Studio cũ đã thành "Tài khoản 1"/.test(l.msg)))
     await waitFor(async () => (await acc('tk-1')).status === 'needs-sign-in', 'kiem cookie luc mo app')
 
@@ -140,24 +139,15 @@ const waitFor = async (fn, what, ms = 30000) => {
     assert.deepEqual(yt.events.filter((e) => e.type === 'switch').slice(switches).map((e) => e.name), ['Dark Bible Stories'], 'chuyen kenh trong khung truoc khi mo video')
     assert(st.logs.some((l) => /Khung Studio: mở .*\/studio\/video\/Prem0000001\/edit \(kênh "Dark Bible Stories"\)/.test(l.msg)), st.logs.slice(-6).map((l) => l.msg).join('\n'))
 
-    // 7) token API theo kenh: chon nham kenh tren Google -> tu choi, dung kenh -> nhan
-    await ui.getByRole('button', { name: 'Cài đặt', exact: true }).click()
-    const oauth = path.join(dataDir, 'client.json')
-    fs.writeFileSync(oauth, JSON.stringify({ installed: { client_id: '1234567890ab-x.apps.googleusercontent.com', client_secret: 'x', project_id: 'p' } }))
-    await call('oauth_import', oauth)
-    await ui.getByLabel('Kênh cần kết nối API').selectOption('UCBibleSimpleAnimation68')
-    await ui.getByRole('button', { name: 'Đăng nhập kênh' }).click()
-    await waitFor(async () => (await logs()).some((l) => /^error .*không phải kênh "Simple Bible Animation"/.test(l)), 'tu choi kenh nham')
-    assert.equal(gm.lastAuth.login_hint, 'athang@versee.net')
-    assert(!JSON.parse(fs.readFileSync(path.join(dataDir, 'secrets.json'), 'utf8'))['ytToken:UCmock000000000000000000'], 'khong luu token kenh nham')
-    assert.equal((await call('hello')).youtube.channel.id, 'UCcu00000000000000000000')
-    await ui.getByLabel('Kênh cần kết nối API').selectOption('UCmock000000000000000000')
-    await ui.getByRole('button', { name: 'Đăng nhập kênh' }).click()
-    await ui.getByText('Kênh Kênh Giả Lập').waitFor()
-    st = await call('hello')
-    assert.deepEqual(st.settings.apiChannels.map((c) => c.id), ['UCcu00000000000000000000', 'UCmock000000000000000000'])
-    await ui.getByRole('button', { name: 'Dùng để đăng video' }).click()
-    await ui.getByText('Kênh Kênh cũ').waitFor()
+    // 7) kenh dang video = cac kenh da tick; kenh cu (UCcu...) khong con -> kenh dau tien; chon kenh khac -> luu
+    await ui.getByRole('button', { name: 'Đăng video', exact: true }).click()
+    const pick = ui.getByLabel('Kênh đăng video')
+    await pick.waitFor()
+    assert.deepEqual(await pick.locator('option').allTextContents(), ['Dark Bible Stories (@BibleStoriies)', 'Simple Bible Animation (@BibleSimpleAnimation68)'])
+    assert.equal((await call('hello')).upload.channelKey, 'UCmock000000000000000000')
+    await pick.selectOption('UCBibleSimpleAnimation68')
+    await waitFor(() => JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8')).uploadChannel === 'UCBibleSimpleAnimation68', 'luu kenh dang video')
+    assert.equal((await call('hello')).upload.channelKey, 'UCBibleSimpleAnimation68')
 
     // 8) doi ten, dang xuat (giu kenh), xoa
     await ui.getByRole('button', { name: 'Tài khoản', exact: true }).click()

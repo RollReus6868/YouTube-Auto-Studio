@@ -230,7 +230,7 @@ async function pickOption(page, t, option) {
 
 // Cac o tich trong hop thoai danh sach phat (theo thu tu hien): [{ name, id, on }].
 // Luu y: chi o tich co ten moi la danh sach phat (nut "Danh sach phat moi" khong phai o tich).
-const playlistItems = (page) => page.eval((b) => window.__ya.find(b, true).map((cb) => {
+const playlistItems = (page, within = SEL.dialogs) => page.eval((b) => window.__ya.find(b, true).map((cb) => {
   const it = cb.closest('li, [role=listitem], ytcp-ve') || cb.parentElement
   const lab = it.querySelector('.label-text, .checkbox-label, #checkbox-label')
   const host = cb.closest('ytcp-checkbox-lit')
@@ -239,7 +239,7 @@ const playlistItems = (page) => page.eval((b) => window.__ya.find(b, true).map((
     id: (host && host.getAttribute('test-id')) || '', // ID danh sach phat (PL...)
     on: cb.getAttribute('aria-checked') === 'true',
   }
-}), { selector: SEL.plBox, within: SEL.dialogs })
+}), { selector: SEL.plBox, within })
 
 // "Hien them" (mo cac muc nang cao). Co video Studio mo san, co video phai bam; bam bi mat thi bam lai.
 // Da mo = cac muc nang cao dang hien (nhan theo id, moi ngon ngu) hoac nut da doi thanh "An bot".
@@ -317,6 +317,285 @@ async function listVideos(page, channelUc, { urls, log = () => {}, onStep = () =
   return out
 }
 
+// ---- cac muc cua mau: dung chung trang Chi tiet video (optimizeVideo) va hop thoai tai len (src/flows/upload.js) ----
+// c: { t (mau da chuan hoa), title, videoId, channelName, video, now, lang, log, warn, changed (mang), soft(ten, fn),
+//      extraTags (the them truoc the cua mau), recDate (ngay quay thay cho mau), dateInput (o nhap ngay cua lich),
+//      openEndScreen (mo trinh chinh man hinh ket thuc) }
+// Moi muc tu bo qua khi mau de 'keep'; loi o mot muc -> soft canh bao, lam tiep muc khac.
+const FIELDS = {
+  description: async (page, c) => {
+    const { t, soft, log, warn, changed, title, videoId, channelName, video, now, lang } = c
+    // Mo ta: chi dien khi video CHUA co mo ta; da co thi giu nguyen.
+    if (t.description) {
+      await soft('Mô tả', async () => {
+        const box = { selector: SEL.desc }
+        await page.waitFor(box)
+        if (String((await page.text(box)) || '').trim()) return log('info', 'Video đã có mô tả: giữ nguyên.')
+        const text = renderComment(t.description, { tieu_de: title, link: `https://youtu.be/${videoId}`, ten_kenh: channelName })
+        const fit = Buffer.byteLength(text) <= 5000 ? text : Buffer.from(text).subarray(0, 5000).toString().replace(/\uFFFD+$/, '')
+        await page.type(box, fit, { clear: false })
+        await page.until((s) => String((window.__ya.one({ selector: s }) || {}).innerText || '').trim().length > 0, [SEL.desc], { what: 'mô tả được điền' })
+        changed.push('description')
+      })
+    }
+  },
+  // c.playlists: ten them truoc ten trong mau (vd danh sach phat cua preset); c.createPlaylist(ten): tao khi kenh chua co;
+  // c.plWithin: khung hop thoai chon danh sach phat (mac dinh: hop thoai bat ky)
+  playlists: async (page, c) => {
+    const { t, soft, warn, changed } = c
+    const names = [...new Set([...(c.playlists || []), ...t.playlists].map((x) => String(x).trim()).filter(Boolean))]
+    if (names.length || t.playlistAuto) {
+      await soft('Danh sách phát', async () => {
+        const within = c.plWithin || SEL.dialogs
+        await markSection(page, LABELS.playlists, 'pl', SEL.trigger)
+        await page.click({ selector: SEL.trigger, within: sec('pl') })
+        const box = { selector: SEL.plBox, within }
+        await page.waitFor(box)
+        let items = await playlistItems(page, within)
+        let ticked = 0
+        const tick = async (i, what) => {
+          if (items[i].on) return
+          await page.click({ ...box, nth: i })
+          await page.until((b, i) => { const el = window.__ya.find(b, true)[i]; return el && el.getAttribute('aria-checked') === 'true' }, [box, i], { what: `danh sách phát "${what}" được tích` })
+          items[i].on = true
+          ticked++
+        }
+        // ten (tich moi danh sach trung ten, vd ca ban "Podcast") hoac ID "PL..." (dung mot danh sach)
+        const find = (want) => items.map((x, i) => [x, i]).filter(([x]) => x.name && (norm(x.name) === norm(want) || (x.id && x.id === want)))
+        for (const want of names) {
+          let hits = find(want)
+          if (!hits.length && c.createPlaylist && (c.playlists || []).includes(want) && !/^PL[\w-]{10,}$/.test(want)) {
+            try {
+              await c.createPlaylist(want)
+              items = await playlistItems(page, within)
+              hits = find(want)
+            } catch (e) {
+              await page.press('Escape').catch(() => {})
+              warn(`Không thấy danh sách phát "${want}" trong kênh và không tạo được (${e.message}). Hãy tạo trong Studio rồi thêm video vào.`)
+              continue
+            }
+          }
+          if (!hits.length) { warn(`Không thấy danh sách phát "${want}" trong kênh.`); continue }
+          for (const [, i] of hits) await tick(i, want)
+        }
+        // tu chon N danh sach phat dau tien (da tich san van tinh vao N)
+        if (t.playlistAuto) {
+          const first = items.map((x, i) => [x, i]).filter(([x]) => x.name).slice(0, t.playlistAuto)
+          if (!first.length) warn('Kênh chưa có danh sách phát nào để tự chọn.')
+          for (const [x, i] of first) await tick(i, x.name)
+        }
+        await page.click({ ...LABELS.done, within })
+        await page.waitGone(box)
+        if (ticked) changed.push('playlists')
+      })
+    }
+  },
+  paidPromotion: async (page, c) => {
+    const { t, soft, log, warn, changed, title, videoId, channelName, video, now, lang } = c
+    if (t.paidPromotion !== 'keep') {
+      await soft('Nội dung được trả tiền để quảng cáo', async () => {
+        await markSection(page, LABELS.paid, 'paid', SEL.radio)
+        if (await pickRadio(page, { ...(t.paidPromotion === 'yes' ? LABELS.paidYes : LABELS.paidNo), within: sec('paid') })) changed.push('paidPromotion')
+      })
+    }
+  },
+  ai: async (page, c) => {
+    const { t, soft, log, warn, changed, title, videoId, channelName, video, now, lang } = c
+    if (t.ai !== 'keep') {
+      await soft('Sử dụng AI', async () => {
+        await markSection(page, LABELS.ai, 'ai', SEL.radio)
+        if (await pickRadio(page, { ...(t.ai === 'yes' ? LABELS.aiYes : LABELS.aiNo), within: sec('ai') })) changed.push('ai')
+      })
+    }
+  },
+  tags: async (page, c) => {
+    const { t, soft, log, warn, changed, title, videoId, channelName, video, now, lang } = c
+    const tt = c.extraTags && c.extraTags.length ? { ...t, extraTags: [...c.extraTags, ...t.extraTags] } : t
+    const plan = tagsToAdd([], tt, title)
+    if (plan.add.length) {
+      await soft('Thẻ', async () => {
+        await page.waitFor({ selector: SEL.tagInput })
+        const have = await page.eval((s) => window.__ya.find({ selector: s, hidden: true }, true).map((e) => String(e.innerText || e.textContent || '').trim()), SEL.chip)
+        const { add, skipped } = tagsToAdd(have, tt, title)
+        for (const s of skipped) warn(`Bỏ thẻ "${s}" vì vượt giới hạn 500 ký tự.`)
+        const hasChip = (tag, timeout) => page.until((s, want) => window.__ya.find({ selector: s, hidden: true }, true).some((e) => window.__ya.norm(e.innerText || e.textContent) === want), [SEL.chip, norm(tag)], { what: `thẻ "${tag}"`, timeout })
+        for (const tag of add) {
+          // Studio chi tao the khi BAM Enter (hoac phim dau phay); dau phay trong chu dan vao khong tach the.
+          await page.type({ selector: SEL.tagInput }, tag, { clear: false })
+          await page.press('Enter')
+          try { await hasChip(tag, 4000) } catch (_) {
+            await page.press(',')
+            await hasChip(tag, 8000)
+          }
+        }
+        if (add.length) changed.push('tags')
+      })
+    }
+  },
+  language: async (page, c) => {
+    const { t, soft, log, warn, changed, title, videoId, channelName, video, now, lang } = c
+    if (t.language) {
+      await soft('Ngôn ngữ', async () => {
+        for (const lab of [LABELS.videoLanguage, LABELS.titleLanguage]) {
+          const r = await pickOption(page, lab, optionNames('language', t.language))
+          if (r === 'changed') changed.push('language')
+          if (r === 'locked') warn(`Ô "${lab.text}" bị khóa, giữ nguyên.`)
+        }
+      })
+    }
+  },
+  recordingDate: async (page, c) => {
+    const { t, soft, log, warn, changed, title, videoId, channelName, video, now, lang } = c
+    const recDate = t.recordingDate === 'keep' ? null : c.recDate || recordingDateFor(t, video, now)
+    if (t.recordingDate === 'publish' && !recDate) warn('Không đọc được ngày đăng video, giữ nguyên ngày quay.')
+    if (recDate) {
+      await soft('Ngày quay', async () => {
+        const want = fmtStudioDate(recDate, lang)
+        const wants = [fmtStudioDate(recDate, 'vi'), fmtStudioDate(recDate, 'en')].map(norm)
+        await page.waitFor(LABELS.recDate)
+        const info = await triggerInfo(page, LABELS.recDate)
+        if (info.lines.some((l) => wants.includes(norm(l)))) return
+        const shown = (timeout) => page.until((t, sel, wants) => {
+          const el = window.__ya.one(t)
+          const tr = el && (el.closest(sel) || el)
+          return tr && String(tr.innerText || '').split('\n').some((l) => wants.includes(window.__ya.norm(l)))
+        }, [LABELS.recDate, SEL.trigger, wants], { what: `ngày quay "${want}"`, timeout })
+        await page.click(LABELS.recDate)
+        // lich that (ngay-quay-lich.html): ytcp-date-picker > o "Nhập ngày" (tp-yt-paper-input#textbox) + lich cuon theo thang
+        // (ytcp-date-picker co kich thuoc 0: hop thoai ben trong la position: fixed -> cho o nhap, khong cho the cha)
+        await page.waitFor({ selector: c.dateInput || SEL.dateInput })
+        await page.type({ selector: c.dateInput || SEL.dateInput }, want)
+        await page.press('Enter')
+        let typed = await shown(1500).then(() => true, () => false)
+        if (!typed) {
+          // o ngay nam trong <form id="form">: phim Enter gui qua sendInputEvent khong phai luc nao cung "submit" form
+          await page.eval((s) => { const f = window.__ya.one({ selector: s.datePicker + ' form', hidden: true }); if (f && f.requestSubmit) f.requestSubmit() }, SEL)
+          typed = await shown(2000).then(() => true, () => false)
+        }
+        if (!typed) {
+          // go chu khong an: bam ngay tren lich nhu nguoi dung (video quay: bam "hom nay")
+          const ok = await pickCalendarDay(page, recDate)
+          if (!ok) throw new StepError(`Không chọn được ngày ${want} trên lịch.`, page.step)
+          await shown()
+        }
+        changed.push('recordingDate')
+      })
+    }
+  },
+  location: async (page, c) => {
+    const { t, soft, log, warn, changed, title, videoId, channelName, video, now, lang } = c
+    if (t.location) {
+      await soft('Vị trí video', async () => {
+        await markSection(page, LABELS.location, 'loc', 'input')
+        const inp = { selector: 'input', within: sec('loc') }
+        const before = String((await page.value(inp)) || '')
+        if (norm(before) === norm(t.location)) return
+        await page.type(inp, t.location)
+        let idx
+        try {
+          idx = await page.until((loc, s) => {
+            const opts = window.__ya.find({ selector: s.option, within: s.listbox }, true)
+            const i = opts.findIndex((o) => {
+              const b = o.querySelector('b, .main-text, #main-text')
+              return window.__ya.norm(b ? b.innerText : String(o.innerText || '').split('\n')[0]) === loc
+            })
+            return i >= 0 ? String(i) : ''
+          }, [norm(t.location), SEL], { what: `gợi ý vị trí "${t.location}"`, timeout: Math.max(page.timeout, 10000) })
+        } catch (e) {
+          await page.press('Escape')
+          await page.type(inp, before) // tra lai vi tri cu, khong de chu go do trong o
+          await page.press('Escape')
+          warn(`Không thấy "${t.location}" trong gợi ý vị trí, giữ nguyên vị trí.`)
+          return
+        }
+        await page.click({ selector: SEL.option, within: SEL.listbox, nth: Number(idx) })
+        await page.until((t) => window.__ya.norm(window.__ya.value(t)) !== '', [inp], { what: 'vị trí được chọn' })
+        changed.push('location')
+      })
+    }
+  },
+  license: async (page, c) => {
+    const { t, soft, log, warn, changed, title, videoId, channelName, video, now, lang } = c
+    if (t.license !== 'keep') {
+      await soft('Giấy phép', async () => {
+        await markSection(page, LABELS.license, 'lic', SEL.trigger)
+        const r = await pickOption(page, { selector: SEL.trigger, within: sec('lic') }, optionNames('license', t.license))
+        if (r === 'changed') changed.push('license')
+        if (r === 'locked') warn('Giấy phép bị khóa trên video này (Studio không cho đổi), giữ nguyên.')
+      })
+    }
+  },
+  embeddable: async (page, c) => {
+    const { t, soft, log, warn, changed, title, videoId, channelName, video, now, lang } = c
+    if (t.embeddable !== 'keep') {
+      await soft('Cho phép nhúng', async () => {
+        if (await setCheckbox(page, LABELS.embed, t.embeddable === 'yes')) changed.push('embeddable')
+      })
+    }
+  },
+  remix: async (page, c) => {
+    const { t, soft, log, warn, changed, title, videoId, channelName, video, now, lang } = c
+    if (t.remix !== 'keep') {
+      await soft('Phối lại cho Shorts', async () => {
+        await markSection(page, LABELS.remix, 'remix', SEL.radio)
+        const lab = { all: LABELS.remixAll, audio: LABELS.remixAudio, none: LABELS.remixNone }[t.remix]
+        if (await pickRadio(page, { ...lab, within: sec('remix') })) changed.push('remix')
+      })
+    }
+  },
+  category: async (page, c) => {
+    const { t, soft, log, warn, changed, title, videoId, channelName, video, now, lang } = c
+    if (t.category !== 'keep') {
+      await soft('Danh mục', async () => {
+        await markSection(page, LABELS.category, 'cat', SEL.trigger)
+        if ((await pickOption(page, { selector: SEL.trigger, within: sec('cat') }, optionNames('category', t.category))) === 'changed') changed.push('category')
+      })
+    }
+  },
+  comments: async (page, c) => {
+    const { t, soft, log, warn, changed, title, videoId, channelName, video, now, lang } = c
+    if (t.comments !== 'keep') {
+      await soft('Bình luận', async () => {
+        await markSection(page, LABELS.commentsSection, 'cmt', SEL.trigger)
+        const want = optionNames('comments', t.comments)
+        if ((await pickOption(page, { ...LABELS.comments, within: sec('cmt') }, want)) === 'changed') changed.push('comments')
+      })
+    }
+  },
+  endScreen: async (page, c) => {
+    const { t, soft, log, warn, changed, title, videoId, channelName, video, now, lang } = c
+    if (t.endScreen === 'latest') {
+      await soft('Màn hình kết thúc', async () => {
+        if (c.openEndScreen) await c.openEndScreen()
+        else await page.click(LABELS.endScreen)
+        await markDialog(page, LABELS.esEditor, 'es', { timeout: Math.max(page.timeout, 20000) })
+        // trinh chinh tai cham: cho nut "Thanh phan" roi moi xem co o mau khong
+        await page.waitFor({ ...LABELS.esElements, within: sec('es') }, { timeout: Math.max(page.timeout, 30000) })
+        await sleep(500)
+        const tile = { ...LABELS.esLatest, within: sec('es') }
+        if (!(await page.has(tile))) {
+          // khong co o mau = video da co man hinh ket thuc: coi nhu xong
+          log('info', 'Màn hình kết thúc: video đã có màn hình kết thúc, giữ nguyên.')
+          await page.click({ ...LABELS.esCancel, within: sec('es') })
+          await page.waitGone({ selector: sec('es') })
+          return
+        }
+        await page.click(tile)
+        const save = { ...LABELS.save, within: sec('es') }
+        await page.until((t) => {
+          const el = window.__ya.one(t)
+          const b = el && (el.closest('button, [role=button], ytcp-button') || el)
+          return b && b.getAttribute('aria-disabled') !== 'true' && !b.hasAttribute('disabled')
+        }, [save], { what: 'nút "Lưu" của màn hình kết thúc' })
+        await page.click(save)
+        await page.waitGone({ selector: sec('es') }, { timeout: Math.max(page.timeout, 30000) })
+        changed.push('endScreen')
+      })
+    }
+  },
+}
+const FIELD_ORDER = Object.keys(FIELDS)
+
 // ---- (b) toi uu trang Chi tiet video -------------------------------------------
 async function optimizeVideo(page, videoId, template, { urls, log = () => {}, onStep = () => {}, video = {}, now = new Date(), channelName = '' } = {}) {
   const t = normalizeTemplate(template)
@@ -344,235 +623,17 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
   })
   const title = String((await page.text({ selector: SEL.title })) || '').trim()
 
-  // Mo ta: chi dien khi video CHUA co mo ta; da co thi giu nguyen.
-  if (t.description) {
-    await soft('Mô tả', async () => {
-      const box = { selector: SEL.desc }
-      await page.waitFor(box)
-      if (String((await page.text(box)) || '').trim()) return log('info', 'Video đã có mô tả: giữ nguyên.')
-      const text = renderComment(t.description, { tieu_de: title, link: `https://youtu.be/${videoId}`, ten_kenh: channelName })
-      const fit = Buffer.byteLength(text) <= 5000 ? text : Buffer.from(text).subarray(0, 5000).toString().replace(/\uFFFD+$/, '')
-      await page.type(box, fit, { clear: false })
-      await page.until((s) => String((window.__ya.one({ selector: s }) || {}).innerText || '').trim().length > 0, [SEL.desc], { what: 'mô tả được điền' })
-      changed.push('description')
-    })
+  const c = { t, title, videoId, channelName, video, now, lang: 'vi', log, warn, changed, soft }
+  for (const k of FIELD_ORDER) {
+    if (k === 'paidPromotion' && !c.more) {
+      await step('Hiện thêm', () => openMore(page))
+      // Studio tieng Anh: cac o chon tim theo ma co dinh, chu tieng Anh; ngay viet kieu "Oct 27, 2026"
+      c.lang = (await page.has(LABELS.english)) ? 'en' : 'vi'
+      if (c.lang === 'en') log('info', 'YouTube Studio của tài khoản này đang dùng tiếng Anh.')
+      c.more = true
+    }
+    await FIELDS[k](page, c)
   }
-
-  if (t.playlists.length || t.playlistAuto) {
-    await soft('Danh sách phát', async () => {
-      await markSection(page, LABELS.playlists, 'pl', SEL.trigger)
-      await page.click({ selector: SEL.trigger, within: sec('pl') })
-      const box = { selector: SEL.plBox, within: SEL.dialogs }
-      await page.waitFor(box)
-      const items = await playlistItems(page)
-      let ticked = 0
-      const tick = async (i, what) => {
-        if (items[i].on) return
-        await page.click({ ...box, nth: i })
-        await page.until((b, i) => { const el = window.__ya.find(b, true)[i]; return el && el.getAttribute('aria-checked') === 'true' }, [box, i], { what: `danh sách phát "${what}" được tích` })
-        items[i].on = true
-        ticked++
-      }
-      for (const want of t.playlists) {
-        // mau ghi ten (tich moi danh sach trung ten) hoac ID "PL..." (dung mot danh sach)
-        const hits = items.map((x, i) => [x, i]).filter(([x]) => x.name && (norm(x.name) === norm(want) || (x.id && x.id === want)))
-        if (!hits.length) { warn(`Không thấy danh sách phát "${want}" trong kênh.`); continue }
-        for (const [, i] of hits) await tick(i, want)
-      }
-      // tu chon N danh sach phat dau tien (da tich san van tinh vao N)
-      if (t.playlistAuto) {
-        const first = items.map((x, i) => [x, i]).filter(([x]) => x.name).slice(0, t.playlistAuto)
-        if (!first.length) warn('Kênh chưa có danh sách phát nào để tự chọn.')
-        for (const [x, i] of first) await tick(i, x.name)
-      }
-      await page.click({ ...LABELS.done, within: SEL.dialogs })
-      await page.waitGone(box)
-      if (ticked) changed.push('playlists')
-    })
-  }
-
-  await step('Hiện thêm', () => openMore(page))
-  // Studio tieng Anh: cac o chon tim theo ma co dinh, chu tieng Anh; ngay viet kieu "Oct 27, 2026"
-  const lang = (await page.has(LABELS.english)) ? 'en' : 'vi'
-  if (lang === 'en') log('info', 'YouTube Studio của tài khoản này đang dùng tiếng Anh.')
-
-  if (t.paidPromotion !== 'keep') {
-    await soft('Nội dung được trả tiền để quảng cáo', async () => {
-      await markSection(page, LABELS.paid, 'paid', SEL.radio)
-      if (await pickRadio(page, { ...(t.paidPromotion === 'yes' ? LABELS.paidYes : LABELS.paidNo), within: sec('paid') })) changed.push('paidPromotion')
-    })
-  }
-
-  if (t.ai !== 'keep') {
-    await soft('Sử dụng AI', async () => {
-      await markSection(page, LABELS.ai, 'ai', SEL.radio)
-      if (await pickRadio(page, { ...(t.ai === 'yes' ? LABELS.aiYes : LABELS.aiNo), within: sec('ai') })) changed.push('ai')
-    })
-  }
-
-  const plan = tagsToAdd([], t, title)
-  if (plan.add.length) {
-    await soft('Thẻ', async () => {
-      await page.waitFor({ selector: SEL.tagInput })
-      const have = await page.eval((s) => window.__ya.find({ selector: s, hidden: true }, true).map((e) => String(e.innerText || e.textContent || '').trim()), SEL.chip)
-      const { add, skipped } = tagsToAdd(have, t, title)
-      for (const s of skipped) warn(`Bỏ thẻ "${s}" vì vượt giới hạn 500 ký tự.`)
-      const hasChip = (tag, timeout) => page.until((s, want) => window.__ya.find({ selector: s, hidden: true }, true).some((e) => window.__ya.norm(e.innerText || e.textContent) === want), [SEL.chip, norm(tag)], { what: `thẻ "${tag}"`, timeout })
-      for (const tag of add) {
-        // Studio chi tao the khi BAM Enter (hoac phim dau phay); dau phay trong chu dan vao khong tach the.
-        await page.type({ selector: SEL.tagInput }, tag, { clear: false })
-        await page.press('Enter')
-        try { await hasChip(tag, 4000) } catch (_) {
-          await page.press(',')
-          await hasChip(tag, 8000)
-        }
-      }
-      if (add.length) changed.push('tags')
-    })
-  }
-
-  if (t.language) {
-    await soft('Ngôn ngữ', async () => {
-      for (const lab of [LABELS.videoLanguage, LABELS.titleLanguage]) {
-        const r = await pickOption(page, lab, optionNames('language', t.language))
-        if (r === 'changed') changed.push('language')
-        if (r === 'locked') warn(`Ô "${lab.text}" bị khóa, giữ nguyên.`)
-      }
-    })
-  }
-
-  const recDate = recordingDateFor(t, video, now)
-  if (t.recordingDate === 'publish' && !recDate) warn('Không đọc được ngày đăng video, giữ nguyên ngày quay.')
-  if (recDate) {
-    await soft('Ngày quay', async () => {
-      const want = fmtStudioDate(recDate, lang)
-      const wants = [fmtStudioDate(recDate, 'vi'), fmtStudioDate(recDate, 'en')].map(norm)
-      await page.waitFor(LABELS.recDate)
-      const info = await triggerInfo(page, LABELS.recDate)
-      if (info.lines.some((l) => wants.includes(norm(l)))) return
-      const shown = (timeout) => page.until((t, sel, wants) => {
-        const el = window.__ya.one(t)
-        const tr = el && (el.closest(sel) || el)
-        return tr && String(tr.innerText || '').split('\n').some((l) => wants.includes(window.__ya.norm(l)))
-      }, [LABELS.recDate, SEL.trigger, wants], { what: `ngày quay "${want}"`, timeout })
-      await page.click(LABELS.recDate)
-      // lich that (ngay-quay-lich.html): ytcp-date-picker > o "Nhập ngày" (tp-yt-paper-input#textbox) + lich cuon theo thang
-      // (ytcp-date-picker co kich thuoc 0: hop thoai ben trong la position: fixed -> cho o nhap, khong cho the cha)
-      await page.waitFor({ selector: SEL.dateInput })
-      await page.type({ selector: SEL.dateInput }, want)
-      await page.press('Enter')
-      let typed = await shown(1500).then(() => true, () => false)
-      if (!typed) {
-        // o ngay nam trong <form id="form">: phim Enter gui qua sendInputEvent khong phai luc nao cung "submit" form
-        await page.eval((s) => { const f = window.__ya.one({ selector: s.datePicker + ' form', hidden: true }); if (f && f.requestSubmit) f.requestSubmit() }, SEL)
-        typed = await shown(2000).then(() => true, () => false)
-      }
-      if (!typed) {
-        // go chu khong an: bam ngay tren lich nhu nguoi dung (video quay: bam "hom nay")
-        const ok = await pickCalendarDay(page, recDate)
-        if (!ok) throw new StepError(`Không chọn được ngày ${want} trên lịch.`, page.step)
-        await shown()
-      }
-      changed.push('recordingDate')
-    })
-  }
-
-  if (t.location) {
-    await soft('Vị trí video', async () => {
-      await markSection(page, LABELS.location, 'loc', 'input')
-      const inp = { selector: 'input', within: sec('loc') }
-      const before = String((await page.value(inp)) || '')
-      if (norm(before) === norm(t.location)) return
-      await page.type(inp, t.location)
-      let idx
-      try {
-        idx = await page.until((loc, s) => {
-          const opts = window.__ya.find({ selector: s.option, within: s.listbox }, true)
-          const i = opts.findIndex((o) => {
-            const b = o.querySelector('b, .main-text, #main-text')
-            return window.__ya.norm(b ? b.innerText : String(o.innerText || '').split('\n')[0]) === loc
-          })
-          return i >= 0 ? String(i) : ''
-        }, [norm(t.location), SEL], { what: `gợi ý vị trí "${t.location}"`, timeout: Math.max(page.timeout, 10000) })
-      } catch (e) {
-        await page.press('Escape')
-        await page.type(inp, before) // tra lai vi tri cu, khong de chu go do trong o
-        await page.press('Escape')
-        warn(`Không thấy "${t.location}" trong gợi ý vị trí, giữ nguyên vị trí.`)
-        return
-      }
-      await page.click({ selector: SEL.option, within: SEL.listbox, nth: Number(idx) })
-      await page.until((t) => window.__ya.norm(window.__ya.value(t)) !== '', [inp], { what: 'vị trí được chọn' })
-      changed.push('location')
-    })
-  }
-
-  if (t.license !== 'keep') {
-    await soft('Giấy phép', async () => {
-      await markSection(page, LABELS.license, 'lic', SEL.trigger)
-      const r = await pickOption(page, { selector: SEL.trigger, within: sec('lic') }, optionNames('license', t.license))
-      if (r === 'changed') changed.push('license')
-      if (r === 'locked') warn('Giấy phép bị khóa trên video này (Studio không cho đổi), giữ nguyên.')
-    })
-  }
-
-  if (t.embeddable !== 'keep') {
-    await soft('Cho phép nhúng', async () => {
-      if (await setCheckbox(page, LABELS.embed, t.embeddable === 'yes')) changed.push('embeddable')
-    })
-  }
-
-  if (t.remix !== 'keep') {
-    await soft('Phối lại cho Shorts', async () => {
-      await markSection(page, LABELS.remix, 'remix', SEL.radio)
-      const lab = { all: LABELS.remixAll, audio: LABELS.remixAudio, none: LABELS.remixNone }[t.remix]
-      if (await pickRadio(page, { ...lab, within: sec('remix') })) changed.push('remix')
-    })
-  }
-
-  if (t.category !== 'keep') {
-    await soft('Danh mục', async () => {
-      await markSection(page, LABELS.category, 'cat', SEL.trigger)
-      if ((await pickOption(page, { selector: SEL.trigger, within: sec('cat') }, optionNames('category', t.category))) === 'changed') changed.push('category')
-    })
-  }
-
-  if (t.comments !== 'keep') {
-    await soft('Bình luận', async () => {
-      await markSection(page, LABELS.commentsSection, 'cmt', SEL.trigger)
-      const want = optionNames('comments', t.comments)
-      if ((await pickOption(page, { ...LABELS.comments, within: sec('cmt') }, want)) === 'changed') changed.push('comments')
-    })
-  }
-
-  if (t.endScreen === 'latest') {
-    await soft('Màn hình kết thúc', async () => {
-      await page.click(LABELS.endScreen)
-      await markDialog(page, LABELS.esEditor, 'es', { timeout: Math.max(page.timeout, 20000) })
-      // trinh chinh tai cham: cho nut "Thanh phan" roi moi xem co o mau khong
-      await page.waitFor({ ...LABELS.esElements, within: sec('es') }, { timeout: Math.max(page.timeout, 30000) })
-      await sleep(500)
-      const tile = { ...LABELS.esLatest, within: sec('es') }
-      if (!(await page.has(tile))) {
-        // khong co o mau = video da co man hinh ket thuc: coi nhu xong
-        log('info', 'Màn hình kết thúc: video đã có màn hình kết thúc, giữ nguyên.')
-        await page.click({ ...LABELS.esCancel, within: sec('es') })
-        await page.waitGone({ selector: sec('es') })
-        return
-      }
-      await page.click(tile)
-      const save = { ...LABELS.save, within: sec('es') }
-      await page.until((t) => {
-        const el = window.__ya.one(t)
-        const b = el && (el.closest('button, [role=button], ytcp-button') || el)
-        return b && b.getAttribute('aria-disabled') !== 'true' && !b.hasAttribute('disabled')
-      }, [save], { what: 'nút "Lưu" của màn hình kết thúc' })
-      await page.click(save)
-      await page.waitGone({ selector: sec('es') }, { timeout: Math.max(page.timeout, 30000) })
-      changed.push('endScreen')
-    })
-  }
-
   let saved = false
   await step('Lưu', async () => {
     await page.waitFor(LABELS.save)
@@ -1043,3 +1104,5 @@ async function watchTasks(page, videoId, text, { urls, log = () => {}, onStep = 
 }
 
 module.exports = { LABELS, SEL, WATCH, listVideos, optimizeVideo, inspectVideo, commentAndPin, _t: { markSection, markDialog, triggerInfo, isChecked, isEnabled, sec, playlistItems, READ, scanThreads, commentIdentity } }
+// dung lai trong hop thoai tai video len (src/flows/upload.js): cung cac o cua trang Chi tiet video
+Object.assign(module.exports._t, { pickRadio, pickOption, setCheckbox, openMore, pickCalendarDay, FIELDS, FIELD_ORDER })
