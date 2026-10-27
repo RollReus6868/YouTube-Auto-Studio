@@ -14,6 +14,25 @@ const STUDIO_LANGUAGES = [
   'Tiếng Bồ Đào Nha (Brazil)', 'Tiếng Đức', 'Tiếng Nhật', 'Tiếng Hàn', 'Tiếng Trung (Giản thể)', 'Tiếng Thái', 'Tiếng Hindi', 'Tiếng Indonesia',
 ]
 
+// Ten tieng Anh (Studio giao dien tieng Anh) cho cung cac muc tren.
+const CATEGORY_NAMES_EN = {
+  1: 'Film & Animation', 2: 'Autos & Vehicles', 10: 'Music', 15: 'Pets & Animals', 17: 'Sports',
+  19: 'Travel & Events', 20: 'Gaming', 22: 'People & Blogs', 23: 'Comedy', 24: 'Entertainment',
+  25: 'News & Politics', 26: 'Howto & Style', 27: 'Education', 28: 'Science & Technology',
+  29: 'Nonprofits & Activism',
+}
+const LANGUAGE_EN = {
+  'Tiếng Việt': 'Vietnamese', 'Tiếng Anh': 'English', 'Tiếng Anh (Hoa Kỳ)': 'English (United States)',
+  'Tiếng Anh (Vương quốc Anh)': 'English (United Kingdom)', 'Tiếng Tây Ban Nha': 'Spanish', 'Tiếng Pháp': 'French',
+  'Tiếng Bồ Đào Nha (Brazil)': 'Portuguese (Brazil)', 'Tiếng Đức': 'German', 'Tiếng Nhật': 'Japanese', 'Tiếng Hàn': 'Korean',
+  'Tiếng Trung (Giản thể)': 'Chinese (Simplified)', 'Tiếng Thái': 'Thai', 'Tiếng Hindi': 'Hindi', 'Tiếng Indonesia': 'Indonesian',
+}
+// Lua chon dang radio / dropdown: [tieng Viet, tieng Anh]
+const OPTION_NAMES = {
+  license: { youtube: ['Giấy phép chuẩn của YouTube', 'Standard YouTube License'], creativeCommon: ['Creative Commons - Ghi công', 'Creative Commons - Attribution'] },
+  comments: { on: ['Bật', 'On'], pause: ['Tạm dừng', 'Pause'], off: ['Tắt', 'Off'] },
+}
+
 const ONE_OF = {
   paidPromotion: ['keep', 'yes', 'no'],
   ai: ['keep', 'yes', 'no'],
@@ -53,6 +72,7 @@ function defaultTemplate() {
   }
 }
 
+const lc = (s) => String(s || '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()
 const list = (v) => (Array.isArray(v) ? v : String(v || '').split(/[,\n]/)).map((t) => String(t).replace(/\s+/g, ' ').trim()).filter(Boolean)
 
 function normalizeTemplate(t) {
@@ -140,9 +160,27 @@ function tagsToAdd(existing, template, title) {
   return { add, skipped }
 }
 
-// Ngay kieu Studio tieng Viet: "26 thg 10, 2026"
-const fmtStudioDate = (d) => `${d.getDate()} thg ${d.getMonth() + 1}, ${d.getFullYear()}`
+// Ngay kieu Studio: tieng Viet "26 thg 10, 2026" | tieng Anh (lang 'en') "Oct 26, 2026"
 const MONTHS_EN = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+const MONTHS_EN_FULL = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
+const cap = (w) => w[0].toUpperCase() + w.slice(1)
+function fmtStudioDate(d, lang = 'vi') {
+  if (lang === 'en') return `${cap(MONTHS_EN[d.getMonth()])} ${d.getDate()}, ${d.getFullYear()}`
+  return `${d.getDate()} thg ${d.getMonth() + 1}, ${d.getFullYear()}`
+}
+// Nhan (aria-label) khoi thang trong lich chon ngay: "thg 10 2026" | "Oct 2026" | "October 2026"
+const calendarMonthLabels = (d) => [`thg ${d.getMonth() + 1} ${d.getFullYear()}`, `${cap(MONTHS_EN[d.getMonth()])} ${d.getFullYear()}`, `${cap(MONTHS_EN_FULL[d.getMonth()])} ${d.getFullYear()}`]
+// Nhan thang -> so thang (nam*12 + thang 0..11) de so sanh / lui toi; khong doc duoc -> null
+function parseMonthLabel(s) {
+  s = String(s || '').normalize('NFC').trim()
+  let m = /(?:thg|tháng)\s*(\d{1,2})(?:\s*,?\s*năm)?\s*,?\s*(\d{4})/i.exec(s)
+  if (m && +m[1] >= 1 && +m[1] <= 12) return +m[2] * 12 + (+m[1] - 1)
+  m = /\b([A-Za-z]{3,})\.?,?\s+(\d{4})\b/.exec(s)
+  if (!m) return null
+  const w = m[1].toLowerCase()
+  const i = MONTHS_EN_FULL.findIndex((x) => x.startsWith(w)) // "Sep" | "Sept" | "September"
+  return i < 0 ? null : +m[2] * 12 + i
+}
 // "25 thg 10, 2026" | "Oct 25, 2026" | "25/10/2026" -> Date (gio dia phuong) hoac null
 function parseStudioDate(s) {
   s = String(s || '').trim()
@@ -156,6 +194,21 @@ function parseStudioDate(s) {
   const d = new Date(year, mon - 1, day)
   return d.getMonth() === mon - 1 && d.getDate() === day ? d : null
 }
+
+// Cac chu chap nhan duoc [vi, en] cho lua chon mau muon chon trong Studio (giao dien Viet hoac Anh).
+// kind: 'category' (key = id) | 'language' (key = ten tieng Viet, ten tieng Anh cung duoc) | 'license' | 'comments'
+function optionNames(kind, key) {
+  if (kind === 'category') return CATEGORY_NAMES[key] ? [CATEGORY_NAMES[key], CATEGORY_NAMES_EN[key]] : []
+  if (kind === 'language') {
+    const k = String(key || '').trim()
+    if (!k) return []
+    const vi = Object.keys(LANGUAGE_EN).find((x) => lc(x) === lc(k) || lc(LANGUAGE_EN[x]) === lc(k))
+    return vi ? [vi, LANGUAGE_EN[vi]] : [k] // ngon ngu ngoai danh sach: dung chu nguoi dung go
+  }
+  const m = OPTION_NAMES[kind]
+  return m && m[key] ? [...m[key]] : []
+}
+const sameAny = (v, names) => names.some((n) => lc(n) === lc(v))
 
 // Ngay quay can dat (Date) hoac null = giu nguyen. video.date: ngay trong danh sach Noi dung.
 function recordingDateFor(template, video, now = new Date()) {
@@ -180,6 +233,22 @@ function touchedFields(template) {
   return out
 }
 
+// Che do hien thi trong cot "Che do hien thi" cua trang Noi dung (Studio Viet hoac Anh):
+// 'public' | 'unlisted' | 'private' | 'scheduled' | 'premiere' | '' (khong biet)
+const VISIBILITY = {
+  public: ['công khai', 'public'],
+  unlisted: ['không công khai', 'unlisted'],
+  private: ['riêng tư', 'private'],
+  scheduled: ['đã lên lịch', 'lên lịch', 'scheduled'],
+  premiere: ['công chiếu', 'đang công chiếu', 'đã công chiếu', 'sắp công chiếu', 'premiere', 'premiered', 'premieres', 'premiering'],
+}
+function visibilityKind(s) {
+  const v = lc(s)
+  return Object.keys(VISIBILITY).find((k) => VISIBILITY[k].includes(v)) || ''
+}
+// Binh luan duoc tren trang xem: cong khai / khong cong khai; chua biet che do (chuoi rong) thi thu
+const canCommentVisibility = (s) => !lc(s) || ['public', 'unlisted'].includes(visibilityKind(s))
+
 // ---- optimized.json: { [channelKey]: { [videoId]: { at, title, pinned, warnings } } } ----
 function markOptimized(db, channelKey, videoId, info = {}) {
   const out = { ...(db || {}) }
@@ -194,7 +263,6 @@ const isOptimized = (db, channelKey, videoId) => !!(db && db[channelKey] && db[c
 //   tags: [..], language: [ngon ngu video, ngon ngu tieu de], recordingDate/location/category: chu,
 //   license: { value: 'youtube'|'creativeCommon'|'', locked }, embeddable: bool, comments: 'on'|'pause'|'off'|''
 // Tra ve { missing, filled, unknown } (ten muc cua mau). Muc 'keep' bo qua.
-const lc = (s) => String(s || '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()
 function playlistsFilled(p, t) {
   if (!p) return undefined
   if (p.items) {
@@ -218,13 +286,13 @@ function compareFields(read, template, { title = '' } = {}) {
   if (t.playlists.length || t.playlistAuto) add('playlists', playlistsFilled(r.playlists, t))
   for (const k of ['paidPromotion', 'ai', 'remix', 'comments']) if (t[k] !== 'keep') add(k, has(k) ? r[k] === t[k] : undefined)
   if (t.tagsMode !== 'keep' || t.extraTags.length) add('tags', has('tags') ? tagsToAdd(r.tags, t, title).add.length === 0 : undefined)
-  if (t.language) add('language', has('language') ? r.language.every((x) => lc(x) === lc(t.language)) : undefined)
+  if (t.language) add('language', has('language') ? r.language.every((x) => sameAny(x, optionNames('language', t.language))) : undefined)
   if (t.recordingDate !== 'keep') add('recordingDate', has('recordingDate') ? !!String(r.recordingDate).trim() : undefined)
   if (t.location) add('location', has('location') ? !!String(r.location).trim() : undefined)
   // giay phep bi khoa: Studio khong cho doi -> khong tinh la thieu
   if (t.license !== 'keep') add('license', has('license') ? r.license.locked || r.license.value === t.license : undefined)
   if (t.embeddable !== 'keep') add('embeddable', has('embeddable') ? r.embeddable === (t.embeddable === 'yes') : undefined)
-  if (t.category !== 'keep') add('category', has('category') ? lc(r.category) === lc(CATEGORY_NAMES[t.category]) : undefined)
+  if (t.category !== 'keep') add('category', has('category') ? sameAny(r.category, optionNames('category', t.category)) : undefined)
   if (t.endScreen !== 'keep') add('endScreen', has('endScreen') ? !!r.endScreen : undefined) // trang Chi tiet khong cho biet
   const out = { missing: [], filled: [], unknown: [] }
   for (const [k, v] of checks) out[v === true ? 'filled' : v === false ? 'missing' : 'unknown'].push(k)
@@ -232,7 +300,7 @@ function compareFields(read, template, { title = '' } = {}) {
 }
 
 module.exports = {
-  CATEGORY_NAMES, STUDIO_LANGUAGES, COMMENT_VARS, defaultTemplate, normalizeTemplate, templateFor, setTemplate,
+  CATEGORY_NAMES, CATEGORY_NAMES_EN, STUDIO_LANGUAGES, LANGUAGE_EN, optionNames, calendarMonthLabels, parseMonthLabel, visibilityKind, canCommentVisibility, COMMENT_VARS, defaultTemplate, normalizeTemplate, templateFor, setTemplate,
   API_FIELDS, withoutApiFields, presetSeed,
   renderComment, tagsToAdd, tagLength, fmtStudioDate, parseStudioDate, recordingDateFor, touchedFields, markOptimized, isOptimized, compareFields,
 }

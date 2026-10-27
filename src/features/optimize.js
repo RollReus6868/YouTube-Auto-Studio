@@ -5,8 +5,8 @@ const fs = require('fs')
 const { listVideos, optimizeVideo, inspectVideo, commentAndPin } = require('../flows/optimize')
 const ot = require('../optimize-template')
 
-// Binh luan duoc tren trang xem: video cong khai / khong cong khai (rieng tu, len lich thi khong)
-const PUBLIC = /^(công khai|không công khai|public|unlisted)$/i
+// Binh luan duoc tren trang xem: video cong khai / khong cong khai (rieng tu, len lich, cong chieu thi khong).
+// Nhan ca Studio tieng Viet lan tieng Anh (Public / Unlisted / Private / Scheduled / Premiere): xem ot.visibilityKind
 // so video moi nhat se quet (trang Noi dung xep moi nhat truoc); luu o settings.optimizeScanLimit
 const LIMITS = [5, 10, 20, 30, 50]
 const LATEST = 10
@@ -129,7 +129,7 @@ module.exports = (ctx) => {
             const text = ot.renderComment(tpl.comment, { tieu_de: r.title || v.title, link: `https://youtu.be/${v.id}`, ten_kenh: name })
             let c = null
             if (tpl.like || text) {
-              if (!v.visibility || PUBLIC.test(v.visibility)) {
+              if (ot.canCommentVisibility(v.visibility)) {
                 // phan Studio da luu: loi o trang xem video chi la canh bao (chay lai se khong dang trung)
                 try {
                   const ch = channel(key) || {}

@@ -104,6 +104,65 @@ test('quet: so gia tri doc duoc voi mau', () => {
   assert.deepEqual(ot.compareFields({}, ot.defaultTemplate()).unknown.length, 8, 'khong doc duoc gi -> unknown')
 })
 
+test('Studio tieng Anh: ten danh muc / ngon ngu / lua chon', () => {
+  assert.deepEqual(Object.keys(ot.CATEGORY_NAMES_EN), Object.keys(ot.CATEGORY_NAMES), 'cung cac danh muc')
+  assert.deepEqual([22, 27, 1, 2, 10, 15, 17, 19, 20, 23, 24, 25, 26, 28, 29].map((k) => ot.CATEGORY_NAMES_EN[k]), [
+    'People & Blogs', 'Education', 'Film & Animation', 'Autos & Vehicles', 'Music', 'Pets & Animals', 'Sports', 'Travel & Events', 'Gaming',
+    'Comedy', 'Entertainment', 'News & Politics', 'Howto & Style', 'Science & Technology', 'Nonprofits & Activism'])
+  assert.deepEqual(Object.keys(ot.LANGUAGE_EN), ot.STUDIO_LANGUAGES, 'moi ngon ngu deu co ten tieng Anh')
+  assert.deepEqual(['Tiếng Anh (Hoa Kỳ)', 'Tiếng Việt', 'Tiếng Anh', 'Tiếng Anh (Vương quốc Anh)', 'Tiếng Trung (Giản thể)', 'Tiếng Bồ Đào Nha (Brazil)'].map((k) => ot.LANGUAGE_EN[k]),
+    ['English (United States)', 'Vietnamese', 'English', 'English (United Kingdom)', 'Chinese (Simplified)', 'Portuguese (Brazil)'])
+  assert.deepEqual(ot.optionNames('category', '27'), ['Giáo dục', 'Education'])
+  assert.deepEqual(ot.optionNames('category', 22), ['Mọi người và blog', 'People & Blogs'])
+  assert.deepEqual([ot.optionNames('category', 'keep'), ot.optionNames('category', '999')], [[], []])
+  assert.deepEqual(ot.optionNames('language', 'Tiếng Việt'), ['Tiếng Việt', 'Vietnamese'])
+  assert.deepEqual(ot.optionNames('language', ' english (united states) '), ['Tiếng Anh (Hoa Kỳ)', 'English (United States)'], 'go ten tieng Anh cung duoc')
+  assert.deepEqual(ot.optionNames('language', 'Tiếng Ý'), ['Tiếng Ý'], 'ngoai danh sach: giu chu nguoi dung go')
+  assert.deepEqual(ot.optionNames('language', ''), [])
+  assert.deepEqual(ot.optionNames('license', 'youtube'), ['Giấy phép chuẩn của YouTube', 'Standard YouTube License'])
+  assert.deepEqual(ot.optionNames('license', 'creativeCommon'), ['Creative Commons - Ghi công', 'Creative Commons - Attribution'])
+  assert.deepEqual(['on', 'pause', 'off'].map((k) => ot.optionNames('comments', k)), [['Bật', 'On'], ['Tạm dừng', 'Pause'], ['Tắt', 'Off']])
+  assert.deepEqual([ot.optionNames('comments', 'keep'), ot.optionNames('la', 'x')], [[], []])
+  const a = ot.optionNames('comments', 'on')
+  a.push('x')
+  assert.deepEqual(ot.optionNames('comments', 'on'), ['Bật', 'On'], 'tra ve ban sao')
+})
+
+test('Studio tieng Anh: ngay + nhan thang trong lich', () => {
+  assert.equal(ot.fmtStudioDate(new Date(2026, 9, 26), 'vi'), '26 thg 10, 2026')
+  assert.equal(ot.fmtStudioDate(new Date(2026, 9, 26), 'en'), 'Oct 26, 2026')
+  assert.equal(ot.fmtStudioDate(new Date(2026, 0, 5), 'en'), 'Jan 5, 2026', 'ngay khong co so 0 o dau')
+  assert.equal(+ot.parseStudioDate(ot.fmtStudioDate(new Date(2026, 4, 9), 'en')), +new Date(2026, 4, 9))
+  assert.deepEqual(ot.calendarMonthLabels(new Date(2026, 9, 26)), ['thg 10 2026', 'Oct 2026', 'October 2026'])
+  assert.deepEqual(ot.calendarMonthLabels(new Date(2027, 0, 1)), ['thg 1 2027', 'Jan 2027', 'January 2027'])
+  const n = 2026 * 12 + 9
+  assert.deepEqual(['thg 10 2026', 'Oct 2026', 'October 2026', ' october  2026 ', 'tháng 10 năm 2026', 'Oct. 2026'].map(ot.parseMonthLabel), [n, n, n, n, n, n])
+  assert.equal(ot.parseMonthLabel('Sept 2026'), 2026 * 12 + 8)
+  assert.equal(ot.parseMonthLabel('thg 1 1900'), 1900 * 12)
+  for (const d of [new Date(2026, 1, 3), new Date(2025, 11, 31)]) for (const l of ot.calendarMonthLabels(d)) assert.equal(ot.parseMonthLabel(l), d.getFullYear() * 12 + d.getMonth(), l)
+  assert.deepEqual(['', 'thg 13 2026', 'Foo 2026', 'Oct', null].map(ot.parseMonthLabel), [null, null, null, null, null])
+})
+
+test('quet: Studio tieng Anh doc ten danh muc / ngon ngu tieng Anh', () => {
+  const keep = { playlistAuto: 0, paidPromotion: 'keep', ai: 'keep', tagsMode: 'keep', location: '', recordingDate: 'keep', remix: 'keep', endScreen: 'keep' }
+  const t = { ...keep, category: '27', language: 'Tiếng Anh (Hoa Kỳ)' }
+  assert.deepEqual(ot.compareFields({ category: 'Education', language: ['English (United States)', 'english  (united states)'] }, t).filled, ['language', 'category'])
+  assert.deepEqual(ot.compareFields({ category: 'Giáo dục', language: ['Tiếng Anh (Hoa Kỳ)', 'English (United States)'] }, t).filled, ['language', 'category'], 'tron Viet / Anh')
+  assert.deepEqual(ot.compareFields({ category: 'Giáo dục'.normalize('NFD'), language: ['Tiếng Anh (Hoa Kỳ)'.normalize('NFD')] }, t).filled, ['language', 'category'], 'NFD')
+  assert.deepEqual(ot.compareFields({ category: 'Entertainment', language: ['English (United States)', 'English'] }, t).missing, ['language', 'category'])
+  assert.deepEqual(ot.compareFields({ category: 'People & Blogs' }, { ...keep, category: '22' }).filled, ['category'])
+  assert.deepEqual(ot.compareFields({ language: ['English'] }, { ...keep, language: 'English' }).filled, ['language'], 'mau go ten tieng Anh')
+  // giay phep / binh luan da doi ra khoa ('youtube' | 'on' ...) nen khong phu thuoc ngon ngu
+  assert.deepEqual(ot.compareFields({ license: { value: 'youtube', locked: false }, comments: 'pause' }, { ...keep, license: 'youtube', comments: 'pause' }).filled, ['comments', 'license'])
+})
+
+test('che do hien thi trong trang Noi dung (Viet / Anh)', () => {
+  const kinds = ['Công khai', 'Public', 'Không công khai', 'Unlisted', 'Riêng tư', 'Private', 'Đã lên lịch', 'Scheduled', 'Đang công chiếu', 'Premiere', 'Premiered', 'Premieres', ' PUBLIC ', 'Công khai'.normalize('NFD'), '', 'Khác']
+  assert.deepEqual(kinds.map(ot.visibilityKind), ['public', 'public', 'unlisted', 'unlisted', 'private', 'private', 'scheduled', 'scheduled', 'premiere', 'premiere', 'premiere', 'premiere', 'public', 'public', '', ''])
+  assert.deepEqual(kinds.map(ot.canCommentVisibility), [true, true, true, true, false, false, false, false, false, false, false, false, true, true, true, false], 'chi cong khai / khong cong khai (hoac chua biet) moi binh luan')
+  assert.equal(ot.canCommentVisibility(undefined), true)
+})
+
 test('danh dau video da toi uu', () => {
   let db = ot.markOptimized({}, 'UCa', 'v1', { title: 'A', pinned: true })
   db = ot.markOptimized(db, 'UCa', 'v2')
