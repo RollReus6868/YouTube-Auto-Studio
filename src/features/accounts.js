@@ -147,22 +147,25 @@ module.exports = (ctx) => {
 
   // ---- khung Studio hien (bang ben phai) ----------------------------------------------------
   const savePane = () => { ctx.store.save({ studioPane: S.pane }); ctx.push() }
+  // tra ve true khi khung da o dung kenh channelKey
   async function pane({ accountId, channelKey = '' } = {}) {
     const acc = m().get(accountId)
-    if (!acc || S.paneBusy) return
+    if (!acc || S.paneBusy) return false
     S.pane = { accountId, channelKey }
     savePane()
     ctx.studio.use(acc.partition)
     const ch = channelKey && m().find(channelKey)
-    if (!ch) return
+    if (!ch) return false
     S.paneBusy = true
     ctx.push()
+    let ok = false
     try {
       const page = new Page(ctx.studio.wc(), { timeout: 20000, shotDir: ctx.logFile('loi-trang') })
       await page.until(() => document.readyState === 'complete', [], { what: 'YouTube Studio mở xong' }).catch(() => {})
       const r = await flows.switchChannel(page, ch, { urls: ctx.urls })
       m().learn(acc.id, { ucId: r.ucId, name: ch.name, handle: ch.handle })
       S.pane.channelKey = channelKey
+      ok = true
       ctx.log('ok', `Khung Studio: đã chuyển sang kênh "${ch.name}".`)
     } catch (e) {
       ctx.log('error', `Khung Studio: không chuyển được sang kênh "${ch.name}": ${e.message}`)
@@ -170,6 +173,21 @@ module.exports = (ctx) => {
       S.paneBusy = false
       sync()
     }
+    return ok
+  }
+
+  // Mo dia chi Studio (vd trang chinh sua video) trong khung Studio, sau khi chon dung tai khoan + kenh
+  // (nhu nguoi dung chon kenh o o tren dau khung). Studio /video/<id>/edit khong co UC: phai chuyen kenh truoc.
+  async function openUrl({ channelKey, url } = {}) {
+    const ch = channelKey && m().find(channelKey)
+    if (!ch) return ctx.log('warn', `Không có kênh "${channelKey || ''}" ở trang Tài khoản. Bấm "Làm mới kênh" rồi tick kênh cần dùng.`)
+    if (!/^https?:\/\//.test(String(url || ''))) return ctx.log('warn', 'Địa chỉ cần mở không hợp lệ.')
+    if (S.login) return ctx.log('warn', 'Đang đăng nhập trong khung Studio. Bấm "Xong, đóng lại" rồi thử lại.')
+    if (S.paneBusy) return ctx.log('warn', 'Khung Studio đang chuyển kênh, đợi xong rồi thử lại.')
+    const acc = m().get(ch.accountId)
+    if (!(await pane({ accountId: acc.id, channelKey: ch.key }))) return
+    ctx.studio.use(acc.partition, url)
+    ctx.log('info', `Khung Studio: mở ${url} (kênh "${ch.name}").`)
   }
 
   // Khung Studio vua vao kenh ucId: doi chieu voi danh sach kenh
@@ -193,6 +211,7 @@ module.exports = (ctx) => {
     channels: () => m().channels(),
     find: (key) => m().find(key),
     email: (accountId) => (m().get(accountId) || {}).email || '',
+    openUrl: (p) => openUrl(p || {}),
     panePartition: () => { const a = m().get(S.pane.accountId) || m().list_[0]; return a ? a.partition : '' },
   }
   ctx.withChannel = withChannel
@@ -250,6 +269,7 @@ module.exports = (ctx) => {
       sync()
     },
     accounts_pane: (p) => pane(p || {}),
+    accounts_open_url: (p) => openUrl(p || {}),
     // Thu: chuyen sang kenh trong cua so an, doc lai dia chi + ten kenh (de kiem tra ctx.withChannel)
     accounts_try: async (key) => {
       S.debug = { key, busy: true }

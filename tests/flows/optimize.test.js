@@ -37,6 +37,17 @@ module.exports = [
     assert.equal(list[1].id, VID)
   }],
 
+  ['chon so video quet: qua nhieu trang, toi da bang so video co trong kenh', async ({ page, urls }) => {
+    await page.goto(`${urls.studio}/channel/${UC}/videos/upload`)
+    await page.eval(() => localStorage.setItem('opt-pp', '3'))
+    const five = await listVideos(page, UC, { urls, limit: 5 })
+    assert.deepEqual(five.map((v) => v.id), ['Prem0000001', VID, 'LostTribe01', 'NeverProp01', 'Maccabee001'], 'doc sang trang 2, dung 5')
+    const all = await listVideos(page, UC, { urls, limit: 50, maxPages: 10 })
+    assert.equal(all.length, 7, 'kenh chi co 7 video')
+    assert.equal(all[6].id, 'HonorPar001', 'doc ca trang 3')
+    await page.eval(() => localStorage.removeItem('opt-pp'))
+  }],
+
   ['mo ta: video chua co thi dien, da co thi giu nguyen', async ({ page, urls, mock }) => {
     const tpl = { ...KEEP, description: '{tieu_de}\nKênh {ten_kenh}: {link}' }
     const r = await optimizeVideo(page, 'NoDescVid01', tpl, { urls, now: NOW, channelName: 'Dark Bible Study' })
@@ -472,4 +483,45 @@ module.exports.push(['tinh nang: quet doc tung video, chi toi uu video con thieu
   // mo lai trang: giu trang thai cua lan quet / toi uu
   f.commands.optimize_open()
   assert(S.videos.every((v) => v.status === 'done'))
+}])
+
+module.exports.push(['tinh nang: chon so video quet (luu cai dat), bam tieu de mo trang chinh sua video', async ({ page, urls, tmp }) => {
+  const path = require('path')
+  const logs = []
+  const opened = []
+  let saved = { optimizeScanLimit: 20 }
+  const state = { f: {} }
+  const ctx = {
+    state, log: (l, m) => logs.push(`${l} ${m}`), logFile: (n) => path.join(tmp, n), urls, push: () => {},
+    store: { get settings() { return saved }, save: (p) => { saved = { ...saved, ...p } } }, refreshSettings: () => {},
+    stopped: () => false, resetStop: () => {},
+    accounts: {
+      channels: () => [{ key: UC, ucId: UC, name: 'Dark Bible Study', handle: '@DarkBibleStudy999' }],
+      find: (k) => (k === UC ? { key: UC, ucId: UC, name: 'Dark Bible Study' } : null),
+      openUrl: async (p) => { opened.push(p) },
+    },
+    withChannel: async (key, fn) => fn(page),
+  }
+  await page.goto(`${urls.studio}/channel/${UC}/videos/upload`)
+  await page.eval(() => localStorage.setItem('opt-pp', '3'))
+  page.timeout = 4000
+  const f = require('../../src/features/optimize')(ctx)
+  f.start()
+  const S = state.f.optimize
+  assert.equal(S.limit, 20, 'doc tu cai dat')
+  assert.deepEqual(S.limits, [5, 10, 20, 30, 50])
+  f.commands.optimize_limit('abc')
+  assert.deepEqual([S.limit, saved.optimizeScanLimit], [10, 10], 'gia tri la -> mac dinh 10')
+  await f.commands.optimize_list({ channelKey: UC, limit: 5 })
+  assert.equal(saved.optimizeScanLimit, 5, 'luu so video da chon')
+  assert.deepEqual(S.videos.map((v) => v.id), ['Prem0000001', VID, 'LostTribe01', 'NeverProp01', 'Maccabee001'], 'chi 5 video, qua 2 trang')
+  assert.match(logs.join('\n'), /: 5 video/)
+  // mo lai trang: giu so da chon
+  f.commands.optimize_open()
+  assert.equal(S.limit, 5)
+  // bam tieu de: mo trang chinh sua video trong khung Studio, dung kenh
+  await f.commands.optimize_open_video({ channelKey: UC, id: VID })
+  assert.deepEqual(opened, [{ channelKey: UC, url: `${urls.studio}/video/${VID}/edit` }])
+  await f.commands.optimize_open_video({ channelKey: UC, id: '' })
+  assert.equal(opened.length, 1, 'khong ro video thi khong mo')
 }])

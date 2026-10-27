@@ -1,16 +1,19 @@
 // Tinh nang "Toi uu video": quet video da dang cua kenh, toi uu trong Studio theo mau cua kenh,
 // roi Thich + binh luan + ghim tren trang xem video. Nho video da toi uu o optimized.json.
-// Quet: doc 10 video moi nhat, mo tung trang Chi tiet (chi doc) xem con thieu muc nao so voi mau.
+// Quet: doc N video moi nhat (nguoi dung chon, mac dinh 10), mo tung trang Chi tiet (chi doc) xem con thieu muc nao so voi mau.
 const fs = require('fs')
 const { listVideos, optimizeVideo, inspectVideo, commentAndPin } = require('../flows/optimize')
 const ot = require('../optimize-template')
 
 // Binh luan duoc tren trang xem: video cong khai / khong cong khai (rieng tu, len lich thi khong)
 const PUBLIC = /^(công khai|không công khai|public|unlisted)$/i
-const LATEST = 10 // chi quet 10 video moi nhat (trang Noi dung xep moi nhat truoc)
+// so video moi nhat se quet (trang Noi dung xep moi nhat truoc); luu o settings.optimizeScanLimit
+const LIMITS = [5, 10, 20, 30, 50]
+const LATEST = 10
+const limitOf = (n) => (LIMITS.includes(Number(n)) ? Number(n) : LATEST)
 
 module.exports = (ctx) => {
-  const S = ctx.state.f.optimize = { channelKey: '', channels: [], videos: [], busy: false, at: '', templates: {} }
+  const S = ctx.state.f.optimize = { channelKey: '', channels: [], videos: [], busy: false, at: '', templates: {}, limit: LATEST, limits: LIMITS }
   const cache = new Map() // channelKey -> { videos, at }
   const dbFile = () => ctx.logFile('optimized.json')
   const readDb = () => { try { return JSON.parse(fs.readFileSync(dbFile(), 'utf8')) } catch (_) { return {} } }
@@ -24,6 +27,7 @@ module.exports = (ctx) => {
     S.channels = ctx.accounts ? ctx.accounts.channels().map((c) => ({ key: c.key, name: c.name, handle: c.handle || '', ucId: c.ucId || '' })) : []
     if (!S.channelKey && S.channels.length) S.channelKey = S.channels[0].key
     S.templates = templates()
+    S.limit = limitOf(ctx.store && ctx.store.settings.optimizeScanLimit)
     const c = cache.get(S.channelKey)
     S.videos = c ? c.videos : []
     S.at = c ? c.at : ''
@@ -43,17 +47,28 @@ module.exports = (ctx) => {
     return true
   }
 
-  async function list(channelKey) {
-    const key = String(channelKey || S.channelKey || '')
+  function setLimit(n) {
+    const limit = limitOf(n)
+    if (ctx.store && ctx.store.settings.optimizeScanLimit !== limit) ctx.store.save({ optimizeScanLimit: limit })
+    S.limit = limit
+    ctx.push()
+  }
+
+  // p: ma kenh (cu) hoac { channelKey, limit }
+  async function list(p) {
+    const o = p && typeof p === 'object' ? p : { channelKey: p }
+    const key = String(o.channelKey || S.channelKey || '')
+    if (o.limit !== undefined) setLimit(o.limit)
     if (!ready(key)) return
     S.channelKey = key
     S.busy = true
     ctx.push()
     ctx.resetStop()
+    const limit = S.limit
     try {
       const tpl = ot.templateFor(templates(), key)
       await ctx.withChannel(key, async (page) => {
-        const rows = await listVideos(page, ucOf(key), { urls: ctx.urls, log: ctx.log, limit: LATEST })
+        const rows = await listVideos(page, ucOf(key), { urls: ctx.urls, log: ctx.log, limit, maxPages: Math.max(10, Math.ceil(limit / 5)) })
         const db = readDb()
         const prev = (id) => (db[key] && db[key][id]) || {}
         // viec o trang xem video (thich / binh luan / ghim) chua kiem lai duoc o lan toi uu truoc: quet khong doc duoc nen lay tu db
@@ -214,11 +229,21 @@ module.exports = (ctx) => {
     ctx.log('ok', template === null ? 'Kênh này dùng lại mẫu tối ưu mặc định.' : key === 'default' ? 'Đã lưu mẫu tối ưu mặc định.' : `Đã lưu mẫu tối ưu cho kênh ${(channel(key) || {}).name || key}.`)
   }
 
+  // Bam tieu de video: mo trang chinh sua video trong khung Studio cua trang Tai khoan, dung kenh
+  async function openVideo({ channelKey, id } = {}) {
+    const key = String(channelKey || S.channelKey || '')
+    if (!/^[\w-]{6,}$/.test(String(id || ''))) return ctx.log('warn', 'Không rõ video cần mở.')
+    if (!ctx.accounts || !ctx.accounts.openUrl) return ctx.log('warn', 'Chưa có tài khoản Google nào (trang Tài khoản).')
+    await ctx.accounts.openUrl({ channelKey: key, url: `${ctx.urls.studio}/video/${id}/edit` })
+  }
+
   return {
     commands: {
       optimize_open: () => refresh(),
       optimize_select: (key) => { if (!S.busy) { S.channelKey = String(key || ''); refresh() } },
-      optimize_list: (key) => list(key),
+      optimize_list: (p) => list(p),
+      optimize_limit: (n) => setLimit(n),
+      optimize_open_video: (p) => openVideo(p || {}),
       optimize_run: (p) => run(p || {}),
       optimize_template_save: (p) => saveTemplate(p || {}),
     },

@@ -19,7 +19,10 @@ export type OptimizeState = {
   busy: boolean
   at: string
   templates: Templates
+  limit?: number // so video moi nhat se quet (settings.optimizeScanLimit)
+  limits?: number[]
 }
+const LIMITS = [5, 10, 20, 30, 50]
 
 const STATUS: Record<OptVideo['status'], [Tone, string]> = {
   new: ['muted', 'Chưa tối ưu'], scan: ['muted', 'Chờ đọc'], run: ['active', 'Đang tối ưu'], done: ['success', 'Đã tối ưu'], error: ['error', 'Lỗi'],
@@ -31,7 +34,7 @@ const FIELD_VI: Record<string, string> = {
   category: 'danh mục', comments: 'bình luận', description: 'mô tả', endScreen: 'màn hình kết thúc',
 }
 
-function VideoRow({ v, on, toggle, busy }: { v: OptVideo; on: boolean; toggle: () => void; busy: boolean }) {
+function VideoRow({ v, on, toggle, busy, open }: { v: OptVideo; on: boolean; toggle: () => void; busy: boolean; open: () => void }) {
   const [tone, text] = STATUS[v.status]
   const missing = v.status === 'done' && v.missing && v.missing.length ? v.missing : null
   const warn = v.status === 'done' && ((v.warnings && v.warnings.length > 0) || !!missing)
@@ -39,7 +42,13 @@ function VideoRow({ v, on, toggle, busy }: { v: OptVideo; on: boolean; toggle: (
     <li className={cn('flex items-start gap-3 rounded-lg px-2 py-2', on ? 'bg-primary/5' : 'hover:bg-muted/40')}>
       <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-[hsl(var(--primary))]" checked={on} disabled={busy} onChange={toggle} aria-label={`Chọn ${v.title}`} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold" title={v.title}>{v.title}</p>
+        <button
+          type="button"
+          onClick={open}
+          title={`Mở trang chỉnh sửa video trong Tài khoản trình duyệt\n${v.title}`}
+          aria-label={`Mở trang chỉnh sửa video ${v.title}`}
+          className="block max-w-full cursor-pointer truncate text-left text-sm font-semibold underline-offset-2 hover:text-primary hover:underline focus-visible:underline focus-visible:outline-none"
+        >{v.title}</button>
         <p className="truncate text-[11px] text-muted-foreground">
           {[v.visibility, [v.date, v.dateNote].filter(Boolean).join(' · '), `${v.views} lượt xem`, `${v.comments} bình luận`].filter(Boolean).join('  •  ')}
         </p>
@@ -116,12 +125,15 @@ export function OptimizePage({ state, send, go }: PageProps) {
   const allOn = videos.length > 0 && chosen.length === videos.length
   const scanning = s.busy && !videos.some((v) => v.status === 'run')
   const read = videos.filter((v) => v.status !== 'scan').length
+  const limit = s.limit ?? 10
+  // bam tieu de: sang trang Tai khoan, khung Studio chuyen dung kenh roi mo trang chinh sua video
+  const openVideo = (id: string) => { go('accounts'); send('optimize_open_video', { channelKey: s.channelKey, id }) }
   return (
     <>
       <PageHeader
         icon={Wand2}
         title="Tối ưu video"
-        description="Quét 10 video mới nhất, đọc trang Chi tiết của từng video để biết video nào còn thiếu thông tin so với mẫu, rồi tối ưu trong YouTube Studio + thích, bình luận, ghim."
+        description="Quét các video mới nhất (chọn số video), đọc trang Chi tiết của từng video để biết video nào còn thiếu thông tin so với mẫu, rồi tối ưu trong YouTube Studio + thích, bình luận, ghim."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -134,7 +146,17 @@ export function OptimizePage({ state, send, go }: PageProps) {
               {!s.channels.length && <option value="">Chưa có kênh</option>}
               {s.channels.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}
             </select>
-            <Button variant="outline" size="sm" disabled={s.busy || !s.channelKey} onClick={() => send('optimize_list', s.channelKey)}>
+            <select
+              aria-label="Số video cần quét"
+              title="Số video mới nhất sẽ quét"
+              value={limit}
+              disabled={s.busy}
+              onChange={(e) => send('optimize_limit', Number(e.target.value))}
+              className="h-8 rounded-md border border-input bg-background/50 px-2 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {(s.limits ?? LIMITS).map((n) => <option key={n} value={n}>{n} video</option>)}
+            </select>
+            <Button variant="outline" size="sm" disabled={s.busy || !s.channelKey} onClick={() => send('optimize_list', { channelKey: s.channelKey, limit })}>
               {scanning ? <LoaderCircle className="animate-spin" /> : <ScanSearch />} Quét video
             </Button>
           </div>
@@ -149,7 +171,7 @@ export function OptimizePage({ state, send, go }: PageProps) {
             </div>
           </Card>
         )}
-        <Card title="Video đã đăng" hint={scanning && videos.length ? `Đang đọc trang Chi tiết: ${read}/${videos.length} video` : s.at ? `${videos.length} video · ${done} đã tối ưu · quét lúc ${new Date(s.at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : 'Bấm “Quét video” để đọc 10 video mới nhất trong Studio'}>
+        <Card title="Video đã đăng" hint={scanning && videos.length ? `Đang đọc trang Chi tiết: ${read}/${videos.length} video` : s.at ? `${videos.length} video · ${done} đã tối ưu · quét lúc ${new Date(s.at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : `Bấm “Quét video” để đọc ${limit} video mới nhất trong Studio`}>
           {videos.length ? (
             <>
               <div className="mb-1 flex items-center gap-3 px-2 text-xs text-muted-foreground">
@@ -160,7 +182,7 @@ export function OptimizePage({ state, send, go }: PageProps) {
                 <button className="font-semibold hover:text-foreground disabled:opacity-50" disabled={s.busy} onClick={() => setSel(new Set(todo.map((v) => v.id)))}>Chọn video chưa tối ưu ({todo.length})</button>
               </div>
               <ul className="max-h-[420px] space-y-0.5 overflow-y-auto">
-                {videos.map((v) => <VideoRow key={v.id} v={v} on={sel.has(v.id)} toggle={() => toggle(v.id)} busy={s.busy} />)}
+                {videos.map((v) => <VideoRow key={v.id} v={v} on={sel.has(v.id)} toggle={() => toggle(v.id)} busy={s.busy} open={() => openVideo(v.id)} />)}
               </ul>
             </>
           ) : (
@@ -198,6 +220,8 @@ export const optimizeDemo: OptimizeState = {
   ],
   busy: false,
   at: '2026-10-26T12:05:00Z',
+  limit: 10,
+  limits: LIMITS,
   templates: {
     default: { ...defaultOptimizeTemplate(), playlists: ['Dark Bible Study', 'Bible Podcast'] },
   },

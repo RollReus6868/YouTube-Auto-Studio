@@ -114,6 +114,32 @@ const waitFor = async (fn, what, ms = 30000) => {
     await ui.getByText('YouTube Studio · Dark Bible Stories').waitFor({ timeout: 30000 })
     assert.equal((await call('hello')).f.accounts.pane.channelKey, 'UCmock000000000000000000')
 
+    // 6b) Toi uu video: chon so video quet (luu cai dat), quet; bam tieu de video -> trang Tai khoan,
+    // khung Studio chuyen sang dung kenh cua video roi mo trang chinh sua video
+    await ui.getByLabel('Tài khoản / kênh trong khung Studio').selectOption('c:UCBibleSimpleAnimation68')
+    await ui.getByText('YouTube Studio · Simple Bible Animation').waitFor({ timeout: 30000 })
+    await ui.getByRole('button', { name: 'Tối ưu video', exact: true }).click()
+    await ui.getByRole('heading', { name: 'Tối ưu video' }).waitFor()
+    await ui.getByLabel('Kênh cần tối ưu').selectOption('UCmock000000000000000000')
+    assert.equal(await ui.getByLabel('Số video cần quét').inputValue(), '10', 'mac dinh 10 video')
+    await ui.getByLabel('Số video cần quét').selectOption('5')
+    await waitFor(async () => (await call('hello')).f.optimize.limit === 5, 'chon 5 video')
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8')).optimizeScanLimit, 5, 'luu so video vao cai dat')
+    await ui.getByRole('button', { name: 'Quét video' }).click()
+    await waitFor(async () => { const o = (await call('hello')).f.optimize; return !o.busy && o.videos.length === 5 }, 'quet 5 video', 90000)
+    const titles = ui.getByRole('button', { name: /^Mở trang chỉnh sửa video / })
+    assert.equal(await titles.count(), 5)
+    assert.match(await titles.first().getAttribute('title'), /^Mở trang chỉnh sửa video trong Tài khoản trình duyệt/)
+    assert.equal(await titles.first().evaluate((el) => getComputedStyle(el).cursor), 'pointer')
+    const switches = yt.events.filter((e) => e.type === 'switch').length
+    await titles.first().click()
+    await ui.getByRole('heading', { name: 'Tài khoản', exact: true }).waitFor()
+    await waitFor(() => pages().some((p) => p.url().includes('/studio/video/Prem0000001/edit')), 'khung Studio mo trang chinh sua video', 30000)
+    st = await call('hello')
+    assert.deepEqual(st.f.accounts.pane, { accountId: 'nick-thang', channelKey: 'UCmock000000000000000000' })
+    assert.deepEqual(yt.events.filter((e) => e.type === 'switch').slice(switches).map((e) => e.name), ['Dark Bible Stories'], 'chuyen kenh trong khung truoc khi mo video')
+    assert(st.logs.some((l) => /Khung Studio: mở .*\/studio\/video\/Prem0000001\/edit \(kênh "Dark Bible Stories"\)/.test(l.msg)), st.logs.slice(-6).map((l) => l.msg).join('\n'))
+
     // 7) token API theo kenh: chon nham kenh tren Google -> tu choi, dung kenh -> nhan
     await ui.getByRole('button', { name: 'Cài đặt', exact: true }).click()
     const oauth = path.join(dataDir, 'client.json')

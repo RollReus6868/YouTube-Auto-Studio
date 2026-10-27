@@ -259,6 +259,10 @@ module.exports = [
     }), SEL)
     console.log(JSON.stringify(rows.slice(0, 3)), rows.length)
     assert(rows.length >= 1 && rows.every((r) => r.id && r.title && r.vis && r.date), JSON.stringify(rows.slice(0, 3)))
+    // quet nhieu hon 1 trang (30 hang/trang, 64 video): nut "trang tiep theo" dung mot nut va dang bam duoc
+    assert.equal(await page.eval((s) => window.__ya.find({ selector: s }, true).length, SEL.next), 1, 'mot nut trang tiep theo')
+    assert.equal(await page.eval((s) => window.__ya.one({ selector: s }).id, SEL.next), 'navigate-after')
+    assert(await _t.isEnabled(page, { selector: SEL.next }), 'nut trang tiep theo bam duoc')
   }],
 ]
 
