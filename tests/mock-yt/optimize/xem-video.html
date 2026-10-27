@@ -255,8 +255,10 @@ function confirmPin(cid) {
 document.addEventListener('click', (e) => { if (!e.target.closest('#popups')) closePopups() })
 // phan binh luan chi tai khi khung vao tam nhin (giong YouTube that: IntersectionObserver)
 let loaded = false
-new IntersectionObserver((es) => {
+// opt-needshow: gia cua so chay ngam khong duoc ve (Windows) -> chi tai khi tool da "hien" cua so (opt-shown)
+const io = new IntersectionObserver((es) => {
   if (loaded || !es.some((x) => x.isIntersecting)) return
+  if (flag('opt-needshow') && !flag('opt-shown')) { setTimeout(() => { io.unobserve($('#comments')); io.observe($('#comments')) }, 300); return }
   loaded = true
   setTimeout(() => {
     if (flag('opt-cmtoff')) {
@@ -268,5 +270,6 @@ new IntersectionObserver((es) => {
     // cuon toi cuoi danh sach -> tai them
     new IntersectionObserver((xs) => { if (xs.some((x) => x.isIntersecting) && shown < ordered().length) setTimeout(more, 300) }).observe($('#continuations'))
   }, 400)
-}).observe($('#comments'))
+})
+io.observe($('#comments'))
 </script>

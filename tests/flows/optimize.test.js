@@ -206,6 +206,25 @@ module.exports = [
     assert.deepEqual([await events(mock, 'comment'), await events(mock, 'pin'), await events(mock, 'like')], [[], [], []], 'khong binh luan, ghim, bam thich lai')
   }],
 
+  ['trang xem video chi tai binh luan khi cua so chay ngam duoc hien (Windows): hien trong luc lam roi an lai', async ({ page, urls, mock }) => {
+    await flags(page, urls, { 'opt-needshow': true, 'opt-shown': false })
+    const calls = []
+    page.show = async () => {
+      calls.push('show')
+      await page.eval(() => localStorage.setItem('opt-shown', 'true'))
+      return async () => { calls.push('hide'); await page.eval(() => localStorage.setItem('opt-shown', 'false')) }
+    }
+    try {
+      const r = await commentAndPin(page, VID, TITLE, { urls, channel: CH, like: false, pin: false })
+      assert.deepEqual([r.posted, r.commented, r.warnings], [true, true, []])
+      assert.deepEqual(calls, ['show', 'hide'])
+      assert.equal((await events(mock, 'comment')).length, 1)
+    } finally {
+      page.show = null
+      await flags(page, urls, { 'opt-needshow': false })
+    }
+  }],
+
   ['binh luan cua kenh nam sau: cuon tai them, "Hàng đầu" thieu thi doi sang "Mới nhất"', async ({ page, urls, mock }) => {
     await flags(page, urls, { 'opt-topcap': 3 })
     const logs = []

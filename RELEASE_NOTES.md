@@ -1,8 +1,9 @@
-## YT Auto Studio 0.4.6
+## YT Auto Studio 0.4.7
 
-Sửa lỗi quét video.
+Sửa lỗi không bình luận được.
 
-- **Sửa lỗi "Quá 20 giây vẫn chưa thấy trang Nội dung":** trên một số kênh, YouTube Studio đổi trang danh sách video sang kiểu mới có tiêu đề "← Video" thay cho "Nội dung của kênh". Tool chờ chữ cũ nên báo lỗi dù bảng video đã hiện đủ. Giờ tool chỉ cần thấy hàng video là quét, không phụ thuộc tiêu đề trang.
+- **Sửa lỗi bình luận:** khi bình luận, tool mở trang xem video trong cửa sổ chạy ngầm. Trên Windows, cửa sổ ẩn không được vẽ nên YouTube không bao giờ tải phần bình luận (chỉ có vòng xoay), tool chờ 20 giây rồi báo lỗi. Giờ, trong lúc thích / bình luận / ghim, tool cho cửa sổ đó "hiện" ở chế độ trong suốt và bấm xuyên qua được (bạn không thấy gì, không bấm nhầm vào nó), xong việc thì ẩn lại. Tool cũng ép trang vẽ lại nếu phần bình luận tải chậm.
+- Nếu vẫn không thấy phần bình luận, nhật ký ghi rõ lý do (trang không được vẽ / YouTube vẫn đang tải / video không có khung bình luận).
 
 Đang dùng bản cũ: mở tool, vào **Cập nhật**, bấm **Tải và cài**.
 
@@ -10,6 +11,6 @@ Sửa lỗi quét video.
 
 | Máy của bạn | File |
 |---|---|
-| Windows 10/11 | `YTAutoStudio-0.4.6-windows-setup.exe` |
+| Windows 10/11 | `YTAutoStudio-0.4.7-windows-setup.exe` |
 
 Bản này chỉ build cho Windows. Bản macOS sẽ build khi cần.

@@ -818,15 +818,32 @@ async function openWatch(page, url) {
 }
 
 // Cuon toi khung binh luan (YouTube chi tai khi khung vao tam nhin) -> { off } | { off: false }
+// Sau 3 giay chua thay thi ep trang ve lai (page.nudge) moi vong: cua so chay ngam co the khong ve.
 async function openComments(page, { timeout = Math.max(page.timeout, 20000) } = {}) {
-  return page.until((s, add, off) => {
+  const t0 = Date.now()
+  const r = await poll(page, async () => {
+    if (Date.now() - t0 > 3000 && page.nudge) await page.nudge()
+    return page.eval((s, add, off) => {
+      const box = document.querySelector(s.comments)
+      if (box) box.scrollIntoView({ block: 'start' })
+      else window.scrollBy(0, 400)
+      if (window.__ya.count(off)) return { off: true }
+      if (window.__ya.count({ ...add, within: s.comments }) || window.__ya.count({ selector: s.thread, within: s.comments })) return { off: false }
+      return null
+    }, WATCH, LABELS.addComment, WATCH.commentsOff)
+  }, timeout)
+  if (r) return r
+  // ghi ro vi sao: khung con dang tai (vong xoay) / trang khong duoc ve (requestAnimationFrame khong chay)
+  const d = await page.eval((s) => new Promise((done) => {
     const box = document.querySelector(s.comments)
-    if (box) box.scrollIntoView({ block: 'start' })
-    else window.scrollBy(0, 400)
-    if (window.__ya.count(off)) return { off: true }
-    if (window.__ya.count({ ...add, within: s.comments }) || window.__ya.count({ selector: s.thread, within: s.comments })) return { off: false }
-    return null
-  }, [WATCH, LABELS.addComment, WATCH.commentsOff], { what: 'phần bình luận', timeout })
+    const out = { box: !!box, loading: !!(box && box.querySelector('#spinner-container tp-yt-paper-spinner-lite, ytd-continuation-item-renderer')), vis: document.visibilityState, raf: false }
+    requestAnimationFrame(() => { out.raf = true; done(out) })
+    setTimeout(() => done(out), 1500)
+  }), WATCH).catch(() => null)
+  const why = !d ? '' : !d.box ? ' (trang không có khung bình luận)'
+    : !d.raf ? ' (trang không được vẽ: cửa sổ chạy ngầm bị Windows tạm dừng nên YouTube không tải bình luận)'
+    : d.loading ? ' (YouTube vẫn đang tải bình luận)' : ''
+  throw new StepError(`Quá ${Math.round(timeout / 1000)} giây vẫn chưa thấy phần bình luận${why}.`, page.step)
 }
 
 // Tim binh luan cua kenh: cuon de YouTube tai them; khong thay thi doi sang "Moi nhat" roi tim lai.
@@ -861,7 +878,13 @@ async function seekMine(page, text, who, { pages = 8, log = () => {} } = {}) {
   return null
 }
 
-async function commentAndPin(page, videoId, text, { urls, log = () => {}, onStep = () => {}, like = true, pin = true, channel = {}, pages = 8 } = {}) {
+// Trang xem video phai duoc VE thi YouTube moi tai binh luan: hien cua so chay ngam (trong suot) trong luc lam.
+async function commentAndPin(page, ...args) {
+  const hide = page.show ? await page.show() : null
+  try { return await watchTasks(page, ...args) } finally { if (hide) await hide() }
+}
+
+async function watchTasks(page, videoId, text, { urls, log = () => {}, onStep = () => {}, like = true, pin = true, channel = {}, pages = 8 } = {}) {
   text = String(text || '').trim()
   const warnings = []
   const shots = []

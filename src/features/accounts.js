@@ -42,7 +42,8 @@ module.exports = (ctx) => {
     const old = lanes.get(acc.id)
     if (old && !old.win.isDestroyed()) { clearTimeout(old.timer); return old }
     const win = new BrowserWindow({
-      show: false, width: 1280, height: 800, skipTaskbar: true, title: `Studio · ${acc.label}`,
+      // toolbar (Windows): khong hien o thanh tac vu / Alt+Tab khi phai "hien" trong suot (Page.show)
+      show: false, width: 1280, height: 800, skipTaskbar: true, title: `Studio · ${acc.label}`, ...(process.platform === 'win32' ? { type: 'toolbar' } : {}),
       webPreferences: { session: googleSession(acc.partition), backgroundThrottling: false, contextIsolation: true, sandbox: true, spellcheck: false },
     })
     const wc = win.webContents
@@ -50,7 +51,16 @@ module.exports = (ctx) => {
     // Studio chan roi trang khi con thay doi chua luu (beforeunload): cua so an khong co ai bam "Roi trang"
     wc.on('will-prevent-unload', (e) => e.preventDefault())
     wc.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) wc.loadURL(url); return { action: 'deny' } })
-    const page = new Page(wc, { timeout: 20000, shotDir: ctx.logFile('loi-trang'), shouldStop: ctx.stopped })
+    // Cua so an (show: false) tren Windows khong ve trang -> YouTube khong tai binh luan. Khi can, hien no
+    // trong suot + bam xuyen qua (nguoi dung khong thay, khong bam nham), xong viec thi an lai.
+    const show = () => {
+      if (win.isDestroyed() || win.isVisible()) return () => {}
+      win.setOpacity(0)
+      win.setIgnoreMouseEvents(true)
+      win.showInactive()
+      return () => { if (!win.isDestroyed()) win.hide() }
+    }
+    const page = new Page(wc, { timeout: 20000, shotDir: ctx.logFile('loi-trang'), shouldStop: ctx.stopped, show })
     const l = { win, page, chain: Promise.resolve(), pending: 0, timer: null }
     lanes.set(acc.id, l)
     return l

@@ -116,6 +116,9 @@ class Page {
     this.shotDir = opts.shotDir || ''
     this.step = ''
     this.shouldStop = opts.shouldStop || (() => false)
+    // show(): cho cua so chay ngam "hien" (trong suot, ngoai tam bam) de Chromium ve trang -> tra ve ham an lai.
+    // Trang YouTube can ve that moi tai binh luan (IntersectionObserver); cua so an tren Windows khong ve.
+    this.show = opts.show || null
   }
 
   url() { return this.wc.getURL() }
@@ -241,6 +244,12 @@ class Page {
       await dbg.sendCommand('DOM.setFileInputFiles', { objectId: result.objectId, files: files.map((f) => path.resolve(f)) })
     } finally { if (!attached) dbg.detach() }
     await sleep(300)
+  }
+
+  // Ep Chromium ve mot khung (capturePage tam coi trang la dang hien): IntersectionObserver / rAF chay duoc.
+  async nudge() {
+    if (this.wc.isDestroyed()) return
+    await this.wc.capturePage().catch(() => null)
   }
 
   // Ghi lai anh + HTML khi loi, de nguoi dung gui lai cho nguoi sua tool.
