@@ -39,6 +39,16 @@ module.exports = [
     } finally { await page.eval(() => localStorage.removeItem('opt-overview')) }
   }],
 
+  ['trang bang video kieu moi (tieu de "← Video", khong co "Nội dung của kênh"): van doc duoc', async ({ page, urls }) => {
+    await page.goto(`${urls.studio}/channel/${UC}/videos/upload`)
+    await page.eval(() => localStorage.setItem('opt-videohead', 'true'))
+    try {
+      page.timeout = 5000
+      const list = await listVideos(page, UC, { urls, limit: 2 })
+      assert.deepEqual(list.map((v) => v.id), ['Prem0000001', VID])
+    } finally { await page.eval(() => localStorage.removeItem('opt-videohead')) }
+  }],
+
   ['chi doc N video moi nhat (limit)', async ({ page, urls }) => {
     await page.goto(`${urls.studio}/channel/${UC}/videos/upload`)
     await page.eval(() => localStorage.setItem('opt-pp', '2'))

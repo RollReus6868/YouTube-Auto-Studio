@@ -263,9 +263,9 @@ async function listVideos(page, channelUc, { urls, log = () => {}, onStep = () =
   onStep('Mở Nội dung')
   await page.run('Mở trang Nội dung của kênh', async () => {
     await page.goto(`${urls.studio}/channel/${uc}/videos/upload${CONTENT_QS}`)
-    await page.until((a, b) => window.__ya.count(a) || window.__ya.count(b), [LABELS.content, LABELS.seeAll], { what: 'trang Nội dung' })
   })
-  let ready = await page.until((row, empty, all) => (window.__ya.count({ selector: row }) ? 'rows' : window.__ya.count(empty) ? 'empty' : window.__ya.count(all) ? 'overview' : ''), [SEL.row, LABELS.noContent, LABELS.seeAll], { what: 'danh sách video' })
+  // trang that co the la "Nội dung của kênh" (cu) hoac "← Video" (moi): chi can thay hang video
+  let ready = await page.until((row, empty, all) => (window.__ya.count({ selector: row }) ? 'rows' : window.__ya.count(empty) ? 'empty' : window.__ya.count(all) ? 'overview' : ''), [SEL.row, LABELS.noContent, LABELS.seeAll], { what: 'danh sách video trong trang Nội dung', timeout: Math.max(page.timeout, 30000) })
   if (ready === 'overview') {
     // tong quan Noi dung: bam "Xem tat ca" cua hang Video (hang dau tien co tieu de "Video")
     await page.run('Bấm "Xem tất cả" ở mục Video', async () => {

@@ -4,7 +4,8 @@
      o luot xem them cua vidIQ (.tablecell-views.vidiq-scope), nut trang ytcp-icon-button#navigate-after.
      Hang hien tre 500ms; localStorage 'opt-pp' = so hang moi trang (mac dinh 30).
      localStorage 'opt-overview' = trang Noi dung kieu moi (anh nguoi dung 27/10): hang "Bài đăng" + hang "Video", moi hang co nut "Xem tất cả";
-     bam "Xem tất cả" cua hang Video moi hien bang video. -->
+     bam "Xem tất cả" cua hang Video moi hien bang video.
+     localStorage 'opt-videohead' = trang bang video kieu moi (that 27/10): tieu de "← Video", khong co chu "Nội dung của kênh". -->
 <style>
   body { margin: 0; font: 13px Roboto, Arial, sans-serif; background: #282828; color: #fff }
   header { height: 56px; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid #3e3e3e }
@@ -74,6 +75,7 @@ function render() {
 document.getElementById('navigate-after').onclick = () => { if ((page + 1) * size < OPT.videos.length) { page++; document.getElementById('rows').innerHTML = 'Đang tải…'; setTimeout(render, 300) } }
 document.getElementById('navigate-before').onclick = () => { if (page) { page--; render() } }
 // kenh "Dark Bible Stories" cua Studio gia tai khoan (tests/mock-yt/accounts) dung chung danh sach video (e2e-accounts)
+if (OPT.load('opt-videohead', false)) document.querySelector('main h1').textContent = '← Video'
 function start() {
   if (uc !== OPT.channel.uc && uc !== 'UCmock000000000000000000') document.getElementById('rows').textContent = 'Không có nội dung nào'
   else setTimeout(render, 500)
