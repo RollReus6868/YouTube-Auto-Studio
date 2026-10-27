@@ -8,7 +8,7 @@ const { chromium } = require('playwright-core')
 
 const URL = `http://localhost:${process.env.YA_PORT || 4173}/`
 const OUT = path.join(__dirname, 'screenshots')
-const PAGES = ['accounts', 'videos', 'optimize', 'posts', 'presets', 'community', 'guide', 'logs', 'update', 'settings']
+const PAGES = ['accounts', 'videos', 'optimize', 'posts', 'presets', 'community', 'hometab', 'guide', 'logs', 'update', 'settings']
 const WITH_PANE = new Set(['accounts', 'community'])
 const problems = []
 const overflow = () => {
@@ -79,6 +79,15 @@ function findBrowser() {
       await page.getByRole('button', { name: 'Đã gửi' }).click()
       await page.getByText('Love ❤️ God bless you too!').waitFor()
       await check('community-da-gui')
+      // trang chu kenh: kenh co anh dai dien hien anh that (nhu trang Tai khoan), khong anh / anh loi -> chu cai
+      await page.goto(`${URL}?demo#hometab`)
+      const homeRow = (name) => page.locator('li', { has: page.getByLabel(`Chọn kênh ${name}`) })
+      await homeRow('Dark Faith 2nd').locator('img').waitFor()
+      assert(await homeRow('Dark Bible Stories').locator('img').evaluate((i) => i.complete && i.naturalWidth > 0), `${tag}: anh dai dien Trang chu kenh`)
+      assert.equal(await homeRow('28k s').locator('img').count(), 0, `${tag}: kenh khong anh -> chu cai`)
+      await page.waitForFunction(() => !document.querySelector('img[src="data:image/png;base64,AAAA"]'))
+      assert.equal(await homeRow('Dark Bible Study').getByText('D', { exact: true }).count(), 1, `${tag}: anh loi -> chu cai`)
+      assert.equal(await page.locator('main li img').count(), 5, `${tag}: so anh dai dien o Trang chu kenh`)
       // mo chi tiet video
       await page.goto(`${URL}?demo#videos`)
       await page.getByRole('button', { name: /Bí ẩn rừng sâu tập 1/ }).click()

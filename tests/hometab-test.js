@@ -99,6 +99,28 @@ test('kenh dich trung kenh moi', () => {
   assert.equal(h.sameChannel({ handle: '' }, { handle: '' }), false)
 })
 
+test('danh sach kenh cua tinh nang giu anh dai dien tu trang Tai khoan', () => {
+  const img = 'https://yt3.ggpht.com/abc=s88-c-k-c0x00ffffff-no-rj'
+  const accs = [{
+    id: 'tk-1', channels: [
+      { key: UC, ucId: UC, name: 'Dark Faith 2nd', handle: '@DarkFaith9999', subs: '49.300 người đăng ký', avatar: img },
+      { name: '28k s', handle: '@28ks-p5n', subs: '' }, // ban cu: chua co truong avatar
+    ],
+  }]
+  const ctx = { state: { f: {} }, accounts: { list: () => accs }, push() {}, log() {} }
+  const f = require('../src/features/hometab')(ctx)
+  f.start()
+  const list = ctx.state.f.hometab.channels
+  assert.deepEqual(list.map((c) => [c.key, c.avatar, c.subs, c.accountId]), [
+    [UC, img, '49.300 người đăng ký', 'tk-1'],
+    ['tk-1:28k s', '', '', 'tk-1'],
+  ])
+  // anh moi o trang Tai khoan -> hometab_refresh lay theo, khong tai lai
+  accs[0].channels[1].avatar = img
+  f.commands.hometab_refresh()
+  assert.equal(ctx.state.f.hometab.channels[1].avatar, img)
+})
+
 ;(async () => {
   let failed = 0
   for (const [name, fn] of tests) {

@@ -81,6 +81,13 @@ const waitFor = async (fn, what, ms = 30000) => {
     assert.equal(a.channels.find((c) => c.name === 'Dark Faith 2nd').avatar, `${yt.base}/yt3/UCDarkFaith9999000000000=s48-c-k-c0x00ffffff-no-rj`)
     assert.equal(a.channels.find((c) => c.name === '28k s').avatar, '')
     await waitFor(() => ui.evaluate(() => [...document.querySelectorAll('img[referrerpolicy="no-referrer"]')].filter((i) => i.complete && i.naturalWidth > 0).length >= 6), 'anh dai dien kenh tren trang Tai khoan')
+    // trang Trang chu kenh dung lai anh do (khong tai lai): danh sach "Kenh cu can them" co anh that, kenh khong anh -> chu cai
+    await ui.getByRole('button', { name: 'Trang chủ kênh', exact: true }).click()
+    const homeRow = (name) => ui.locator('li', { has: ui.getByLabel(`Chọn kênh ${name}`) })
+    await waitFor(() => homeRow('Dark Faith 2nd').locator('img').evaluate((i) => i.complete && i.naturalWidth > 0).catch(() => false), 'anh dai dien o Trang chu kenh')
+    assert.equal(await homeRow('28k s').locator('img').count(), 0)
+    await waitFor(async () => ((await call('hello')).f.hometab.channels.find((c) => c.name === 'Dark Faith 2nd') || {}).avatar === `${yt.base}/yt3/UCDarkFaith9999000000000=s48-c-k-c0x00ffffff-no-rj`, 'hometab giu avatar')
+    await ui.getByRole('button', { name: 'Tài khoản', exact: true }).click()
 
     // 4) tick kenh
     await ui.getByLabel('Dùng kênh Dark Bible Stories').click()
