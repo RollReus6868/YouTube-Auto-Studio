@@ -1,14 +1,13 @@
-## YT Auto Studio 0.4.3
+## YT Auto Studio 0.4.4
 
-Sửa và thêm tính năng cho Tối ưu video.
+Sửa lỗi và thêm tính năng cho Tối ưu video, Trang chủ kênh.
 
-- **Biết video nào đã tối ưu:** khi quét 10 video mới nhất, tool mở từng video (chỉ đọc, không sửa) để xem đã điền đủ theo mẫu chưa. Video đủ hiện **Đã tối ưu**; video còn thiếu hiện các nhãn **Thiếu: …** (ví dụ danh sách phát, thẻ, ngày quay, vị trí, thích, bình luận, ghim).
-- **Danh sách phát tự điền:** ngoài các danh sách đã chọn trong mẫu, tool tự tích 3 danh sách phát đầu tiên hiện ra trong hộp thoại. Số lượng chỉnh được trong mẫu (0–5, đặt 0 để tắt).
-- **Ngày quay:** tool gõ ngày vào ô "Nhập ngày"; nếu Studio không nhận, tool bấm chọn ngày trên lịch như người dùng.
-- **Vị trí video:** kiểm lại cách chọn gợi ý trên HTML thật (gợi ý nằm sau dòng "Không có").
-- **Thích, bình luận, ghim không còn báo thành công giả:** sau khi làm, tool tải lại trang xem video và chỉ báo thành công khi thấy thật (đã thích, có bình luận của kênh, có huy hiệu "đã ghim"). Nếu chưa được, video vẫn hiện **Thiếu: ghim** (hoặc thích, bình luận) để lần sau làm tiếp, kèm lý do (ví dụ đang đăng nhập nhầm kênh, video đang công chiếu, bình luận bị tắt).
-- **Nhật ký ra file:** mọi dòng nhật ký được ghi vào `nhat-ky.txt` trong thư mục dữ liệu (nút **Mở thư mục dữ liệu**), cùng thư mục ảnh lỗi `loi-trang`, để gửi khi cần kiểm tra lỗi.
-- Thao tác bấm nhanh hơn (bớt thời gian chờ sau mỗi lần bấm).
+- **Sửa lỗi không thích / bình luận được ("Quá 20 giây vẫn chưa thấy Thích video này"):** khi kênh xem video của chính mình, YouTube hiện nút "Thích / Bỏ thích" khác với nút người xem thấy, nên tool không nhận ra và dừng luôn cả bình luận. Tool giờ nhận cả hai kiểu nút. Nếu bước Thích vẫn lỗi, tool vẫn bình luận và ghim tiếp.
+- **Màn hình kết thúc:** video đã có màn hình kết thúc được coi là xong, không còn cảnh báo.
+- **Chọn số video cần quét:** chọn 5, 10, 20, 30 hoặc 50 video cạnh nút Quét video. Tool nhớ lựa chọn này.
+- **Bấm tên video để mở trang chỉnh sửa:** tool chuyển sang trang Tài khoản, tự vào đúng kênh và mở trang chỉnh sửa của video đó trong Studio.
+- **Trang chủ kênh:** danh sách kênh hiện ảnh đại diện thật của kênh.
+- Chuyển kênh ổn định hơn: tool tải lại Studio khi trang còn ở kênh cũ, và bấm lại ảnh đại diện nếu menu tài khoản chưa mở.
 
 Đang dùng bản cũ: mở tool, vào **Cập nhật**, bấm **Tải và cài**.
 
@@ -16,6 +15,6 @@ Sửa và thêm tính năng cho Tối ưu video.
 
 | Máy của bạn | File |
 |---|---|
-| Windows 10/11 | `YTAutoStudio-0.4.3-windows-setup.exe` |
+| Windows 10/11 | `YTAutoStudio-0.4.4-windows-setup.exe` |
 
 Bản này chỉ build cho Windows. Bản macOS sẽ build khi cần.
