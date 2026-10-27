@@ -1,9 +1,18 @@
-## YT Auto Studio 0.4.7
+## YT Auto Studio 0.5.0
 
-Sửa lỗi không bình luận được.
+Đăng video không cần API YouTube nữa.
 
-- **Sửa lỗi bình luận:** khi bình luận, tool mở trang xem video trong cửa sổ chạy ngầm. Trên Windows, cửa sổ ẩn không được vẽ nên YouTube không bao giờ tải phần bình luận (chỉ có vòng xoay), tool chờ 20 giây rồi báo lỗi. Giờ, trong lúc thích / bình luận / ghim, tool cho cửa sổ đó "hiện" ở chế độ trong suốt và bấm xuyên qua được (bạn không thấy gì, không bấm nhầm vào nó), xong việc thì ẩn lại. Tool cũng ép trang vẽ lại nếu phần bình luận tải chậm.
-- Nếu vẫn không thấy phần bình luận, nhật ký ghi rõ lý do (trang không được vẽ / YouTube vẫn đang tải / video không có khung bình luận).
+- **Đăng video bằng hộp thoại "Tải video lên" của YouTube Studio**, làm đúng các bước như clip hướng dẫn, trong cửa sổ chạy ngầm của tài khoản đã đăng nhập. Không cần Google Cloud, OAuth hay hạn mức API.
+  - Tiêu đề lấy từ video.
+  - Mô tả giữ đoạn mặc định của kênh, rồi cách một dòng và thêm mô tả của video.
+  - Tải thumbnail lên, tích danh sách phát, chọn "Không dành cho trẻ em".
+  - Bấm **Hiện thêm** để đặt các mục theo mẫu tối ưu của preset: quảng cáo trả tiền: Không; dùng AI: Có; thêm tiêu đề vào thẻ; ngày quay: hôm nay; vị trí: United States; không cho phối lại.
+  - Màn hình kết thúc lấy từ video gần đây nhất.
+  - Chọn chế độ hiển thị hoặc lên lịch, bấm "Vẫn xuất bản" nếu YouTube hỏi.
+  - Tool chờ video tải lên xong 100% mới đóng.
+- **Trang Đăng video:** có ô **Kênh đăng video**, chọn trong các kênh đã tick ở trang Tài khoản.
+- **Gỡ bỏ:** phần "Kết nối YouTube API" trong Cài đặt và hướng dẫn tạo dự án Google Cloud. API Gemini vẫn giữ để viết mô tả và trả lời bình luận.
+- Nếu một bước trong hộp thoại tải lên bấm trượt, tool lưu ảnh + HTML vào thư mục `loi-trang` để sửa nhanh.
 
 Đang dùng bản cũ: mở tool, vào **Cập nhật**, bấm **Tải và cài**.
 
@@ -11,6 +20,6 @@ Sửa lỗi không bình luận được.
 
 | Máy của bạn | File |
 |---|---|
-| Windows 10/11 | `YTAutoStudio-0.4.7-windows-setup.exe` |
+| Windows 10/11 | `YTAutoStudio-0.5.0-windows-setup.exe` |
 
 Bản này chỉ build cho Windows. Bản macOS sẽ build khi cần.
