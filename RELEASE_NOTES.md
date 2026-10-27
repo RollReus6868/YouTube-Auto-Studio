@@ -1,13 +1,10 @@
-## YT Auto Studio 0.4.4
+## YT Auto Studio 0.4.5
 
-Sửa lỗi và thêm tính năng cho Tối ưu video, Trang chủ kênh.
+Tối ưu video chạy được cả khi YouTube Studio đang ở tiếng Việt hoặc tiếng Anh.
 
-- **Sửa lỗi không thích / bình luận được ("Quá 20 giây vẫn chưa thấy Thích video này"):** khi kênh xem video của chính mình, YouTube hiện nút "Thích / Bỏ thích" khác với nút người xem thấy, nên tool không nhận ra và dừng luôn cả bình luận. Tool giờ nhận cả hai kiểu nút. Nếu bước Thích vẫn lỗi, tool vẫn bình luận và ghim tiếp.
-- **Màn hình kết thúc:** video đã có màn hình kết thúc được coi là xong, không còn cảnh báo.
-- **Chọn số video cần quét:** chọn 5, 10, 20, 30 hoặc 50 video cạnh nút Quét video. Tool nhớ lựa chọn này.
-- **Bấm tên video để mở trang chỉnh sửa:** tool chuyển sang trang Tài khoản, tự vào đúng kênh và mở trang chỉnh sửa của video đó trong Studio.
-- **Trang chủ kênh:** danh sách kênh hiện ảnh đại diện thật của kênh.
-- Chuyển kênh ổn định hơn: tool tải lại Studio khi trang còn ở kênh cũ, và bấm lại ảnh đại diện nếu menu tài khoản chưa mở.
+- **Studio tiếng Việt hay tiếng Anh đều bấm được:** tool tìm từng mục (danh sách phát, quảng cáo trả phí, AI, ngày quay, vị trí, giấy phép, nhúng, phối lại Shorts, danh mục, bình luận, màn hình kết thúc, nút Lưu, bình luận và ghim dưới video) theo mã cố định của Studio, giống nhau ở mọi ngôn ngữ. Chữ tiếng Việt và tiếng Anh chỉ dùng dự phòng. Tên danh mục, ngôn ngữ, giấy phép và ngày quay được hiểu theo cả hai thứ tiếng.
+- **"Hiện thêm":** nếu đã bấm mà các mục nâng cao chưa hiện, tool bấm lại. Video đã mở sẵn thì làm như cũ.
+- **Trang Nội dung kiểu mới:** với kênh có trang Nội dung dạng tổng quan (hàng Video, hàng Danh sách phát), tool bấm "Xem tất cả" ở hàng Video rồi mới quét. Kênh có bảng video như cũ thì không đổi.
 
 Đang dùng bản cũ: mở tool, vào **Cập nhật**, bấm **Tải và cài**.
 
@@ -15,6 +12,6 @@ Sửa lỗi và thêm tính năng cho Tối ưu video, Trang chủ kênh.
 
 | Máy của bạn | File |
 |---|---|
-| Windows 10/11 | `YTAutoStudio-0.4.4-windows-setup.exe` |
+| Windows 10/11 | `YTAutoStudio-0.4.5-windows-setup.exe` |
 
 Bản này chỉ build cho Windows. Bản macOS sẽ build khi cần.
