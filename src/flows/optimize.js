@@ -85,7 +85,7 @@ const SEL = {
   menus: 'ytd-menu-popup-renderer, [role=menu]',
 }
 const sec = (name) => `[data-ya-sec="${name}"]`
-const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase()
+const norm = (s) => String(s || '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()
 
 // Danh dau khoi chua tieu de `label`: di len tu tieu de toi cha dau tien co phan tu `has`.
 async function markSection(page, label, name, has, opts = {}) {
@@ -220,6 +220,18 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
   const warnings = []
   const warn = (m) => { warnings.push(m); log('warn', m) }
   const step = (name, fn) => { onStep(name); return page.run(name, fn) }
+  // Muc tuy chon: loi o mot muc thi bao canh bao, dong menu/hop thoai dang mo roi lam tiep cac muc khac
+  // (khong mat het thay doi chi vi mot muc). Chay lai se chi lam nhung muc con thieu.
+  const soft = async (name, fn) => {
+    try { await step(name, fn) } catch (e) {
+      if (page.snapshot) await page.snapshot(`toi-uu-${videoId}-${name}`).catch(() => {})
+      await page.press('Escape').catch(() => {})
+      await sleep(300)
+      const es = await page.has({ ...LABELS.esCancel, within: sec('es') }).catch(() => false)
+      if (es) await page.click({ ...LABELS.esCancel, within: sec('es') }).catch(() => {})
+      warn(`Bỏ qua mục "${name}": ${e.message}`)
+    }
+  }
 
   await step('Mở trang Chi tiết video', async () => {
     await page.goto(`${urls.studio}/video/${videoId}/edit`)
@@ -230,7 +242,7 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
 
   // Mo ta: chi dien khi video CHUA co mo ta; da co thi giu nguyen.
   if (t.description) {
-    await step('Mô tả', async () => {
+    await soft('Mô tả', async () => {
       const box = { selector: SEL.desc }
       await page.waitFor(box)
       if (String((await page.text(box)) || '').trim()) return log('info', 'Video đã có mô tả: giữ nguyên.')
@@ -243,7 +255,7 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
   }
 
   if (t.playlists.length) {
-    await step('Danh sách phát', async () => {
+    await soft('Danh sách phát', async () => {
       await markSection(page, LABELS.playlists, 'pl', SEL.trigger)
       await page.click({ selector: SEL.trigger, within: sec('pl') })
       const box = { selector: SEL.plBox, within: SEL.dialogs }
@@ -283,14 +295,14 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
   })
 
   if (t.paidPromotion !== 'keep') {
-    await step('Nội dung được trả tiền để quảng cáo', async () => {
+    await soft('Nội dung được trả tiền để quảng cáo', async () => {
       await markSection(page, LABELS.paid, 'paid', SEL.radio)
       if (await pickRadio(page, { ...(t.paidPromotion === 'yes' ? LABELS.paidYes : LABELS.paidNo), within: sec('paid') })) changed.push('paidPromotion')
     })
   }
 
   if (t.ai !== 'keep') {
-    await step('Sử dụng AI', async () => {
+    await soft('Sử dụng AI', async () => {
       await markSection(page, LABELS.ai, 'ai', SEL.radio)
       if (await pickRadio(page, { ...(t.ai === 'yes' ? LABELS.yes : LABELS.no), within: sec('ai') })) changed.push('ai')
     })
@@ -298,7 +310,7 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
 
   const plan = tagsToAdd([], t, title)
   if (plan.add.length) {
-    await step('Thẻ', async () => {
+    await soft('Thẻ', async () => {
       await page.waitFor({ selector: SEL.tagInput })
       const have = await page.eval((s) => window.__ya.find({ selector: s, hidden: true }, true).map((e) => String(e.innerText || e.textContent || '').trim()), SEL.chip)
       const { add, skipped } = tagsToAdd(have, t, title)
@@ -318,7 +330,7 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
   }
 
   if (t.language) {
-    await step('Ngôn ngữ', async () => {
+    await soft('Ngôn ngữ', async () => {
       for (const lab of [LABELS.videoLanguage, LABELS.titleLanguage]) {
         const r = await pickOption(page, lab, t.language)
         if (r === 'changed') changed.push('language')
@@ -330,7 +342,7 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
   const recDate = recordingDateFor(t, video, now)
   if (t.recordingDate === 'publish' && !recDate) warn('Không đọc được ngày đăng video, giữ nguyên ngày quay.')
   if (recDate) {
-    await step('Ngày quay', async () => {
+    await soft('Ngày quay', async () => {
       const want = fmtStudioDate(recDate)
       await page.waitFor(LABELS.recDate)
       const info = await triggerInfo(page, LABELS.recDate)
@@ -349,10 +361,11 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
   }
 
   if (t.location) {
-    await step('Vị trí video', async () => {
+    await soft('Vị trí video', async () => {
       await markSection(page, LABELS.location, 'loc', 'input')
       const inp = { selector: 'input', within: sec('loc') }
-      if (norm(await page.value(inp)) === norm(t.location)) return
+      const before = String((await page.value(inp)) || '')
+      if (norm(before) === norm(t.location)) return
       await page.type(inp, t.location)
       let idx
       try {
@@ -366,6 +379,8 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
         }, [norm(t.location), SEL], { what: `gợi ý vị trí "${t.location}"`, timeout: Math.max(page.timeout, 10000) })
       } catch (e) {
         await page.press('Escape')
+        await page.type(inp, before) // tra lai vi tri cu, khong de chu go do trong o
+        await page.press('Escape')
         warn(`Không thấy "${t.location}" trong gợi ý vị trí, giữ nguyên vị trí.`)
         return
       }
@@ -376,7 +391,7 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
   }
 
   if (t.license !== 'keep') {
-    await step('Giấy phép', async () => {
+    await soft('Giấy phép', async () => {
       await markSection(page, LABELS.license, 'lic', SEL.trigger)
       const r = await pickOption(page, { selector: SEL.trigger, within: sec('lic') }, t.license === 'youtube' ? LABELS.licenseYoutube : LABELS.licenseCc)
       if (r === 'changed') changed.push('license')
@@ -385,13 +400,13 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
   }
 
   if (t.embeddable !== 'keep') {
-    await step('Cho phép nhúng', async () => {
+    await soft('Cho phép nhúng', async () => {
       if (await setCheckbox(page, LABELS.embed, t.embeddable === 'yes')) changed.push('embeddable')
     })
   }
 
   if (t.remix !== 'keep') {
-    await step('Phối lại cho Shorts', async () => {
+    await soft('Phối lại cho Shorts', async () => {
       await markSection(page, LABELS.remix, 'remix', SEL.radio)
       const lab = { all: LABELS.remixAll, audio: LABELS.remixAudio, none: LABELS.remixNone }[t.remix]
       if (await pickRadio(page, { ...lab, within: sec('remix') })) changed.push('remix')
@@ -399,14 +414,14 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
   }
 
   if (t.category !== 'keep') {
-    await step('Danh mục', async () => {
+    await soft('Danh mục', async () => {
       await markSection(page, LABELS.category, 'cat', SEL.trigger)
       if ((await pickOption(page, { selector: SEL.trigger, within: sec('cat') }, CATEGORY_NAMES[t.category])) === 'changed') changed.push('category')
     })
   }
 
   if (t.comments !== 'keep') {
-    await step('Bình luận', async () => {
+    await soft('Bình luận', async () => {
       await markSection(page, LABELS.commentsSection, 'cmt', SEL.trigger)
       const want = { on: LABELS.commentsOn, pause: LABELS.commentsPause, off: LABELS.commentsOff }[t.comments]
       if ((await pickOption(page, { ...LABELS.comments, within: sec('cmt') }, want)) === 'changed') changed.push('comments')
@@ -414,7 +429,7 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
   }
 
   if (t.endScreen === 'latest') {
-    await step('Màn hình kết thúc', async () => {
+    await soft('Màn hình kết thúc', async () => {
       await page.click(LABELS.endScreen)
       await markDialog(page, LABELS.endScreen, 'es', { timeout: Math.max(page.timeout, 20000) })
       // trinh chinh tai cham: cho nut "Thanh phan" roi moi xem co o mau khong
@@ -487,7 +502,7 @@ async function commentAndPin(page, videoId, text, { urls, log = () => {}, onStep
   })
 
   const findMine = () => page.eval((s, want) => {
-    const n = (x) => String(x || '').replace(/\s+/g, ' ').trim().toLowerCase()
+    const n = (x) => String(x || '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()
     for (const el of document.querySelectorAll('[data-ya-thread]')) el.removeAttribute('data-ya-thread')
     const w = n(want)
     for (const th of window.__ya.find({ selector: s.thread }, true)) {
@@ -517,7 +532,7 @@ async function commentAndPin(page, videoId, text, { urls, log = () => {}, onStep
       }, [submit], { what: 'nút "Bình luận" bật' })
       await page.click(submit)
       mine = await page.until((s, want) => {
-        const n = (x) => String(x || '').replace(/\s+/g, ' ').trim().toLowerCase()
+        const n = (x) => String(x || '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()
         return window.__ya.find({ selector: s.thread }, true).some((th) => { const c = th.querySelector(s.content); return n(c && c.innerText).startsWith(n(want).slice(0, 60)) })
       }, [SEL, text], { what: 'bình luận vừa đăng', timeout: Math.max(page.timeout, 15000) }).then(findMine)
       out.commented = true
@@ -551,4 +566,4 @@ async function commentAndPin(page, videoId, text, { urls, log = () => {}, onStep
   return out
 }
 
-module.exports = { LABELS, SEL, listVideos, optimizeVideo, commentAndPin }
+module.exports = { LABELS, SEL, listVideos, optimizeVideo, commentAndPin, _t: { markSection, markDialog, triggerInfo, isChecked, isEnabled, sec } }

@@ -130,7 +130,7 @@ function advanced() {
     <div class="description"><p>Bạn phải cho chúng tôi biết video của bạn có chứa nội dung được trả tiền để quảng cáo hay không…</p></div>
     ${radios('paid', [['VIDEO_PAID_PRODUCT_PLACEMENT_NOTIFY', 'Có, video của tôi có chứa nội dung được trả tiền để quảng cáo'], ['VIDEO_PAID_PRODUCT_PLACEMENT_NO', 'Không, video của tôi không chứa nội dung được trả tiền để quảng cáo']])}</ytcp-paid-product-placement-select></div>
   ${section('brand-links-section', 'Hợp tác với thương hiệu', 'Chia sẻ quyền truy cập vào video và các chỉ số của video với đối tác thương hiệu.', OPT.button('brand-partner-shared-code-button', 'Chia sẻ mã truy cập'))}
-  ${section('altered-content', 'Sử dụng AI', '', `<ytkp-altered-content-select><div class="altered-content-prompt-heading">Bạn có sử dụng AI để tạo hoặc chỉnh sửa nội dung theo bất kỳ cách nào sau đây không?</div>
+  ${localStorage.getItem('opt-noai') ? '' : section('altered-content', 'Sử dụng AI', '', `<ytkp-altered-content-select><div class="altered-content-prompt-heading">Bạn có sử dụng AI để tạo hoặc chỉnh sửa nội dung theo bất kỳ cách nào sau đây không?</div>
     <ul class="description"><li>Có hình ảnh người thật có vẻ như nói và làm điều gì đó…</li><li>Chỉnh sửa cảnh quay của một sự kiện hoặc địa điểm có thật</li><li>Tạo ra một cảnh trông giống thật nhưng không thực sự xảy ra</li><li>Tạo nhạc là trọng tâm chính của video</li></ul>
     ${radios('ai', [['VIDEO_HAS_ALTERED_CONTENT_YES', 'Có', 'Có, đã dùng AI'], ['VIDEO_HAS_ALTERED_CONTENT_NO', 'Không', 'Không, không dùng AI']])}
     <div class="description">Khi bạn chọn "có", nội dung của bạn sẽ được thêm nhãn.</div></ytkp-altered-content-select>`)}
@@ -147,8 +147,9 @@ function advanced() {
      ${select('ytcp-form-select', 'title-language', 'titleLanguage', 'Ngôn ngữ của tiêu đề và nội dung mô tả', LANGS)}`)}
   ${section('recording-date-location', 'Ngày và địa điểm quay video', 'Thêm thời gian và vị trí ghi hình video. Người xem có thể tìm kiếm video theo vị trí.',
     `<div style="display:flex;gap:12px"><ytcp-text-dropdown-trigger id="recorded-date">${OPT.trigger('Ngày quay', '')}</ytcp-text-dropdown-trigger>
-     <ytcp-form-location id="location"><ytcp-form-autocomplete><ytcp-dropdown-trigger><div role="button" class="container"><div class="left-container"><div class="label-area"><div class="label-text">Vị trí video</div></div>
-       <input aria-haspopup="false" aria-label="Vị trí video" placeholder="Không có"></div></div></ytcp-dropdown-trigger></ytcp-form-autocomplete></ytcp-form-location></div>`)}
+     <!-- nhu HTML that: "Vị" viet dang to hop i + U+0323 -->
+     <ytcp-form-location id="location"><ytcp-form-autocomplete><ytcp-dropdown-trigger><div role="button" class="container"><div class="left-container"><div class="label-area"><div class="label-text">Vị trí video</div></div>
+       <input aria-haspopup="false" aria-label="Vị trí video" placeholder="Không có"></div></div></ytcp-dropdown-trigger></ytcp-form-autocomplete></ytcp-form-location></div>`)}
   ${section('', 'Giấy phép', 'Tìm hiểu về các loại giấy phép.', `${select('ytcp-form-select', 'license', 'license', 'Giấy phép', ['Giấy phép chuẩn của YouTube', 'Creative Commons - Ghi công'])}
     <div class="checkbox-list"><ytcp-form-checkbox id="allow-embed" data-k="embed">${OPT.checkbox('', 'Cho phép nhúng', true)}</ytcp-form-checkbox>
     ${OPT.checkbox('notify-subscribers', 'Xuất bản lên trang Kênh đăng ký và thông báo đến người đăng ký', true, true)}</div>`)}

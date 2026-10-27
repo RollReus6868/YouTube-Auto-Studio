@@ -1,15 +1,11 @@
-## YT Auto Studio 0.4.1
+## YT Auto Studio 0.4.2
 
-Sửa lỗi và gọn giao diện theo góp ý sau khi dùng thử 0.4.0.
+Sửa lỗi Tối ưu video.
 
-- **Sửa lỗi thẻ khi tối ưu video:** lỗi "Quá 20 giây vẫn chưa thấy thẻ …". Studio chỉ tạo thẻ khi bấm phím Enter, giờ tool bấm Enter sau mỗi thẻ (không được thì thử dấu phẩy).
-- **Tối ưu video:**
-  - chỉ quét **10 video mới nhất** của kênh;
-  - thêm mục **Mô tả**: tool chỉ điền mô tả cho video **chưa có mô tả**, video đã có mô tả thì giữ nguyên. Dùng được `{tieu_de}`, `{link}`, `{ten_kenh}`.
-- **Tài khoản:** mỗi kênh hiện **ảnh đại diện** (lấy từ menu chuyển kênh của YouTube).
-- **Mẫu mặc định:** mỗi mẫu có đủ các mục Studio giống trang Tối ưu video (danh sách phát, quảng cáo trả phí, thẻ, vị trí, ngày quay, phối lại Shorts, bình luận, màn hình kết thúc, thích, bình luận ghim). Các mục này luôn hiện, lưu chung nút **Lưu mẫu**. Bật "Sau khi đăng: tối ưu bằng mẫu" để tool tự làm sau khi video công khai.
-- **Giao diện gọn hơn:** các nút nhỏ lại và nằm ở **góc trên bên phải** mỗi trang. **Nhật ký** luôn nằm ở dưới cùng (dòng mới nhất ở cuối), có nút thu gọn.
-- **Bỏ trang Bình luận** vì trùng với **Cộng đồng**. Trả lời bình luận giờ chỉ làm ở trang Cộng đồng, nên không còn nguy cơ trả lời một bình luận hai lần.
+- **Sửa lỗi "Quá 20 giây vẫn chưa thấy mục Vị trí video":** trên Studio thật, một số chữ tiếng Việt (như "Vị trí video") được mã hóa khác cách thường gặp nên tool so chữ không khớp. Tool giờ chuẩn hóa chữ trước khi so, áp dụng cho mọi trang tool thao tác trên Studio và YouTube.
+- **Một mục lỗi không làm hỏng cả video nữa:** nếu tool không làm được một mục (ví dụ danh sách phát, vị trí, màn hình kết thúc), tool bỏ qua mục đó, ghi cảnh báo và vẫn lưu các mục còn lại. Ảnh chụp của mục lỗi được lưu trong thư mục `loi-trang`. Chạy lại sẽ chỉ làm những mục còn thiếu.
+- **Vị trí video:** nếu không có gợi ý đúng tên, tool trả lại vị trí cũ thay vì để chữ gõ dở trong ô.
+- Kiểm tra từng mục của trang Chi tiết video, hộp thoại danh sách phát, màn hình kết thúc, trang xem video và danh sách Nội dung trên HTML thật của Studio.
 
 Đang dùng bản cũ: mở tool, vào **Cập nhật**, bấm **Tải và cài**.
 
@@ -17,6 +13,6 @@ Sửa lỗi và gọn giao diện theo góp ý sau khi dùng thử 0.4.0.
 
 | Máy của bạn | File |
 |---|---|
-| Windows 10/11 | `YTAutoStudio-0.4.1-windows-setup.exe` |
+| Windows 10/11 | `YTAutoStudio-0.4.2-windows-setup.exe` |
 
 Bản này chỉ build cho Windows. Bản macOS sẽ build khi cần.

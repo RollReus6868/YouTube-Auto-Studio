@@ -73,6 +73,22 @@ module.exports = [
     assert.deepEqual(await events(mock, 'save'), [])
   }],
 
+  ['mot muc loi (khong thay muc AI) va vi tri khong co goi y: bao canh bao, cac muc khac van luu', async ({ page, urls, mock }) => {
+    await page.goto(`${urls.studio}/video/${VID}/edit`)
+    await page.eval(() => localStorage.setItem('opt-noai', '1'))
+    page.timeout = 3000
+    const r = await optimizeVideo(page, VID, { ...defaultTemplate(), location: 'Atlantis' }, { urls, now: NOW })
+    await page.eval(() => localStorage.removeItem('opt-noai'))
+    assert.equal(r.saved, true)
+    assert.deepEqual(r.changed, ['paidPromotion', 'tags', 'recordingDate', 'remix', 'endScreen'])
+    assert.match(r.warnings.join('\n'), /Bỏ qua mục "Sử dụng AI": Quá 3 giây vẫn chưa thấy mục "Sử dụng AI"/)
+    assert.match(r.warnings.join('\n'), /Không thấy "Atlantis" trong gợi ý vị trí, giữ nguyên vị trí/)
+    const [save] = await events(mock, 'save')
+    assert.equal(save.data.remix, 'Không cho phép phối lại')
+    assert.equal(save.data.location, '', 'vi tri cu (trong) duoc giu')
+    assert.equal(await page.value({ selector: '#location input' }), '', 'chu "Atlantis" khong con trong o')
+  }],
+
   ['ep cac muc khac theo mau (ngon ngu, danh muc, binh luan, nhung, ngay dang)', async ({ page, urls, mock }) => {
     const tpl = { ...KEEP, language: 'Tiếng Việt', category: '27', comments: 'off', embeddable: 'no', license: 'creativeCommon', recordingDate: 'publish', playlists: ['Không Có Thật'], tagsMode: 'title', extraTags: ['bible study'] }
     const r = await optimizeVideo(page, VID, tpl, { urls, now: NOW, video: { date: '25 thg 10, 2026' } })

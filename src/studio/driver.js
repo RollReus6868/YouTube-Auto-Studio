@@ -12,7 +12,8 @@ class StepError extends Error {
 // Chay trong trang. Tim xuyen shadow DOM; chi lay phan tu dang hien.
 const HELPER = `(() => {
   if (window.__ya) return
-  const norm = (s) => String(s || '').replace(/\\s+/g, ' ').trim().toLowerCase()
+  // Studio co cho viet chu tieng Viet dang to hop (vd "i" + dau nang U+0323): dua ve NFC truoc khi so
+  const norm = (s) => String(s || '').normalize('NFC').replace(/\\s+/g, ' ').trim().toLowerCase()
   const visible = (el) => {
     if (!el.isConnected) return false
     const r = el.getBoundingClientRect()

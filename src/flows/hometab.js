@@ -281,7 +281,7 @@ const waitLib = (page, fn, arg, what, timeout) => page.until(`(arg) => { ${insta
 const by = (regex, name) => ({ text: name, regex })
 const inMenu = (regex, name) => ({ text: name, regex, within: { selector: SEL.overlay } })
 const inDialog = (regex, name) => ({ text: name, regex, within: { selector: SEL.dialog } })
-const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase()
+const norm = (s) => String(s || '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()
 const noop = () => {}
 
 function mouse(page, type, x, y, extra = {}) {
