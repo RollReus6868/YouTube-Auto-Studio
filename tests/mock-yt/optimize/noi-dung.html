@@ -68,6 +68,7 @@ function render() {
 }
 document.getElementById('navigate-after').onclick = () => { if ((page + 1) * size < OPT.videos.length) { page++; document.getElementById('rows').innerHTML = 'Đang tải…'; setTimeout(render, 300) } }
 document.getElementById('navigate-before').onclick = () => { if (page) { page--; render() } }
-if (uc !== OPT.channel.uc) document.getElementById('rows').textContent = 'Không có nội dung nào'
+// kenh "Dark Bible Stories" cua Studio gia tai khoan (tests/mock-yt/accounts) dung chung danh sach video (e2e-accounts)
+if (uc !== OPT.channel.uc && uc !== 'UCmock000000000000000000') document.getElementById('rows').textContent = 'Không có nội dung nào'
 else setTimeout(render, 500)
 </script>

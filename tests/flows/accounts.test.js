@@ -57,6 +57,17 @@ module.exports = [
     assert(!mock.events.some((e) => ['other-account-click', 'create-channel-click', 'deleted-click'].includes(e.type)))
     await assert.rejects(flows.switchChannel(page, { name: 'Black America TV', handle: '@BlackAmericaTV9999' }, { urls }), /Không thấy kênh "Black America TV"/)
   }],
+  ['cua so khac vua chuyen phien sang kenh can dung, trang nay con o kenh cu: tai lai Studio, khong bam', async ({ page, urls, mock }) => {
+    await signIn(page, urls)
+    const uc = 'UCmock000000000000000000'
+    await flows.switchChannel(page, { name: 'Simple Bible Animation', handle: '@BibleSimpleAnimation68', ucId: ucOf('Simple Bible Animation') }, { urls })
+    // nhu cua so an / khung Studio khac cung tai khoan vua chuyen kenh: menu (doc lai tu may chu) danh dau kenh moi
+    await page.eval(async (uc) => { await fetch('/studio/__switch?uc=' + uc); D.active = D.channels.find((c) => c.uc === uc) }, uc)
+    const n = mock.events.filter((e) => e.type === 'switch').length
+    const r = await flows.switchChannel(page, { name: 'Dark Bible Stories', handle: '@BibleStoriies', ucId: uc }, { urls })
+    assert.equal(r.ucId, uc)
+    assert.equal(mock.events.filter((e) => e.type === 'switch').length, n, 'khong bam lai kenh da chon')
+  }],
   ['kenh dang chon (dau ✓) nhung chua biet UC: khong bam, hoc UC tu dia chi', async ({ page, urls, mock }) => {
     await signIn(page, urls)
     const r = await flows.switchChannel(page, { name: 'Dark Faith 2nd' }, { urls })

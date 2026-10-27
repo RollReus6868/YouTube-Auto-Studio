@@ -97,8 +97,15 @@ async function currentChannel(page, { wait = 5000 } = {}) {
 // Mo menu avatar -> "Chuyen doi tai khoan"; cho danh sach kenh hien ra.
 async function openSwitcher(page) {
   await page.run('Mở menu tài khoản (avatar góc phải)', async () => {
+    // trang vua chuyen kenh co the chua nap xong script: cu bam roi vao luc do se mat
+    await page.until(() => document.readyState === 'complete', [], { timeout: 10000, what: 'YouTube Studio mở xong' }).catch(() => {})
     const byId = await page.has({ selector: SEL.avatar })
-    await page.click(byId ? { selector: SEL.avatar } : { text: 'Tài khoản', regex: LABELS.avatar, selector: 'button' })
+    const av = byId ? { selector: SEL.avatar } : { text: 'Tài khoản', regex: LABELS.avatar, selector: 'button' }
+    const sw = { text: 'Chuyển đổi tài khoản', regex: LABELS.switchAccount }
+    await page.click(av)
+    // menu chua mo sau 6 giay: cu bam bi mat -> bam lai mot lan
+    const open = await page.until((t) => window.__ya.count(t), [sw], { timeout: 6000, what: 'menu tài khoản' }).then(() => true, () => false)
+    if (!open && !(await page.has(sw))) await page.click(av)
   })
   await page.run('Bấm "Chuyển đổi tài khoản"', () => page.click({ text: 'Chuyển đổi tài khoản', regex: LABELS.switchAccount }))
   await page.run('Chờ danh sách kênh', () => page.until(readRows, [SEL, LABELS], { timeout: 15000, what: 'danh sách kênh trong "Chuyển đổi tài khoản"' }))
@@ -219,6 +226,11 @@ async function switchChannel(page, target, { urls, log = () => {}, timeout = 200
   }
   if (row.active && before) {
     await closeMenu(page)
+    // phien da o kenh nay (cua so khac vua chuyen) nhung trang con o kenh cu: tai lai Studio
+    if (target.ucId && before !== target.ucId) {
+      await page.goto(`${urls.studio}/`)
+      await openStudio(page, { urls })
+    }
     return verify(page, target)
   }
   await page.run(`Chọn kênh "${target.name}"`, () => page.click({ selector: '[data-ya-pick]' }))
