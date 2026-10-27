@@ -165,7 +165,8 @@ const waitFor = async (fn, what, ms = 30000) => {
     await ui.getByRole('button', { name: 'Xóa Tài khoản 1' }).click()
     await ui.getByRole('dialog').getByRole('button', { name: 'Xóa' }).click()
     await waitFor(async () => (await call('hello')).f.accounts.list.length === 1, 'xoa tai khoan')
-    assert(await ui.getByRole('button', { name: 'Xóa Thắng chính' }).isDisabled(), 'giu it nhat mot tai khoan')
+    // giao dien ve lai sau trang thai: cho nut bi khoa thay vi doc ngay
+    await waitFor(() => ui.getByRole('button', { name: 'Xóa Thắng chính' }).isDisabled(), 'giu it nhat mot tai khoan', 10000)
     const saved = fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8')
     assert(!/password|loginMode/i.test(saved), 'khong luu mat khau / kieu dang nhap cu')
     if (process.env.YA_SHOT) {
