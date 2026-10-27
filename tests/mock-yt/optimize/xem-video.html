@@ -17,6 +17,8 @@
        opt-nopin=1         menu khong co "Ghim"
        opt-pinfail=silent  bam Ghim, co thong bao nhung huy hieu van rong, khong luu
        opt-pinfail=local   huy hieu hien tren trang nhung khong luu (tai lai thi mat)
+       opt-ownerlike=1     giao dien chu kenh xem video cua minh (that/xem-da-ghim.html): 1 nut ytd-toggle-button-renderer "Thích" / "Bỏ thích", khong co nut Khong thich
+       opt-nolike=1        khong co nut Thich nao (giao dien la)
        opt-topcap=N        muc "Nổi bật nhất" chi hien N luot (phai doi sang "Mới nhất") -->
 <style>
   body { margin: 0; font: 14px Roboto, Arial, sans-serif; background: #0f0f0f; color: #f1f1f1 }
@@ -98,8 +100,14 @@ $('#end').innerHTML = signedOut
   : `<button id="avatar-btn" aria-label="Menu tài khoản">${esc(me.name.slice(0, 1))}</button>`
 if (!signedOut && isOwner) $('#owner-buttons').innerHTML = '<button>Số liệu phân tích</button><a href="#" aria-label="Chỉnh sửa video">Chỉnh sửa video</a>'
 
+if (flag('opt-ownerlike')) {
+  $('like-button-view-model').outerHTML = '<div id="top-level-buttons-computed"><ytd-toggle-button-renderer><yt-button-shape><button id="like" aria-pressed="false"></button></yt-button-shape></ytd-toggle-button-renderer></div>'
+  $('dislike-button-view-model').remove()
+}
+if (flag('opt-nolike')) { $('like-button-view-model').remove(); document.body.insertAdjacentHTML('beforeend', '<button id="like" hidden></button>') }
 function paintLike() {
   const b = $('#like')
+  if (flag('opt-ownerlike')) { b.setAttribute('aria-pressed', String(liked)); b.setAttribute('aria-label', liked ? 'Bỏ thích' : 'Thích'); b.textContent = `👍 ${2 + (liked ? 1 : 0)}`; return }
   b.setAttribute('aria-pressed', String(liked))
   b.setAttribute('aria-label', `cùng 2 người khác thích video này`)
   b.textContent = `👍 ${2 + (liked ? 1 : 0)}`

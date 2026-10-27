@@ -76,7 +76,7 @@ module.exports = [
     mock.events.length = 0
     const again = await optimizeVideo(page, VID, { ...defaultTemplate(), playlists: ['Dark Bible Study'] }, { urls, now: NOW })
     assert.deepEqual([again.changed, again.saved], [[], false])
-    assert.match(again.warnings[0], /Màn hình kết thúc/)
+    assert.deepEqual(again.warnings, [], 'video da co man hinh ket thuc: coi nhu xong, khong canh bao')
     assert.deepEqual(await events(mock, 'save'), [])
   }],
 
@@ -214,6 +214,24 @@ module.exports = [
     const r = await commentAndPin(page, VID, '', { urls, channel: CH })
     assert.deepEqual([r.liked, r.commented], [false, false])
     assert.match(r.warnings.join('\n'), /Sau khi tải lại trang, video chưa được thích/)
+  }],
+
+  ['chu kenh xem video cua minh: nut "Thích" / "Bỏ thích" (giong that/xem-da-ghim.html)', async ({ page, urls, mock }) => {
+    await flags(page, urls, { 'opt-ownerlike': true })
+    const logs = []
+    const r = await commentAndPin(page, VID, TITLE, { urls, channel: CH, log: (l, m) => logs.push(`${l} ${m}`) })
+    assert.deepEqual([r.liked, r.commented, r.pinned, r.warnings], [true, true, true, []], logs.join('\n'))
+    assert.deepEqual((await events(mock, 'like')).map((e) => e.liked), [true])
+    assert.equal(await page.eval(() => document.querySelector('#like').getAttribute('aria-label')), 'Bỏ thích')
+  }],
+
+  ['khong thay nut Thich: van binh luan + ghim, bao chua thich', async ({ page, urls, mock }) => {
+    await flags(page, urls, { 'opt-nolike': true })
+    const logs = []
+    const r = await commentAndPin(page, VID, TITLE, { urls, channel: CH, log: (l, m) => logs.push(`${l} ${m}`) })
+    assert.deepEqual([r.liked, r.commented, r.pinned], [false, true, true], logs.join('\n'))
+    assert.match(r.warnings.join('\n'), /Chưa thích được video: Không thấy nút "Thích"/)
+    assert.equal((await events(mock, 'comment')).length, 1)
   }],
 
   ['binh luan bi giu lai (chi hien tren trang): commented=false', async ({ page, urls, mock }) => {

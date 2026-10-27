@@ -236,6 +236,18 @@ module.exports = [
     assert.equal(other.match, null, 'binh luan nguoi xem khong phai cua kenh')
   }],
 
+  ['HTML that: nut Thich - nguoi xem (like-button-view-model) va chu kenh xem video cua minh ("Bỏ thích")', async ({ page, urls }) => {
+    page.timeout = 3000
+    const like = { ...L.like, selector: SEL.likeButton }
+    const read = () => page.eval((t) => window.__ya.find(t, true).map((b) => [b.getAttribute('aria-label'), b.getAttribute('aria-pressed')]), like)
+    await page.goto(`${urls.studio}/that-optimize/xem-video`)
+    assert.deepEqual(await read(), [['cùng 49 người khác thích video này', 'false']], 'chi nut Thich, khong lay nut Khong thich')
+    for (const name of ['xem-da-ghim', 'xem-hoi-ghim']) {
+      await page.goto(`${urls.studio}/that-optimize/${name}`)
+      assert.deepEqual(await read(), [['Bỏ thích', 'true']], name)
+    }
+  }],
+
   ['HTML that (yt-2): danh sach Noi dung', async ({ page, urls }) => {
     page.timeout = 3000
     await page.goto(`${urls.studio}/that-optimize/noi-dung`)

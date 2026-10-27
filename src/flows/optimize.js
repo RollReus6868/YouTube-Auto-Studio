@@ -51,7 +51,8 @@ const LABELS = {
   save: L('Lưu', '^(lưu|save)$'),
   saved: L('Đã lưu thay đổi', '^(đã lưu thay đổi|changes saved)$'),
   // nut Thich that: like-button-view-model button[aria-label="cùng 49 người khác thích video này"]
-  like: L('Thích video này', '(thích video này|like this video)'),
+  // nguoi xem: like-button-view-model "cùng 49 người khác thích video này"; chu kenh xem video cua minh: 1 nut "Thích" / "Bỏ thích"
+  like: L('Thích video này', '^(?!không |dislike|i dislike)(.*thích video này.*|.*like this video.*|thích|bỏ thích|like|unlike)$'),
   addComment: L('Thêm bình luận...', '^(thêm bình luận|add a comment)'), // that: "Thêm bình luận..." (3 dau cham)
   submitComment: L('Bình luận', '^(bình luận|comment)$'),
   commentMenu: L('Tác vụ', '^(tác vụ|menu tác vụ|action menu)$'),
@@ -76,7 +77,7 @@ const SEL = {
   // khong de the long nhau (vd ytcp-playlist-dialog > tp-yt-paper-dialog): moi o se bi dem 2 lan khi dung `within`
   dialogs: 'tp-yt-paper-dialog, [role=dialog]',
   plBox: '#checkbox[role=checkbox], [role=checkbox]', // ytcp-checkbox-lit > #checkbox; aria-label rong, ten o span.label-text
-  likeButton: 'like-button-view-model button',
+  likeButton: 'like-button-view-model button, #top-level-buttons-computed ytd-toggle-button-renderer button',
   submit: '#submit-button button, button#submit-button',
   listbox: '[role=listbox], tp-yt-paper-listbox',
   option: '[role=option], tp-yt-paper-item',
@@ -501,7 +502,8 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
       await sleep(500)
       const tile = { ...LABELS.esLatest, within: sec('es') }
       if (!(await page.has(tile))) {
-        warn('Màn hình kết thúc: không có mẫu "Lấy màn hình kết thúc của video gần đây nhất" (video đã có màn hình kết thúc?), giữ nguyên.')
+        // khong co o mau = video da co man hinh ket thuc: coi nhu xong
+        log('info', 'Màn hình kết thúc: video đã có màn hình kết thúc, giữ nguyên.')
         await page.click({ ...LABELS.esCancel, within: sec('es') })
         await page.waitGone({ selector: sec('es') })
         return
@@ -760,7 +762,9 @@ async function poll(page, fn, ms) {
 
 async function openWatch(page, url) {
   await page.goto(url)
-  await page.waitFor(likeTarget, { timeout: Math.max(page.timeout, 20000) })
+  // cho trang xem video hien (nut Thich, thanh tac vu hoac khung binh luan); thieu nut Thich thi buoc Thich tu bao loi
+  await page.until((like, s) => window.__ya.count(like) || window.__ya.count({ selector: 'ytd-watch-metadata #actions, ' + s.comments }), [likeTarget, WATCH], { what: 'trang xem video', timeout: Math.max(page.timeout, 20000) })
+  await poll(page, () => page.has(likeTarget), 5000)
 }
 
 // Cuon toi khung binh luan (YouTube chi tai khi khung vao tam nhin) -> { off } | { off: false }
@@ -861,13 +865,20 @@ async function commentAndPin(page, videoId, text, { urls, log = () => {}, onStep
   }
 
   if (like) {
-    await step('Thích video', async () => {
-      if (await likePressed(page)) { out.liked = true; return }
-      await page.click(likeTarget)
-      const ok = await page.until((t) => { const el = window.__ya.one(t); return !!el && el.getAttribute('aria-pressed') === 'true' }, [likeTarget], { what: 'nút Thích được bấm', timeout: Math.max(page.timeout, 8000) }).catch(() => false)
-      if (ok) out.liked = true
-      else await warn('like', 'thich', 'Đã bấm "Thích" nhưng nút không chuyển sang "đã thích".')
-    })
+    // loi o buoc Thich khong chan binh luan / ghim
+    try {
+      await step('Thích video', async () => {
+        if (!(await page.has(likeTarget))) throw new StepError('Không thấy nút "Thích" trên trang xem video.', page.step)
+        if (await likePressed(page)) { out.liked = true; return }
+        await page.click(likeTarget)
+        const ok = await page.until((t) => { const el = window.__ya.one(t); return !!el && el.getAttribute('aria-pressed') === 'true' }, [likeTarget], { what: 'nút Thích được bấm', timeout: Math.max(page.timeout, 8000) }).catch(() => false)
+        if (ok) out.liked = true
+        else await warn('like', 'thich', 'Đã bấm "Thích" nhưng nút không chuyển sang "đã thích".')
+      })
+    } catch (e) {
+      if (/Đã dừng theo yêu cầu/.test(e.message)) throw e
+      await warn('like', 'thich', `Chưa thích được video: ${e.message}`)
+    }
   }
 
   let mine = null
