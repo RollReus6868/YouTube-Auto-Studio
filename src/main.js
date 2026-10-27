@@ -54,9 +54,31 @@ const push = () => { if (win && !win.isDestroyed()) win.webContents.send('state'
 function log(level, msg) {
   state.logs.push({ t: new Date().toTimeString().slice(0, 8), level, msg })
   state.logs.splice(0, state.logs.length - MAX_LOGS)
+  saveLog(level, msg)
   push()
 }
 const logFile = (name) => path.join(app.getPath('userData'), name)
+
+// Ghi nhat ky ra <userData>/nhat-ky.txt (de nguoi dung gui lai khi bao loi); qua 2 MB thi doi
+// thanh nhat-ky.old.txt (chi giu mot ban cu).
+const LOG_MAX = 2 * 1024 * 1024
+let logSize = -1
+function saveLog(level, msg) {
+  try {
+    const file = logFile('nhat-ky.txt')
+    if (logSize < 0) logSize = fs.existsSync(file) ? fs.statSync(file).size : 0
+    if (logSize > LOG_MAX) {
+      fs.rmSync(logFile('nhat-ky.old.txt'), { force: true })
+      fs.renameSync(file, logFile('nhat-ky.old.txt'))
+      logSize = 0
+    }
+    const d = new Date()
+    const p = (n) => String(n).padStart(2, '0')
+    const line = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${d.toTimeString().slice(0, 8)} [${level}] ${String(msg).replace(/\r?\n/g, ' | ')}\n`
+    fs.appendFileSync(file, line)
+    logSize += Buffer.byteLength(line)
+  } catch (_) { /* khong de loi ghi file lam hong viec dang chay */ }
+}
 
 // ---- cai dat ------------------------------------------------------------------------
 function refreshSettings() {
@@ -450,6 +472,7 @@ const commands = {
     try { scanner.createSkeleton(store.settings.root); log('ok', 'Đã tạo các thư mục videos, posts, da-dang và file HUONG-DAN.txt.'); runScan(true) } catch (e) { log('error', e.message) }
   },
   open_path: (p) => p && shell.openPath(String(p)),
+  open_data: () => shell.openPath(app.getPath('userData')), // nhat-ky.txt, loi-trang/, optimized.json...
   open_url: (u) => /^https:\/\//.test(u) && shell.openExternal(u),
   settings_save: (patch) => {
     // chi nhan cac truong cai dat thuong; khoa bi mat di lenh rieng

@@ -4,7 +4,7 @@
 //                  ngay quay, vi tri, giay phep, nhung, phoi lai Shorts, danh muc, binh luan,
 //                  man hinh ket thuc (luu rieng) -> Luu -> "Da luu thay doi"
 //   inspectVideo   /video/<id>/edit: CHI DOC gia tri hien tai, so voi mau -> muc nao con thieu (khong bam Luu)
-//   commentAndPin  trang xem video: Thich, binh luan, ⋮ -> Ghim -> Ghim -> "Da ghim binh luan"
+//   commentAndPin  trang xem video: Thich, binh luan, ⋮ -> Ghim -> Ghim; tai lai trang de kiem lai tung viec
 // Ham thuan tren mot Page da o dung kenh (ctx.withChannel lo chuyen kenh). Muc mau = 'keep' -> bo qua.
 const { StepError, channelOf, sleep } = require('../studio/driver')
 const { CATEGORY_NAMES, normalizeTemplate, tagsToAdd, fmtStudioDate, recordingDateFor, renderComment, compareFields } = require('../optimize-template')
@@ -82,6 +82,12 @@ const SEL = {
   option: '[role=option], tp-yt-paper-item',
   chip: '#tags-container #chip-text, ytcp-chip #chip-text',
   tagInput: '#tags-container input, ytcp-form-input-container#tags-container input',
+  datePicker: 'ytcp-date-picker',
+  dateInput: 'ytcp-date-picker #textbox input, ytcp-date-picker input, [role=dialog] input',
+  calMonth: '[role=listitem][aria-label]',
+  calDay: '.calendar-day',
+  calPrev: '#prev-month',
+  calNext: '#next-month',
   thread: 'ytd-comment-thread-renderer',
   content: '#content-text',
   pinnedBadge: '#pinned-comment-badge',
@@ -158,6 +164,34 @@ const triggerInfo = (page, t) => page.eval((t, sel) => {
     disabled: tr.getAttribute('aria-disabled') === 'true' || tr.hasAttribute('disabled'),
   }
 }, t, SEL.trigger)
+
+// Lich chon ngay cua Studio: lui / toi tung thang toi khi thay "thg M YYYY" roi bam o ngay. true neu da bam.
+async function pickCalendarDay(page, date) {
+  const label = `thg ${date.getMonth() + 1} ${date.getFullYear()}`
+  for (let i = 0; i < 36; i++) {
+    const r = await page.eval((s, label, day, ym) => {
+      const months = window.__ya.find({ selector: s.calMonth, within: { selector: s.datePicker, hidden: true } }, true)
+      const n = (x) => window.__ya.norm(x)
+      const hit = months.find((m) => n(m.getAttribute('aria-label')) === n(label))
+      if (hit) {
+        hit.scrollIntoView({ block: 'center' })
+        const d = [...hit.querySelectorAll(s.calDay)].find((x) => !x.classList.contains('invisible') && n(x.textContent) === String(day))
+        if (!d) return 'noday'
+        d.setAttribute('data-ya-day', '1')
+        return 'found'
+      }
+      // thang dang hien (dau tien co nhan) truoc hay sau thang can tim?
+      // (lich that con giu 1 thang gia "thg 1 1900" trong danh sach cuon: bo qua)
+      const seen = months.map((m) => /(\d+)\s+(\d{4})/.exec(m.getAttribute('aria-label') || '')).filter((x) => x && Number(x[2]) > 1970).map((x) => Number(x[2]) * 12 + Number(x[1]) - 1)
+      if (!seen.length) return ''
+      return Math.min(...seen) > ym ? 'prev' : 'next'
+    }, SEL, label, date.getDate(), date.getFullYear() * 12 + date.getMonth())
+    if (r === 'found') { await page.click({ selector: '[data-ya-day="1"]' }); return true }
+    if (r === 'noday' || !r) return false
+    await page.click({ selector: r === 'prev' ? SEL.calPrev : SEL.calNext, within: { selector: SEL.datePicker, hidden: true } })
+  }
+  return false
+}
 
 // Chon `option` trong o tha xuong (bam vao t). 'same' | 'changed' | 'locked'
 async function pickOption(page, t, option) {
@@ -363,15 +397,29 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
       await page.waitFor(LABELS.recDate)
       const info = await triggerInfo(page, LABELS.recDate)
       if (info.lines.some((l) => norm(l) === norm(want))) return
-      await page.click(LABELS.recDate)
-      const inp = { selector: 'ytcp-date-picker input, [role=dialog] input' }
-      await page.type(inp, want)
-      await page.press('Enter')
-      await page.until((t, sel, want) => {
+      const shown = (timeout) => page.until((t, sel, want) => {
         const el = window.__ya.one(t)
         const tr = el && (el.closest(sel) || el)
         return tr && String(tr.innerText || '').split('\n').some((l) => window.__ya.norm(l) === want)
-      }, [LABELS.recDate, SEL.trigger, norm(want)], { what: `ngày quay "${want}"` })
+      }, [LABELS.recDate, SEL.trigger, norm(want)], { what: `ngày quay "${want}"`, timeout })
+      await page.click(LABELS.recDate)
+      // lich that (ngay-quay-lich.html): ytcp-date-picker > o "Nhập ngày" (tp-yt-paper-input#textbox) + lich cuon theo thang
+      // (ytcp-date-picker co kich thuoc 0: hop thoai ben trong la position: fixed -> cho o nhap, khong cho the cha)
+      await page.waitFor({ selector: SEL.dateInput })
+      await page.type({ selector: SEL.dateInput }, want)
+      await page.press('Enter')
+      let typed = await shown(1500).then(() => true, () => false)
+      if (!typed) {
+        // o ngay nam trong <form id="form">: phim Enter gui qua sendInputEvent khong phai luc nao cung "submit" form
+        await page.eval((s) => { const f = window.__ya.one({ selector: s.datePicker + ' form', hidden: true }); if (f && f.requestSubmit) f.requestSubmit() }, SEL)
+        typed = await shown(2000).then(() => true, () => false)
+      }
+      if (!typed) {
+        // go chu khong an: bam ngay tren lich nhu nguoi dung (video quay: bam "hom nay")
+        const ok = await pickCalendarDay(page, recDate)
+        if (!ok) throw new StepError(`Không chọn được ngày ${want} trên lịch.`, page.step)
+        await shown()
+      }
       changed.push('recordingDate')
     })
   }
@@ -631,102 +679,283 @@ async function inspectVideo(page, videoId, template, { urls, log = () => {}, onS
 }
 
 // ---- (c) binh luan + ghim tren trang xem video ----------------------------------
-async function commentAndPin(page, videoId, text, { urls, log = () => {}, onStep = () => {}, like = true, pin = true } = {}) {
+// Moi viec (Thich / binh luan / ghim) chi tinh la XONG khi da kiem lai: sau khi bam, roi tai lai
+// trang va doc lai (YouTube hien ket qua "lac quan" ngay ca khi may chu khong luu).
+// Nhan + bo chon rieng cua trang xem video (HTML that: tests/mock-yt/optimize/that/xem-video.html)
+const WATCH = {
+  comments: 'ytd-comments#comments', // khung binh luan chinh (ban sao trong engagement panel bi bo qua)
+  thread: 'ytd-comment-thread-renderer',
+  top: '#comment-container', // binh luan goc (khong tinh #replies)
+  content: '#content-text',
+  author: '#author-text', // a[href="/@handle"]
+  authorBadge: '#author-comment-badge', // rong voi nguoi xem; co chu (ytd-author-comment-badge-renderer) voi chu kenh
+  pinnedBadge: '#pinned-comment-badge', // luon co trong DOM, chi co chu khi da ghim
+  identity: 'ytd-comment-simplebox-renderer #author-thumbnail img, ytd-commentbox #author-thumbnail img', // alt = ten kenh dang binh luan
+  // chua dang nhap: nut "Dang nhap" tren thanh tren cung (a[href*=ServiceLogin])
+  signIn: { selector: 'a[href*="ServiceLogin"], a[href*="accounts.google.com/"], ytd-button-renderer a, tp-yt-paper-button', regex: '^(đăng nhập|sign in)$' },
+  commentsOff: { regex: '(tính năng bình luận đã bị tắt|bình luận đã bị tắt|comments are turned off)', within: 'ytd-comments#comments' },
+  sortMenu: { selector: '#sort-menu [role=button], #sort-menu tp-yt-paper-button', regex: '^(sắp xếp bình luận|sắp xếp theo|sort comments|sort by)$', within: 'ytd-comments#comments' },
+  newest: { regex: '^(mới nhất|newest first|newest)$', within: 'ytd-comments#comments #sort-menu' },
+}
+
+// Trong trang: doc cac luot binh luan dang hien, tim binh luan co chu `want`, xem co phai cua kenh `who`.
+// Tra ve { count, first, match, other }; danh dau binh luan cua kenh bang data-ya-thread="me".
+const scanThreads = (page, want, who) => page.eval((s, want, who) => {
+  const n = (x) => String(x || '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()
+  const handleOf = (x) => { const m = /@([^/?#\s]+)/.exec(decodeURIComponent(String(x || ''))); return m ? '@' + m[1].toLowerCase() : '' }
+  const ucOf = (x) => (/\/channel\/(UC[\w-]{10,})/.exec(String(x || '')) || [])[1] || ''
+  const wh = handleOf(who.handle)
+  const info = (th, i) => {
+    const top = th.querySelector(s.top) || th
+    const c = top.querySelector(s.content)
+    const text = n(c && c.innerText)
+    const badge = top.querySelector(s.authorBadge)
+    const creator = !!(badge && (badge.querySelector('ytd-author-comment-badge-renderer') || n(badge.innerText)))
+    const links = [...top.querySelectorAll(`${s.author}, ${s.authorBadge} a, #author-thumbnail-button, #author-thumbnail a`)]
+    const ids = links.flatMap((a) => [a.getAttribute('href'), a.getAttribute('aria-label'), a.innerText])
+    const handles = ids.map(handleOf).filter(Boolean)
+    const author = (handles[0] || n(ids.find((x) => n(x)) || '')).slice(0, 80)
+    const byHandle = !!wh && handles.includes(wh)
+    const byUc = !!who.ucId && ids.some((x) => ucOf(x) === who.ucId)
+    const pb = top.querySelector(s.pinnedBadge)
+    const pinned = !!(pb && window.__ya.visible(pb) && n(pb.innerText))
+    return { i, text, author, creator, mine: byHandle || byUc || creator, pinned }
+  }
+  for (const el of document.querySelectorAll('[data-ya-thread]')) el.removeAttribute('data-ya-thread')
+  const list = window.__ya.find({ selector: s.thread, within: s.comments }, true)
+  const w = n(want)
+  const same = (t) => !!t && !!w && (t === w || (w.length > 60 && t.startsWith(w.slice(0, 60))))
+  let match = null, other = null
+  list.forEach((th, i) => {
+    if (match) return
+    const x = info(th, i)
+    if (!same(x.text)) return
+    if (x.mine) { match = x; th.setAttribute('data-ya-thread', 'me') } else if (!other) other = x
+  })
+  const first = list.length ? info(list[0], 0) : null
+  if (first) first.ours = same(first.text) && first.mine
+  return { count: list.length, first, match, other }
+}, WATCH, want, who)
+
+// Ten kenh trong o binh luan (anh dai dien cua o "Them binh luan...")
+const commentIdentity = (page) => page.eval((s) => {
+  const box = document.querySelector(s.comments) || document
+  for (const img of box.querySelectorAll(s.identity)) { const a = String(img.getAttribute('alt') || '').trim(); if (a) return a }
+  return ''
+}, WATCH)
+
+const likeTarget = { ...LABELS.like, selector: SEL.likeButton }
+const likePressed = (page) => page.eval((t) => { const el = window.__ya.one(t); return !!el && el.getAttribute('aria-pressed') === 'true' }, likeTarget)
+
+// Goi fn() toi khi co gia tri (khac null/false/'') hoac het ms; khong nem loi khi het gio.
+async function poll(page, fn, ms) {
+  const end = Date.now() + ms
+  for (;;) {
+    if (page.shouldStop && page.shouldStop()) throw new StepError('Đã dừng theo yêu cầu.', page.step)
+    const v = await fn().catch(() => null)
+    if (v || Date.now() > end) return v || null
+    await sleep(300)
+  }
+}
+
+async function openWatch(page, url) {
+  await page.goto(url)
+  await page.waitFor(likeTarget, { timeout: Math.max(page.timeout, 20000) })
+}
+
+// Cuon toi khung binh luan (YouTube chi tai khi khung vao tam nhin) -> { off } | { off: false }
+async function openComments(page, { timeout = Math.max(page.timeout, 20000) } = {}) {
+  return page.until((s, add, off) => {
+    const box = document.querySelector(s.comments)
+    if (box) box.scrollIntoView({ block: 'start' })
+    else window.scrollBy(0, 400)
+    if (window.__ya.count(off)) return { off: true }
+    if (window.__ya.count({ ...add, within: s.comments }) || window.__ya.count({ selector: s.thread, within: s.comments })) return { off: false }
+    return null
+  }, [WATCH, LABELS.addComment, WATCH.commentsOff], { what: 'phần bình luận', timeout })
+}
+
+// Tim binh luan cua kenh: cuon de YouTube tai them; khong thay thi doi sang "Moi nhat" roi tim lai.
+async function seekMine(page, text, who, { pages = 8, log = () => {} } = {}) {
+  let other = null
+  let count = 0
+  for (const sort of ['top', 'newest']) {
+    if (sort === 'newest') {
+      // video chua co binh luan nao / khong co menu sap xep: khong can doi
+      if (!count || !(await page.has(WATCH.sortMenu))) break
+      log('info', 'Chưa thấy bình luận của kênh ở mục "Hàng đầu": chuyển sang "Mới nhất".')
+      await page.click(WATCH.sortMenu)
+      await page.click(WATCH.newest)
+      await sleep(800)
+      await page.until((s) => window.__ya.count({ selector: s.thread, within: s.comments }), [WATCH], { timeout: Math.max(page.timeout, 10000), what: 'bình luận (Mới nhất)' }).catch(() => 0)
+    }
+    for (let round = 0, still = 0; round < pages && still < 2; round++) {
+      const r = await scanThreads(page, text, who)
+      if (r.match) return r.match
+      other = other || r.other
+      count = r.count
+      await page.eval((s) => {
+        const th = window.__ya.find({ selector: s.thread, within: s.comments }, true)
+        if (th.length) th[th.length - 1].scrollIntoView({ block: 'end' })
+        window.scrollBy(0, 600)
+      }, WATCH)
+      const grew = await page.until((s, k) => window.__ya.count({ selector: s.thread, within: s.comments }) > k, [WATCH, r.count], { timeout: 2500 }).catch(() => false)
+      still = grew ? 0 : still + 1
+    }
+  }
+  if (other) log('warn', `Có bình luận cùng nội dung nhưng của "${other.author || '?'}", không phải của kênh.`)
+  return null
+}
+
+async function commentAndPin(page, videoId, text, { urls, log = () => {}, onStep = () => {}, like = true, pin = true, channel = {}, pages = 8 } = {}) {
   text = String(text || '').trim()
   const warnings = []
-  const out = { id: videoId, liked: false, commented: false, pinned: false, warnings }
+  const shots = []
+  // liked/commented/pinned: da KIEM LAI sau khi tai lai trang; posted: lan nay vua dang binh luan
+  const out = { id: videoId, liked: false, commented: false, pinned: false, posted: false, warnings, shots, blocker: '' }
+  const who = { name: String(channel.name || '').trim(), handle: String(channel.handle || '').trim(), ucId: String(channel.ucId || '') }
+  const url = `${urls.youtube}/watch?v=${videoId}`
   const step = (name, fn) => { onStep(name); return page.run(name, fn) }
+  const warned = new Set()
+  // canh bao (moi loai mot lan) + luu anh/HTML trang de nguoi sua tool xem
+  const warn = async (kind, shot, msg) => {
+    if (warned.has(kind)) return
+    warned.add(kind)
+    warnings.push(msg)
+    log('warn', msg)
+    const p = page.snapshot ? await page.snapshot(`xem-video-${videoId}-${shot}`) : ''
+    if (p) { shots.push(p); log('info', `Đã lưu ảnh + HTML trang xem video: ${p}.png`) }
+  }
+  const wrongChannel = (name) => !!(name && who.name && norm(name) !== norm(who.name))
 
-  await step('Mở trang xem video', async () => {
-    await page.goto(`${urls.youtube}/watch?v=${videoId}`)
-    await page.waitFor({ ...LABELS.like, selector: SEL.likeButton }, { timeout: Math.max(page.timeout, 20000) })
-  })
+  await step('Mở trang xem video', () => openWatch(page, url))
+  // cua so chay ngam: YouTube chi tai binh luan khi trang "hien" (backgroundThrottling: false)
+  const vis = await page.eval(() => document.visibilityState).catch(() => '')
+  if (vis && vis !== 'visible') log('warn', `Trang xem video đang ở trạng thái "${vis}" (cửa sổ chạy ngầm), YouTube có thể không tải bình luận.`)
+
+  if (await page.has(WATCH.signIn)) {
+    out.blocker = 'signedOut'
+    await warn('all', 'dang-nhap', 'YouTube (www.youtube.com) chưa đăng nhập trong cửa sổ chạy ngầm: không thích / bình luận / ghim được. Vào trang Tài khoản, bấm "Đăng nhập" lại cho tài khoản Google này.')
+    return out
+  }
+
+  // khung binh luan: bat/tat? dang binh luan bang kenh nao?
+  let box = null
+  try {
+    box = await step('Mở phần bình luận', () => openComments(page, text ? {} : { timeout: Math.min(page.timeout, 8000) }))
+  } catch (e) {
+    if (text) throw e
+  }
+  if (box && box.off) {
+    out.blocker = 'commentsOff'
+    if (text) await warn('comment', 'tat-binh-luan', 'Tính năng bình luận đã bị tắt ở video này nên không bình luận / ghim được. Bật bình luận (mẫu tối ưu: Bình luận = Bật) rồi chạy lại.')
+    text = ''
+  }
+  // anh dai dien co the nap muon: cho toi da 3 giay
+  const identity = box && !box.off ? (await poll(page, () => commentIdentity(page), 3000)) || '' : ''
+  if (identity) log('info', `Ô bình luận trên YouTube đang dùng kênh "${identity}".`)
+  if (wrongChannel(identity)) {
+    out.blocker = 'wrongChannel'
+    await warn('all', 'sai-kenh', `Đang bình luận bằng kênh "${identity}", không phải kênh "${who.name}": không thích / bình luận / ghim để khỏi làm bằng kênh khác. Trên youtube.com tài khoản này đang chọn kênh khác (hoặc kênh "${who.name}" chỉ được cấp quyền trong Studio).`)
+    return out
+  }
 
   if (like) {
     await step('Thích video', async () => {
-      const b = { ...LABELS.like, selector: SEL.likeButton }
-      const pressed = await page.eval((t) => { const el = window.__ya.one(t); return !!el && el.getAttribute('aria-pressed') === 'true' }, b)
-      if (!pressed) {
-        await page.click(b)
-        await page.until((t) => { const el = window.__ya.one(t); return !!el && el.getAttribute('aria-pressed') === 'true' }, [b], { what: 'nút Thích được bấm' })
-      }
-      out.liked = true
+      if (await likePressed(page)) { out.liked = true; return }
+      await page.click(likeTarget)
+      const ok = await page.until((t) => { const el = window.__ya.one(t); return !!el && el.getAttribute('aria-pressed') === 'true' }, [likeTarget], { what: 'nút Thích được bấm', timeout: Math.max(page.timeout, 8000) }).catch(() => false)
+      if (ok) out.liked = true
+      else await warn('like', 'thich', 'Đã bấm "Thích" nhưng nút không chuyển sang "đã thích".')
     })
   }
-  if (!text) return out
 
-  // binh luan chi tai khi cuon xuong
-  await step('Mở phần bình luận', async () => {
-    await page.until((a, th) => {
-      if (window.__ya.count(a) || window.__ya.count({ selector: th })) return true
-      window.scrollBy(0, 400)
-      return false
-    }, [LABELS.addComment, SEL.thread], { what: 'phần bình luận', timeout: Math.max(page.timeout, 20000) })
-  })
-
-  const findMine = () => page.eval((s, want) => {
-    const n = (x) => String(x || '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()
-    for (const el of document.querySelectorAll('[data-ya-thread]')) el.removeAttribute('data-ya-thread')
-    const w = n(want)
-    for (const th of window.__ya.find({ selector: s.thread }, true)) {
-      const c = th.querySelector(s.content)
-      const got = n(c && c.innerText)
-      if (got && (got === w || (w.length > 60 && got.startsWith(w.slice(0, 60))))) {
-        th.setAttribute('data-ya-thread', 'me')
-        // #pinned-comment-badge luon co trong DOM, chi co chu khi da ghim
-        const b = th.querySelector(s.pinnedBadge)
-        return { pinned: !!(b && window.__ya.visible(b) && String(b.innerText || '').trim()) }
-      }
+  let mine = null
+  if (text) {
+    mine = await step('Tìm bình luận của kênh', () => seekMine(page, text, who, { pages, log }))
+    if (mine) log('info', 'Bình luận này của kênh đã có dưới video, không đăng lại.')
+    else {
+      await step('Đăng bình luận', async () => {
+        await page.click(LABELS.addComment)
+        await page.waitFor({ selector: SEL.editor })
+        const id2 = await commentIdentity(page)
+        if (wrongChannel(id2)) {
+          out.blocker = 'wrongChannel'
+          await page.click({ selector: '#cancel-button button, #cancel-button' }).catch(() => {})
+          await warn('all', 'sai-kenh', `Đang bình luận bằng kênh "${id2}", không phải kênh "${who.name}": không đăng bình luận.`)
+          return
+        }
+        await page.type({ selector: SEL.editor }, text)
+        const submit = { ...LABELS.submitComment, selector: SEL.submit }
+        await page.until((t) => {
+          const el = window.__ya.one(t)
+          return !!el && el.getAttribute('aria-disabled') !== 'true' && !el.hasAttribute('disabled')
+        }, [submit], { what: 'nút "Bình luận" bật' })
+        await page.click(submit)
+        // cho binh luan moi hien ra VA dung ten kenh
+        const r = await poll(page, async () => { const x = await scanThreads(page, text, who); return x.match || x.other ? x : null }, Math.max(page.timeout, 15000))
+        if (!r) await warn('comment', 'binh-luan', 'Đã bấm "Bình luận" nhưng không thấy bình luận hiện ra dưới video.')
+        else if (!r.match) await warn('comment', 'binh-luan', `Bình luận hiện dưới tên "${r.other.author || '?'}", không phải kênh "${who.name || who.handle}".`)
+        else { out.posted = true; mine = r.match }
+      })
+      if (out.blocker === 'wrongChannel') return out
     }
-    return null
-  }, SEL, text)
-
-  let mine = await findMine()
-  if (mine) {
-    log('info', 'Bình luận này đã có dưới video, không đăng lại.')
-  } else {
-    await step('Đăng bình luận', async () => {
-      await page.click(LABELS.addComment)
-      await page.type({ selector: SEL.editor }, text)
-      const submit = { ...LABELS.submitComment, selector: SEL.submit }
-      await page.until((t) => {
-        const el = window.__ya.one(t)
-        return !!el && el.getAttribute('aria-disabled') !== 'true' && !el.hasAttribute('disabled')
-      }, [submit], { what: 'nút "Bình luận" bật' })
-      await page.click(submit)
-      mine = await page.until((s, want) => {
-        const n = (x) => String(x || '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()
-        return window.__ya.find({ selector: s.thread }, true).some((th) => { const c = th.querySelector(s.content); return n(c && c.innerText).startsWith(n(want).slice(0, 60)) })
-      }, [SEL, text], { what: 'bình luận vừa đăng', timeout: Math.max(page.timeout, 15000) }).then(findMine)
-      out.commented = true
-    })
   }
-  out.pinned = !!(mine && mine.pinned)
-  if (!pin || out.pinned) return out
 
-  try {
-    await step('Ghim bình luận', async () => {
-      await findMine()
-      await page.click({ ...LABELS.commentMenu, selector: 'button, [role=button]', within: '[data-ya-thread="me"]' })
-      await page.click({ ...LABELS.pin, within: SEL.menus })
-      await markDialog(page, LABELS.pinDialog, 'pin')
-      await page.click({ ...LABELS.pin, within: sec('pin') })
-      const end = Date.now() + Math.max(page.timeout, 15000)
-      for (;;) {
-        const m = await findMine()
-        if (m && m.pinned) break
-        if (Date.now() > end) throw new StepError('Không thấy bình luận được ghim sau khi bấm "Ghim".', page.step)
-        await sleep(300)
-      }
-    })
-    out.pinned = true
-  } catch (e) {
-    await page.press('Escape').catch(() => {})
-    const m = `Đã bình luận nhưng chưa ghim được: ${e.message}`
-    warnings.push(m)
-    log('warn', m)
+  if (text && pin && mine && !mine.pinned) {
+    try {
+      await step('Ghim bình luận', async () => {
+        await scanThreads(page, text, who)
+        await page.click({ ...LABELS.commentMenu, selector: 'button, [role=button]', within: '[data-ya-thread="me"]' })
+        if (!(await page.until((t) => window.__ya.count(t), [{ ...LABELS.pin, within: SEL.menus }], { timeout: 4000 }).catch(() => 0))) {
+          throw new StepError('Menu của bình luận không có "Ghim" (kênh đang dùng không phải chủ video?).', page.step)
+        }
+        await page.click({ ...LABELS.pin, within: SEL.menus })
+        // hop thoai "Ghim binh luan nay?" (co the khong co)
+        const isPinned = async () => { const x = await scanThreads(page, text, who); return !!(x.match && x.match.pinned) }
+        const seen = await poll(page, async () => ((await isPinned()) ? 'pinned' : (await markDialog(page, LABELS.pinDialog, 'pin', { timeout: 0 }).catch(() => false)) ? 'dialog' : ''), Math.max(page.timeout, 8000))
+        if (seen === 'dialog') await page.click({ ...LABELS.pin, within: sec('pin') })
+        if (!(await poll(page, isPinned, Math.max(page.timeout, 15000)))) throw new StepError('Không thấy huy hiệu "Đã ghim" trên bình luận sau khi bấm "Ghim".', page.step)
+      })
+    } catch (e) {
+      if (/Đã dừng theo yêu cầu/.test(e.message)) throw e
+      await page.press('Escape').catch(() => {})
+      await warn('pin', 'ghim', `Chưa ghim được bình luận: ${e.message}`)
+    }
   }
+
+  // ---- kiem lai sau khi tai lai trang: chi tin dieu YouTube da luu ----
+  if (!like && !text) return out
+  await step('Kiểm tra lại sau khi tải lại trang', async () => {
+    await openWatch(page, url)
+    if (like) {
+      // nut Thich co the nhan trang thai muon mot chut sau khi trang tai xong
+      const p = await page.until((t) => { const el = window.__ya.one(t); return !!el && el.getAttribute('aria-pressed') === 'true' }, [likeTarget], { timeout: 3000 }).catch(() => false)
+      if (!p && out.liked) await warn('like', 'tai-lai-thich', 'Sau khi tải lại trang, video chưa được thích (YouTube không lưu lượt thích).')
+      out.liked = !!p
+    }
+    if (!text) return
+    const b = await openComments(page).catch(() => null)
+    if (!b || b.off) {
+      await warn('comment', 'tai-lai-binh-luan', b ? 'Sau khi tải lại trang, phần bình luận đã bị tắt.' : 'Sau khi tải lại trang không thấy phần bình luận.')
+      return
+    }
+    // binh luan ghim luon dung dau: luot dau tien phai la cua kenh va co huy hieu "Da ghim"
+    const first = await page.until((s) => window.__ya.count({ selector: s.thread, within: s.comments }), [WATCH], { timeout: Math.min(page.timeout, 8000) })
+      .then(() => scanThreads(page, text, who)).then((r) => r.first).catch(() => null)
+    out.pinned = !!(first && first.ours && first.pinned)
+    const found = out.pinned ? first : await seekMine(page, text, who, { pages, log })
+    out.commented = !!found
+    if (!found) {
+      await warn('comment', 'tai-lai-binh-luan', out.posted
+        ? 'Đã đăng bình luận nhưng tải lại trang thì không thấy nữa (YouTube có thể giữ lại để xét duyệt / coi là spam, nhất là bình luận có đường link).'
+        : 'Sau khi tải lại trang không thấy bình luận của kênh dưới video.')
+    }
+    if (pin && found && !out.pinned) await warn('pin', 'tai-lai-ghim', 'Sau khi tải lại trang, bình luận của kênh không được ghim ở đầu phần bình luận.')
+  })
+  if (text && pin && !out.commented) out.pinned = false
+  log(out.warnings.length ? 'warn' : 'ok', `Trang xem video (đã kiểm lại): ${[like && `thích ${out.liked ? '✓' : '✗'}`, text && `bình luận ${out.commented ? '✓' : '✗'}`, text && pin && `ghim ${out.pinned ? '✓' : '✗'}`].filter(Boolean).join(', ')}.`)
   return out
 }
 
-module.exports = { LABELS, SEL, listVideos, optimizeVideo, inspectVideo, commentAndPin, _t: { markSection, markDialog, triggerInfo, isChecked, isEnabled, sec, playlistItems, READ } }
+module.exports = { LABELS, SEL, WATCH, listVideos, optimizeVideo, inspectVideo, commentAndPin, _t: { markSection, markDialog, triggerInfo, isChecked, isEnabled, sec, playlistItems, READ, scanThreads, commentIdentity } }

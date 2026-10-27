@@ -55,7 +55,10 @@ module.exports = (ctx) => {
       await ctx.withChannel(key, async (page) => {
         const rows = await listVideos(page, ucOf(key), { urls: ctx.urls, log: ctx.log, limit: LATEST })
         const db = readDb()
-        S.videos = rows.map((r) => ({ ...r, status: 'scan', step: 'Chờ đọc', error: '', warnings: (db[key] && db[key][r.id] && db[key][r.id].warnings) || [] }))
+        const prev = (id) => (db[key] && db[key][id]) || {}
+        // viec o trang xem video (thich / binh luan / ghim) chua kiem lai duoc o lan toi uu truoc: quet khong doc duoc nen lay tu db
+        const watchLeft = (id) => (prev(id).missing || []).filter((k) => ['thích', 'bình luận', 'ghim'].includes(k))
+        S.videos = rows.map((r) => ({ ...r, status: 'scan', step: 'Chờ đọc', error: '', warnings: prev(r.id).warnings || [] }))
         S.at = new Date().toISOString()
         ctx.push()
         // doc tung video (chi doc): loi o mot video khong dung ca lan quet
@@ -64,7 +67,8 @@ module.exports = (ctx) => {
           set(v.id, { step: `Đang đọc ${i + 1}/${S.videos.length}…` })
           try {
             const r = await inspectVideo(page, v.id, tpl, { urls: ctx.urls, log: ctx.log, video: v })
-            Object.assign(v, { missing: r.missing, note: r.notes.join(' · '), title: r.title || v.title, status: r.missing.length ? 'new' : 'done' })
+            const missing = [...r.missing, ...watchLeft(v.id)]
+            Object.assign(v, { missing, note: r.notes.join(' · '), title: r.title || v.title, status: missing.length ? 'new' : 'done' })
           } catch (e) {
             if (page.snapshot) await page.snapshot(`quet-${v.id}`).catch(() => {})
             Object.assign(v, { missing: [], note: `Không đọc được trang Chi tiết: ${e.message}`, status: 'new' })
@@ -97,6 +101,7 @@ module.exports = (ctx) => {
     for (const v of todo) setV(v.id, { status: 'run', step: 'Chờ', error: '' })
     ctx.log('info', `Bắt đầu tối ưu ${todo.length} video.`)
     let ok = 0
+    let partial = 0 // video chua thich / binh luan / ghim duoc
     try {
       await ctx.withChannel(key, async (page) => {
         for (const v of todo) {
@@ -112,7 +117,8 @@ module.exports = (ctx) => {
               if (!v.visibility || PUBLIC.test(v.visibility)) {
                 // phan Studio da luu: loi o trang xem video chi la canh bao (chay lai se khong dang trung)
                 try {
-                  c = await commentAndPin(page, v.id, text, { urls: ctx.urls, log: ctx.log, onStep, like: tpl.like, pin: tpl.pin })
+                  const ch = channel(key) || {}
+                  c = await commentAndPin(page, v.id, text, { urls: ctx.urls, log: ctx.log, onStep, like: tpl.like, pin: tpl.pin, channel: { name: ch.name || name, handle: ch.handle || '', ucId: ucOf(key) } })
                   warnings.push(...c.warnings)
                 } catch (e) {
                   if (ctx.stopped()) throw e
@@ -121,10 +127,16 @@ module.exports = (ctx) => {
                 }
               } else warnings.push(`Video đang "${v.visibility}" nên chưa thích / bình luận được. Tối ưu lại khi video đã công khai.`)
             }
+            // viec muon lam o trang xem video ma CHUA kiem lai duoc (sau khi tai lai trang)
+            const missing = [tpl.like && !(c && c.liked) && 'thích', text && !(c && c.commented) && 'bình luận', text && tpl.pin && !(c && c.pinned) && 'ghim'].filter(Boolean)
             for (const w of warnings) if (!r.warnings.includes(w)) ctx.log('warn', `${r.title || v.title}: ${w}`)
-            writeDb(ot.markOptimized(readDb(), key, v.id, { title: r.title, changed: r.changed, commented: !!(c && (c.commented || c.pinned)), pinned: !!(c && c.pinned), warnings }))
+            if (missing.length) {
+              partial++
+              ctx.log('warn', `${r.title || v.title}: chưa ${missing.join(', ')} được (đã kiểm lại trên trang xem video).`)
+            }
+            writeDb(ot.markOptimized(readDb(), key, v.id, { title: r.title, changed: r.changed, liked: !!(c && c.liked), commented: !!(c && c.commented), pinned: !!(c && c.pinned), missing, warnings }))
             // khong quet lai: muc con thieu = muc quet thay thieu ma toi uu chua doi duoc (chi khi co canh bao Studio)
-            const left = r.warnings.length ? (v.missing || []).filter((k) => !r.changed.includes(k)) : []
+            const left = [...(r.warnings.length ? (v.missing || []).filter((k) => !r.changed.includes(k) && !['thích', 'bình luận', 'ghim'].includes(k)) : []), ...missing]
             setV(v.id, { status: left.length ? 'new' : 'done', step: '', title: r.title || v.title, warnings, missing: left, note: '' })
             ok++
           } catch (e) {
@@ -140,7 +152,7 @@ module.exports = (ctx) => {
     } finally {
       S.busy = false
       if (mine()) cache.set(key, { videos: S.videos, at: S.at })
-      ctx.log(ok === todo.length ? 'ok' : 'warn', `Xong: tối ưu được ${ok}/${todo.length} video.`)
+      ctx.log(ok === todo.length && !partial ? 'ok' : 'warn', `Xong: tối ưu được ${ok}/${todo.length} video${partial ? `, ${partial} video chưa thích / bình luận / ghim được (xem cảnh báo)` : ''}.`)
     }
     return ok
   }

@@ -520,6 +520,7 @@ function LogsPage({ state, send }: Backend) {
       </div>
       <ActionBar>
         <Button variant="subtle" size="sm" disabled={!state.logs.length} onClick={() => send('clear')}><Eraser /> Xóa nhật ký</Button>
+        <Button variant="outline" size="sm" onClick={() => send('open_data')} title="nhat-ky.txt (nhật ký đầy đủ) và loi-trang/ (ảnh + HTML lúc lỗi)"><FolderOpen /> Mở thư mục dữ liệu</Button>
       </ActionBar>
     </>
   )

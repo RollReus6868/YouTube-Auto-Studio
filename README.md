@@ -94,7 +94,7 @@ Gemini API key lấy ở [Google AI Studio](https://aistudio.google.com/apikey),
 
 ## Dữ liệu và nhật ký
 
-Cài đặt, khóa (đã mã hóa) và phiên đăng nhập Studio nằm ở `%APPDATA%\YTAutoStudio` (Windows) hoặc `~/Library/Application Support/YTAutoStudio` (macOS). Lỗi khi khởi động ghi vào `error.log` trong thư mục đó.
+Cài đặt, khóa (đã mã hóa) và phiên đăng nhập Studio nằm ở `%APPDATA%\YTAutoStudio` (Windows) hoặc `~/Library/Application Support/YTAutoStudio` (macOS). Lỗi khi khởi động ghi vào `error.log` trong thư mục đó. Nhật ký đầy đủ ghi vào `nhat-ky.txt` (quá 2 MB thì chuyển thành `nhat-ky.old.txt`), ảnh + HTML trang lúc lỗi nằm trong `loi-trang/`. Mở nhanh thư mục này bằng nút **Mở thư mục dữ liệu** ở trang Nhật ký.
 
 ## Phát triển
 

@@ -1,49 +1,69 @@
 <!doctype html><meta charset="utf-8"><title>YouTube</title>
-<!-- Gia lap trang xem video. Cau truc theo HTML that (html/yt-10-watch.html): like-button-view-model button
-     (aria-label "cùng N người khác thích video này", aria-pressed), ytd-comments, yt-formatted-string#simplebox-placeholder
-     "Thêm bình luận...", #contenteditable-root, ytd-button-renderer#submit-button > button[aria-label=Bình luận],
-     ytd-comment-thread-renderer > ytd-comment-view-model (#pinned-comment-badge luon co, chi co chu khi da ghim;
-     yt-attributed-string#content-text; nut button[aria-label="Menu tác vụ"]), menu ytd-popup-container >
-     ytd-menu-popup-renderer[role=menu] > tp-yt-paper-item[role=menuitem]. Hop thoai xac nhan ghim va thong bao:
-     chua co HTML that (gia: tp-yt-paper-dialog[role=dialog] + yt-confirm-dialog-renderer, tp-yt-paper-toast).
-     Binh luan chi tai khi cuon xuong. localStorage 'opt-nopin' = '1': menu khong co "Ghim". -->
+<!-- Gia lap trang xem video. Cau truc theo HTML that (that/xem-video.html, html/yt-10-watch.html): like-button-view-model button
+     (aria-label "cùng N người khác thích video này", aria-pressed), ytd-comments#comments > ytd-item-section-renderer#sections >
+     #header (ytd-comments-header-renderer: #sort-menu "Sắp xếp bình luận" -> "Nổi bật nhất"/"Mới nhất", ytd-comment-simplebox-renderer
+     voi #author-thumbnail img[alt=ten kenh dang binh luan], "Thêm bình luận...") + #contents (ytd-comment-thread-renderer >
+     #comment-container > ytd-comment-view-model: #pinned-comment-badge luon co, chi co chu khi da ghim; a#author-text[href=/@handle];
+     #author-comment-badge rong voi nguoi xem, co ytd-author-comment-badge-renderer voi chu kenh; yt-attributed-string#content-text;
+     button[aria-label="Menu tác vụ"]) + #continuations. Menu: ytd-popup-container > ytd-menu-popup-renderer[role=menu].
+     Hop thoai xac nhan ghim, thong bao, chu "tat binh luan", nut "Dang nhap": chua co HTML that (gia theo YouTube).
+     Binh luan chi tai khi khung vao tam nhin (IntersectionObserver), moi lan 5 luot, cuon xuong cuoi thi tai them.
+     Tinh huong (localStorage, giu qua tai lai trang):
+       opt-signedout=1     chua dang nhap youtube.com (nut "Đăng nhập", Thich khong an)
+       opt-cmtoff=1        tinh nang binh luan bi tat (chu viet dang to hop NFD)
+       opt-as={name,handle} dang binh luan bang kenh khac (khong phai chu video)
+       opt-likefail=1      Thich chi doi tren trang, tai lai thi mat
+       opt-cmtlocal=1      binh luan chi hien tren trang (bi giu lai), tai lai thi mat
+       opt-nopin=1         menu khong co "Ghim"
+       opt-pinfail=silent  bam Ghim, co thong bao nhung huy hieu van rong, khong luu
+       opt-pinfail=local   huy hieu hien tren trang nhung khong luu (tai lai thi mat)
+       opt-topcap=N        muc "Nổi bật nhất" chi hien N luot (phai doi sang "Mới nhất") -->
 <style>
   body { margin: 0; font: 14px Roboto, Arial, sans-serif; background: #0f0f0f; color: #f1f1f1 }
-  ytd-comments, ytd-comment-thread-renderer, ytd-comment-view-model, ytd-comment-simplebox-renderer, ytd-commentbox, ytd-popup-container,
-  ytd-menu-popup-renderer, tp-yt-paper-listbox, yt-confirm-dialog-renderer, yt-attributed-string { display: block }
-  like-button-view-model, dislike-button-view-model, ytd-button-renderer, yt-button-shape, ytd-menu-renderer, yt-icon-button { display: inline-block }
-  header { height: 56px; display: flex; align-items: center; padding: 0 16px; gap: 16px }
+  ytd-comments, ytd-item-section-renderer, ytd-comments-header-renderer, ytd-comment-thread-renderer, ytd-comment-view-model, ytd-comment-simplebox-renderer, ytd-commentbox, ytd-popup-container,
+  ytd-menu-popup-renderer, tp-yt-paper-listbox, yt-confirm-dialog-renderer, yt-attributed-string, ytd-message-renderer { display: block }
+  like-button-view-model, dislike-button-view-model, ytd-button-renderer, yt-button-shape, ytd-menu-renderer, yt-icon-button, yt-img-shadow, ytd-author-comment-badge-renderer { display: inline-block }
+  [hidden] { display: none !important }
+  ytd-masthead { height: 56px; display: flex; align-items: center; padding: 0 16px; gap: 16px }
   main { display: grid; grid-template-columns: 860px 360px; gap: 24px; padding: 0 24px }
   .player { height: 480px; background: #222 }
   h1 { font-size: 20px }
   .bar { display: flex; align-items: center; gap: 12px }
-  button { background: #272727; color: #f1f1f1; border: 0; border-radius: 18px; padding: 8px 14px; cursor: pointer }
+  button, ytd-masthead a { background: #272727; color: #f1f1f1; border: 0; border-radius: 18px; padding: 8px 14px; cursor: pointer; text-decoration: none }
   button[aria-pressed=true] { background: #f1f1f1; color: #0f0f0f }
   button[disabled] { opacity: .4 }
   .side div { height: 120px; background: #222; margin-bottom: 8px }
   #simplebox-placeholder { display: block; border-bottom: 1px solid #555; padding: 6px 0; color: #aaa; cursor: text }
+  #author-thumbnail img { width: 24px; height: 24px; border-radius: 50%; background: #555; vertical-align: middle }
   #contenteditable-root { border-bottom: 2px solid #fff; padding: 6px 0; min-height: 20px }
-  ytd-comment-thread-renderer { margin: 16px 0; position: relative }
-  #author-text { background: #333; border-radius: 10px; padding: 1px 6px; font-size: 12px; color: #fff; text-decoration: none }
+  ytd-comment-thread-renderer { margin: 16px 0; position: relative; min-height: 90px }
+  #author-text { color: #fff; text-decoration: none; font-size: 13px }
+  ytd-author-comment-badge-renderer { background: #555; border-radius: 10px; padding: 1px 6px; font-size: 12px }
+  ytd-author-comment-badge-renderer a { color: #fff; text-decoration: none }
   #action-menu { position: absolute; right: 0; top: 0 }
+  #sort-menu { position: relative }
+  #sort-menu tp-yt-paper-button { cursor: pointer; padding: 4px 8px }
+  #sort-menu tp-yt-iron-dropdown { position: absolute; left: 0; top: 28px; z-index: 10; background: #282828; border-radius: 8px; padding: 8px 0; width: 260px }
+  #sort-menu tp-yt-paper-item { display: block; padding: 8px 16px; cursor: pointer }
+  #subtitle { font-size: 11px; color: #aaa }
+  #continuations { height: 20px }
   ytd-popup-container tp-yt-iron-dropdown { position: fixed; z-index: 10; background: #282828; border-radius: 8px; padding: 8px 0 }
   tp-yt-paper-item { display: block; padding: 8px 24px; cursor: pointer }
   .bg { position: fixed; inset: 0; background: #0008; z-index: 20 }
   tp-yt-paper-dialog { position: fixed; left: 440px; top: 330px; width: 380px; background: #212121; padding: 16px; border-radius: 12px; z-index: 30; display: block }
   tp-yt-paper-toast { position: fixed; left: 12px; bottom: 24px; background: #f1f1f1; color: #0f0f0f; padding: 12px 16px; border-radius: 6px; z-index: 40 }
-  tp-yt-paper-toast[hidden] { display: none }
 </style>
 <script src="/__file/optimize/data.js"></script>
-<header><b>▶ YouTube</b><input placeholder="Tìm kiếm" style="width:480px"></header>
+<ytd-masthead id="masthead"><b>▶ YouTube</b><input placeholder="Tìm kiếm" style="width:480px"><span style="flex:1"></span><div id="end"></div></ytd-masthead>
 <main>
   <div>
     <div class="player"></div>
     <h1><span id="video-title"></span></h1>
-    <div class="bar"><b>Dark Bible Study</b><button>Số liệu phân tích</button><button>Chỉnh sửa video</button><span style="flex:1"></span>
+    <div class="bar"><b>Dark Bible Study</b><span id="owner-buttons"></span><span style="flex:1"></span>
       <like-button-view-model><toggle-button-view-model><button-view-model><button id="like" aria-pressed="false"></button></button-view-model></toggle-button-view-model></like-button-view-model>
       <dislike-button-view-model><button aria-pressed="false" aria-label="Không thích video này">👎</button></dislike-button-view-model><button>Chia sẻ</button></div>
     <p class="desc"></p>
-    <ytd-comments id="comments" style="min-height:900px"></ytd-comments>
+    <ytd-comments id="comments" style="min-height:900px"><ytd-item-section-renderer id="sections"><div id="header"></div><div id="contents"></div><div id="continuations"></div></ytd-item-section-renderer></ytd-comments>
   </div>
   <div class="side"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div>
 </main>
@@ -53,13 +73,30 @@
 const id = new URLSearchParams(location.search).get('v')
 const video = OPT.videoOf(id)
 const CK = 'opt-comments-' + id, LK = 'opt-like-' + id
-const me = OPT.channel.handle
-let comments = OPT.load(CK, [])
+const owner = OPT.channel
+const signedOut = OPT.load('opt-signedout', false)
+const as = OPT.load('opt-as', null) // kenh dang dung tren youtube.com (null = chu video)
+const me = as || { name: owner.name, handle: owner.handle }
+const isOwner = !as
+const flag = (k) => OPT.load(k, false)
+// nguoi xem binh luan san (nhieu luot thich -> o "Noi bat nhat" xep truoc binh luan moi)
+const SEED = ['Amen! Cảm ơn kênh.', 'Bài giảng rất hay 🙏', 'Xem lần thứ hai vẫn thấy cảm động', 'Matthew 22 is so deep', 'God bless you all', 'Từ Việt Nam xem video này', 'Please make part 2!']
+  .map((text, k) => ({ cid: 'seed' + k, author: '@nguoixem' + (k + 1), text, t: Date.now() - (k + 2) * 86400e3, likes: 9 - k, pinned: false, creator: false }))
+let comments = OPT.load(CK, null) || SEED
 let liked = OPT.load(LK, false)
+let sort = 'top'
+let shown = 0
+let fresh = [] // binh luan vua dang tren trang nay (YouTube dua len dau cho toi khi tai lai)
 const $ = (s, r = document) => r.querySelector(s)
 const esc = OPT.esc
+const saveComments = () => { if (!flag('opt-cmtlocal')) OPT.save(CK, comments) }
 $('#video-title').textContent = video.title
 $('.desc').textContent = `${video.views} lượt xem · ${video.title}`
+
+$('#end').innerHTML = signedOut
+  ? `<ytd-button-renderer class="style-suggestive"><yt-button-shape><a href="https://accounts.google.com/ServiceLogin?service=youtube&hl=vi" aria-label="Đăng nhập"><span role="text">Đăng nhập</span></a></yt-button-shape></ytd-button-renderer>`
+  : `<button id="avatar-btn" aria-label="Menu tài khoản">${esc(me.name.slice(0, 1))}</button>`
+if (!signedOut && isOwner) $('#owner-buttons').innerHTML = '<button>Số liệu phân tích</button><a href="#" aria-label="Chỉnh sửa video">Chỉnh sửa video</a>'
 
 function paintLike() {
   const b = $('#like')
@@ -67,7 +104,13 @@ function paintLike() {
   b.setAttribute('aria-label', `cùng 2 người khác thích video này`)
   b.textContent = `👍 ${2 + (liked ? 1 : 0)}`
 }
-$('#like').onclick = () => { liked = !liked; OPT.save(LK, liked); OPT.log({ type: 'like', id, liked }); paintLike() }
+$('#like').onclick = () => {
+  if (signedOut) return toast('Bạn thích video này? Đăng nhập để thể hiện ý kiến của bạn.')
+  liked = !liked
+  if (!flag('opt-likefail')) OPT.save(LK, liked)
+  OPT.log({ type: 'like', id, liked })
+  paintLike()
+}
 paintLike()
 
 function toast(text) {
@@ -78,64 +121,106 @@ function toast(text) {
 }
 const closePopups = () => { $('#popups').innerHTML = '' }
 
-function renderComments() {
-  const box = $('#comments')
-  const list = [...comments].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0))
-  box.innerHTML = `<div class="bar"><b>${comments.length} bình luận</b><span>Sắp xếp theo</span></div>
-    <ytd-comment-simplebox-renderer><div id="placeholder-area"><yt-formatted-string id="simplebox-placeholder" role="textbox">Thêm bình luận...</yt-formatted-string></div><div id="comment-dialog"></div></ytd-comment-simplebox-renderer>` +
-    list.map((c) => `<ytd-comment-thread-renderer data-i="${comments.indexOf(c)}"><div id="comment-container"><ytd-comment-view-model id="comment"><div id="body"><div id="main">
-      <div id="header"><div id="pinned-comment-badge">${c.pinned ? `<ytd-pinned-comment-badge-renderer>📌 Đã ghim bởi ${esc(me)}</ytd-pinned-comment-badge-renderer>` : ''}</div>
-        <div id="header-author"><h3><a id="author-text" href="/${esc(c.author)}"><span>${esc(c.author)}</span></a></h3><span id="published-time-text"><a>${c.at || '1 ngày trước'}</a></span></div></div>
-      <yt-attributed-string id="content-text"><span role="text">${esc(c.text)}</span></yt-attributed-string>
-      <div id="toolbar"><button aria-pressed="false" aria-label="Thích bình luận này">👍</button><button>Phản hồi</button></div></div>
-      <div id="action-menu"><ytd-menu-renderer><yt-icon-button id="button" class="dropdown-trigger"><button id="button" aria-label="Menu tác vụ">⋮</button></yt-icon-button></ytd-menu-renderer></div>
-      </div></ytd-comment-view-model></div></ytd-comment-thread-renderer>`).join('')
-  $('#simplebox-placeholder').onclick = openBox
-  for (const t of box.querySelectorAll('ytd-comment-thread-renderer')) t.querySelector('#action-menu button').onclick = (e) => { e.stopPropagation(); menu(t, +t.dataset.i) }
+function ordered() {
+  const by = sort === 'top' ? (a, b) => b.likes - a.likes || a.t - b.t : (a, b) => b.t - a.t
+  const rest = comments.filter((c) => !c.pinned && !fresh.includes(c.cid)).sort(by)
+  let list = comments.filter((c) => c.pinned).concat(comments.filter((c) => fresh.includes(c.cid) && !c.pinned), rest)
+  const cap = OPT.load('opt-topcap', 0)
+  if (sort === 'top' && cap) list = list.slice(0, cap)
+  return list
 }
 
+function header() {
+  const opt = (k, name, sub) => `<a class="yt-simple-endpoint${sort === k ? ' iron-selected' : ''}" aria-selected="${sort === k}" data-sort="${k}"><tp-yt-paper-item role="option" aria-disabled="false"><tp-yt-paper-item-body two-line=""><div id="item-with-badge"><div class="item">${name} <span class="notification" hidden=""></span></div></div><div secondary="" id="subtitle">${sub}</div></tp-yt-paper-item-body></tp-yt-paper-item></a>`
+  $('#header').innerHTML = `<ytd-comments-header-renderer><div id="title" class="bar"><h2 id="count"><yt-formatted-string class="count-text"><span>${comments.length}</span><span> bình luận</span></yt-formatted-string></h2>
+    <span id="sort-menu"><yt-sort-filter-sub-menu-renderer><yt-dropdown-menu icon-label="Sắp xếp theo"><tp-yt-paper-menu-button id="menu-button" role="group" aria-haspopup="true"><div id="trigger"><tp-yt-paper-button id="label" class="dropdown-trigger" role="button" tabindex="0" aria-expanded="false" aria-label="Sắp xếp bình luận"><div id="icon-label">Sắp xếp theo</div></tp-yt-paper-button></div>
+      <tp-yt-iron-dropdown id="dropdown" hidden aria-hidden="true"><div id="contentWrapper"><tp-yt-paper-listbox id="menu" role="listbox">${opt('top', 'Nổi bật nhất', 'Hiện bình luận nổi bật')}${opt('new', 'Mới nhất', 'Hiện bình luận gần đây, bao gồm cả những mục có thể là bình luận rác')}</tp-yt-paper-listbox></div></tp-yt-iron-dropdown></tp-yt-paper-menu-button></yt-dropdown-menu></yt-sort-filter-sub-menu-renderer></span></div>
+    <div id="simple-box"><ytd-comment-simplebox-renderer><yt-img-shadow id="author-thumbnail"><img id="img" alt="${signedOut ? '' : esc(me.name)}" src=""></yt-img-shadow><div id="placeholder-area"><yt-formatted-string id="simplebox-placeholder" role="textbox" tabindex="0">Thêm bình luận...</yt-formatted-string></div><div id="comment-dialog"></div></ytd-comment-simplebox-renderer></div></ytd-comments-header-renderer>`
+  $('#simplebox-placeholder').onclick = openBox
+  $('#sort-menu #label').onclick = (e) => { e.stopPropagation(); $('#sort-menu #dropdown').hidden = !$('#sort-menu #dropdown').hidden }
+  for (const a of document.querySelectorAll('#sort-menu [data-sort]')) a.onclick = (e) => {
+    e.stopPropagation()
+    $('#sort-menu #dropdown').hidden = true
+    sort = a.dataset.sort
+    setTimeout(() => { header(); $('#contents').innerHTML = ''; shown = 0; more() }, 500) // tai lai danh sach
+  }
+}
+
+function thread(c) {
+  const h = esc(c.author)
+  return `<ytd-comment-thread-renderer data-cid="${c.cid}"><div id="comment-container"><ytd-comment-view-model id="comment"><div id="body">
+    <div id="author-thumbnail"><button id="author-thumbnail-button" aria-label="${h}"><yt-img-shadow><img alt="" src=""></yt-img-shadow></button></div><div id="main">
+    <div id="header"><div id="pinned-comment-badge">${c.pinned ? `<ytd-pinned-comment-badge-renderer><span id="label">📌 Đã ghim bởi ${esc(owner.handle)}</span></ytd-pinned-comment-badge-renderer>` : ''}</div>
+      <div id="header-author"><h3><a id="author-text" href="/${h}"${c.creator ? ' hidden' : ''}><span>${h}</span></a></h3>
+      <span id="author-comment-badge">${c.creator ? `<ytd-author-comment-badge-renderer creator=""><a class="yt-simple-endpoint" href="/${h}"><div id="name"><yt-formatted-string id="text" title="${h}">${h}</yt-formatted-string></div></a></ytd-author-comment-badge-renderer>` : ''}</span>
+      <span id="published-time-text"><a href="/watch?v=${id}&lc=${c.cid}">${Date.now() - c.t < 60e3 ? '0 giây trước' : Math.round((Date.now() - c.t) / 86400e3) + ' ngày trước'}</a></span></div></div>
+    <ytd-expander id="expander"><div id="content"><yt-attributed-string id="content-text"><span role="text">${esc(c.text)}</span></yt-attributed-string></div></ytd-expander>
+    <div id="toolbar"><button aria-pressed="false" aria-label="Thích bình luận này">👍 ${c.likes || ''}</button><button>Phản hồi</button></div></div>
+    <div id="action-menu"><ytd-menu-renderer><yt-icon-button id="button" class="dropdown-trigger"><button id="button" aria-label="Menu tác vụ">⋮</button></yt-icon-button></ytd-menu-renderer></div>
+    </div></ytd-comment-view-model></div><div id="replies"></div></ytd-comment-thread-renderer>`
+}
+
+// tai them 5 luot (YouTube: khi #continuations vao tam nhin)
+function more() {
+  const list = ordered()
+  const add = list.slice(shown, shown + 5)
+  shown += add.length
+  const box = $('#contents')
+  box.insertAdjacentHTML('beforeend', add.map(thread).join(''))
+  for (const t of box.querySelectorAll('ytd-comment-thread-renderer:not([data-wired])')) {
+    t.setAttribute('data-wired', '1')
+    t.querySelector('#action-menu button').onclick = (e) => { e.stopPropagation(); menu(t, t.dataset.cid) }
+  }
+}
+function renderAll() { header(); $('#contents').innerHTML = ''; const n = Math.max(shown, 5); shown = 0; while (shown < n && shown < ordered().length) more() }
+
 function openBox() {
+  if (signedOut) return toast('Đăng nhập để bình luận.')
   $('#placeholder-area').hidden = true
-  $('#comment-dialog').innerHTML = `<ytd-commentbox><div id="contenteditable-root" contenteditable="true" aria-label="Thêm bình luận..."></div>
+  $('#comment-dialog').innerHTML = `<ytd-comment-dialog-renderer><ytd-commentbox id="commentbox"><div id="thumbnail-input-row"><yt-img-shadow id="author-thumbnail"><img id="img" alt="${esc(me.name)}" src=""></yt-img-shadow>
+    <div id="contenteditable-root" contenteditable="true" aria-label="Thêm bình luận..."></div></div>
     <div class="bar" style="justify-content:flex-end"><ytd-button-renderer id="cancel-button"><yt-button-shape><button aria-label="Hủy">Hủy</button></yt-button-shape></ytd-button-renderer>
-    <ytd-button-renderer id="submit-button"><yt-button-shape><button aria-label="Bình luận" disabled="true" aria-disabled="true"><span role="text">Bình luận</span></button></yt-button-shape></ytd-button-renderer></div></ytd-commentbox>`
+    <ytd-button-renderer id="submit-button"><yt-button-shape><button aria-label="Bình luận" disabled="true" aria-disabled="true"><span role="text">Bình luận</span></button></yt-button-shape></ytd-button-renderer></div></ytd-commentbox></ytd-comment-dialog-renderer>`
   const ed = $('#contenteditable-root')
   const sb = $('#submit-button button')
   ed.focus()
   ed.addEventListener('input', () => { const off = !ed.innerText.trim(); sb.setAttribute('aria-disabled', String(off)); if (off) sb.setAttribute('disabled', 'true'); else sb.removeAttribute('disabled') })
-  $('#cancel-button').onclick = renderComments
+  $('#cancel-button').onclick = renderAll
   sb.onclick = () => {
     if (sb.hasAttribute('disabled')) return
     const text = ed.innerText.trim()
     sb.setAttribute('disabled', 'true')
     setTimeout(() => {
-      comments.unshift({ author: me, text, at: '0 giây trước', pinned: false })
-      OPT.save(CK, comments)
-      OPT.log({ type: 'comment', id, text })
-      renderComments()
+      const c = { cid: 'c' + Date.now(), author: me.handle, text, t: Date.now(), likes: 0, pinned: false, creator: isOwner }
+      comments.push(c)
+      fresh.push(c.cid)
+      saveComments()
+      OPT.log({ type: 'comment', id, text, author: me.handle })
+      renderAll()
     }, 800) // binh luan hien tre
   }
 }
 
-function menu(thread, i) {
+function menu(t, cid) {
   closePopups()
-  const r = thread.querySelector('#action-menu button').getBoundingClientRect()
-  const items = (OPT.load('opt-nopin', false) ? [] : [comments[i].pinned ? 'Bỏ ghim' : 'Ghim']).concat(['Chỉnh sửa', 'Xóa'])
+  const c = comments.find((x) => x.cid === cid)
+  const r = t.querySelector('#action-menu button').getBoundingClientRect()
+  const items = (flag('opt-nopin') || !isOwner ? [] : [c.pinned ? 'Bỏ ghim' : 'Ghim']).concat(c.author === me.handle ? ['Chỉnh sửa', 'Xóa'] : ['Báo vi phạm'])
   setTimeout(() => {
     $('#popups').innerHTML = `<tp-yt-iron-dropdown style="left:${r.left - 140}px;top:${r.bottom + 4}px"><div id="contentWrapper"><ytd-menu-popup-renderer role="menu"><tp-yt-paper-listbox id="items" role="none">
       ${items.map((x) => `<ytd-menu-navigation-item-renderer role="menuitem"><tp-yt-paper-item role="menuitem"><yt-formatted-string>${x}</yt-formatted-string></tp-yt-paper-item></ytd-menu-navigation-item-renderer>`).join('')}
       </tp-yt-paper-listbox></ytd-menu-popup-renderer></div></tp-yt-iron-dropdown>`
     $('#popups').onclick = (e) => {
-      const t = e.target.closest('tp-yt-paper-item')
-      if (!t) return
+      const it = e.target.closest('tp-yt-paper-item')
+      if (!it) return
       e.stopPropagation()
       closePopups()
-      if (t.textContent.trim() === 'Ghim') confirmPin(i)
+      if (it.textContent.trim() === 'Ghim') confirmPin(cid)
     }
   }, 200)
 }
 
-function confirmPin(i) {
+function confirmPin(cid) {
   setTimeout(() => {
     $('#popups').innerHTML = `<div class="bg"></div><tp-yt-paper-dialog role="dialog"><yt-confirm-dialog-renderer><h3 id="title">Ghim bình luận này?</h3>
       <p>Nếu bạn đã ghim một bình luận, thì bình luận này sẽ thay thế bình luận đã ghim trước đó.</p>
@@ -144,21 +229,36 @@ function confirmPin(i) {
     $('#popups .bg').onclick = closePopups
     $('#popups #confirm-button').onclick = () => {
       closePopups()
-      comments.forEach((c, k) => { c.pinned = k === i })
-      OPT.save(CK, comments)
-      OPT.log({ type: 'pin', id, text: comments[i].text })
-      renderComments()
+      const fail = OPT.load('opt-pinfail', '')
+      OPT.log({ type: 'pin', id, text: comments.find((c) => c.cid === cid).text })
       toast('Đã ghim bình luận')
+      if (fail === 'silent') return // may chu tu choi: huy hieu van rong
+      if (fail === 'local') { // chi doi tren trang, khong luu
+        document.querySelector(`[data-cid="${cid}"] #pinned-comment-badge`).innerHTML = `<ytd-pinned-comment-badge-renderer><span id="label">📌 Đã ghim bởi ${esc(owner.handle)}</span></ytd-pinned-comment-badge-renderer>`
+        return
+      }
+      comments.forEach((c) => { c.pinned = c.cid === cid })
+      saveComments()
+      renderAll()
     }
   }, 200)
 }
 
 document.addEventListener('click', (e) => { if (!e.target.closest('#popups')) closePopups() })
-// phan binh luan chi tai khi cuon xuong (giong YouTube that)
+// phan binh luan chi tai khi khung vao tam nhin (giong YouTube that: IntersectionObserver)
 let loaded = false
-addEventListener('scroll', () => {
-  if (loaded || scrollY < 150) return
+new IntersectionObserver((es) => {
+  if (loaded || !es.some((x) => x.isIntersecting)) return
   loaded = true
-  setTimeout(renderComments, 400)
-})
+  setTimeout(() => {
+    if (flag('opt-cmtoff')) {
+      $('#contents').innerHTML = `<ytd-message-renderer><yt-formatted-string id="message">${'Tính năng bình luận đã bị tắt.'.normalize('NFD')} <a href="#">Tìm hiểu thêm</a></yt-formatted-string></ytd-message-renderer>`
+      return
+    }
+    header()
+    more()
+    // cuon toi cuoi danh sach -> tai them
+    new IntersectionObserver((xs) => { if (xs.some((x) => x.isIntersecting) && shown < ordered().length) setTimeout(more, 300) }).observe($('#continuations'))
+  }, 400)
+}).observe($('#comments'))
 </script>

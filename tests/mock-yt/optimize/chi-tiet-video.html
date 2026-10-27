@@ -211,22 +211,46 @@ function playlistDialog() {
   setTimeout(() => document.body.append(bg, d), 300)
 }
 
-// ---- chon ngay quay (chua co HTML that: o nhap ngay + lich) ----
+// ---- chon ngay quay: giong the that (that/ngay-quay-lich.html) ----
+// ytcp-date-picker > tp-yt-paper-dialog > form > tp-yt-paper-input#textbox[aria-label="Nhập ngày"] input, #prev-month/#next-month,
+// ytcp-scrollable-calendar: moi thang la div[role=listitem][aria-label="thg M YYYY"] > span.calendar-day (o trong: .invisible)
+// localStorage 'opt-quirks' = {"dateTyping":false} gia lap Studio khong nhan ngay go vao o.
 function datePicker() {
-  const now = new Date()
+  const quirks = OPT.load('opt-quirks', {})
   const fmt = (d) => `${d.getDate()} thg ${d.getMonth() + 1}, ${d.getFullYear()}`
+  const m0 = /^(\d{1,2}) thg (\d{1,2}), (\d{4})$/.exec(W.recDate || '')
+  const cur = m0 ? new Date(+m0[3], +m0[2] - 1, +m0[1]) : new Date()
+  let ym = cur.getFullYear() * 12 + cur.getMonth()
   const bg = document.createElement('div'); bg.className = 'backdrop'
   const d = document.createElement('ytcp-date-picker')
-  const days = Array.from({ length: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() }, (_, i) => i + 1)
-  d.innerHTML = `<tp-yt-paper-dialog role="dialog"><input aria-label="Nhập ngày" value="${W.recDate || fmt(now)}"><div class="calendar">${days.map((n) => `<span role="button" class="day" data-d="${n}" style="display:inline-block;width:30px">${n}</span>`).join('')}</div></tp-yt-paper-dialog>`
+  const month = (k) => {
+    const y = Math.floor(k / 12), mo = k % 12
+    const pad = (new Date(y, mo, 1).getDay() + 6) % 7
+    const n = new Date(y, mo + 1, 0).getDate()
+    const cells = [...Array(pad)].map(() => '<span class="calendar-day invisible"> </span>')
+      .concat([...Array(n)].map((_, i) => `<span class="calendar-day${W.recDate === fmt(new Date(y, mo, i + 1)) ? ' selected' : ''}" data-k="${k}" style="display:inline-block;width:30px"> ${i + 1} </span>`))
+    return `<div role="listitem" aria-label="thg ${mo + 1} ${y}"><div class="month-header">Tháng ${mo + 1} ${y}</div>${cells.join('')}</div>`
+  }
+  const paintCal = () => { d.querySelector('ytcp-scrollable-calendar').innerHTML = '<div role="listitem" aria-label="thg 1 1900" style="display:none"></div>' + [ym - 1, ym, ym + 1].map(month).join('') }
+  d.innerHTML = `<tp-yt-paper-dialog id="dialog" role="dialog"><div id="control-area"><form id="form"><tp-yt-paper-input id="textbox" aria-label="Nhập ngày"><input autocomplete="off"></tp-yt-paper-input></form>
+    <ytcp-icon-button id="prev-month" role="button" aria-label="Tháng trước">‹</ytcp-icon-button><ytcp-icon-button id="next-month" role="button" aria-label="Tháng sau">›</ytcp-icon-button></div>
+    <ytcp-scrollable-calendar id="calendar" style="display:block;max-height:200px;overflow:auto"></ytcp-scrollable-calendar></tp-yt-paper-dialog>`
+  d.querySelector('input').value = fmt(cur)
+  paintCal()
   const close = (v) => { if (v) set('recDate', v); d.remove(); bg.remove() }
-  d.querySelector('input').addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter') return
-    const m = /^(\d{1,2}) thg (\d{1,2}), (\d{4})$/.exec(e.target.value.trim())
-    if (!m) { e.target.style.borderColor = 'red'; return }
+  d.querySelector('form').addEventListener('submit', (e) => {
+    e.preventDefault()
+    if (quirks.dateTyping === false) return
+    const m = /^(\d{1,2}) thg (\d{1,2}), (\d{4})$/.exec(d.querySelector('input').value.trim())
+    if (!m) { d.querySelector('input').style.borderColor = 'red'; return }
     close(fmt(new Date(+m[3], +m[2] - 1, +m[1])))
   })
-  d.addEventListener('click', (e) => { if (e.target.classList.contains('day')) close(fmt(new Date(now.getFullYear(), now.getMonth(), +e.target.dataset.d))) })
+  d.addEventListener('click', (e) => {
+    if (e.target.closest('#prev-month')) { ym--; paintCal(); return }
+    if (e.target.closest('#next-month')) { ym++; paintCal(); return }
+    const day = e.target.closest('.calendar-day')
+    if (day && !day.classList.contains('invisible')) { const k = +day.dataset.k; close(fmt(new Date(Math.floor(k / 12), k % 12, +day.textContent.trim()))) }
+  })
   bg.onclick = () => close()
   document.body.append(bg, d)
 }

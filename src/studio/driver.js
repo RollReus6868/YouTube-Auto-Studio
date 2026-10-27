@@ -88,6 +88,18 @@ const HELPER = `(() => {
   }
 })()`
 
+// HTML cua trang KEM shadow DOM (getHTML + moi shadow root dang mo), trinh duyet cu thi outerHTML
+const SNAPSHOT_HTML = `(() => {
+  try {
+    const roots = []
+    const walk = (r) => { for (const el of r.querySelectorAll('*')) if (el.shadowRoot) { roots.push(el.shadowRoot); walk(el.shadowRoot) } }
+    walk(document)
+    const el = document.documentElement
+    if (el.getHTML) return '<html' + [...el.attributes].map((a) => ' ' + a.name + '="' + a.value.replace(/"/g, '&quot;') + '"').join('') + '>' + el.getHTML({ serializableShadowRoots: true, shadowRoots: roots }) + '</html>'
+  } catch (_) {}
+  return document.documentElement.outerHTML
+})()`
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const describe = (t) => (typeof t === 'string' ? `"${t}"` : t.text !== undefined ? `"${t.text}"` : t.regex ? `/${t.regex}/` : t.selector)
 const target = (t) => (typeof t === 'string' ? { text: t } : t)
@@ -163,7 +175,8 @@ class Page {
     t = target(t)
     await this.waitFor(t, opts)
     // cho trang ve xong 2 khung hinh: cua so an vua tai xong co luc bo mat cu bam dau tien
-    await this.eval(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))).catch(() => {})
+    // (cua so an: requestAnimationFrame co the bi ham toi ~1 giay/khung -> cho toi da 150 ms)
+    await this.eval(() => new Promise((r) => { requestAnimationFrame(() => requestAnimationFrame(r)); setTimeout(r, 150) })).catch(() => {})
     const r = await this.eval((x) => window.__ya.rect(x), t)
     if (!r) throw new StepError(`Không thấy ${describe(t)} để bấm.`, this.step)
     if (r.covered || opts.dom) {
@@ -235,7 +248,7 @@ class Page {
       const base = path.join(this.shotDir, `${new Date().toISOString().replace(/[:.]/g, '-')}-${name}`)
       const img = await this.wc.capturePage()
       fs.writeFileSync(`${base}.png`, img.toPNG())
-      const html = await this.wc.executeJavaScript('document.documentElement.outerHTML').catch(() => '')
+      const html = await this.wc.executeJavaScript(SNAPSHOT_HTML).catch(() => '')
       fs.writeFileSync(`${base}.html`, `<!-- ${this.url()} -->\n${html}`)
       return base
     } catch (_) { return '' }

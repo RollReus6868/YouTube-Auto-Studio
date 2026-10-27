@@ -9,7 +9,7 @@ import type { PageProps } from './index'
 export type OptVideo = {
   id: string; title: string; visibility: string; date: string; dateNote?: string; views: string | number; comments: string | number
   status: 'new' | 'scan' | 'run' | 'done' | 'error'; step: string; error: string; warnings?: string[]
-  missing?: string[] // muc mau con thieu (lan quet doc trang Chi tiet video)
+  missing?: string[] // muc mau con thieu (quet trang Chi tiet video) + viec o trang xem video chua kiem lai duoc (thich / binh luan / ghim)
   note?: string // ghi chu khi quet (doc loi...)
 }
 export type OptimizeState = {
@@ -33,7 +33,8 @@ const FIELD_VI: Record<string, string> = {
 
 function VideoRow({ v, on, toggle, busy }: { v: OptVideo; on: boolean; toggle: () => void; busy: boolean }) {
   const [tone, text] = STATUS[v.status]
-  const warn = v.status === 'done' && v.warnings && v.warnings.length > 0
+  const missing = v.status === 'done' && v.missing && v.missing.length ? v.missing : null
+  const warn = v.status === 'done' && ((v.warnings && v.warnings.length > 0) || !!missing)
   return (
     <li className={cn('flex items-start gap-3 rounded-lg px-2 py-2', on ? 'bg-primary/5' : 'hover:bg-muted/40')}>
       <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-[hsl(var(--primary))]" checked={on} disabled={busy} onChange={toggle} aria-label={`Chọn ${v.title}`} />
@@ -205,7 +206,7 @@ export const optimizeDemo: OptimizeState = {
     vid('vyiSqHByq24', 'The Tower of Babel: Humanity’s First Rebellion Against God', 'Công khai', '25 thg 10, 2026', 'Đã xuất bản', 412, 9, 'new', { missing: ['playlists', 'location', 'recordingDate'] }),
     vid('kQ1pB7xZt0E', 'Why Did God Harden Pharaoh’s Heart? The Dark Truth', 'Công khai', '24 thg 10, 2026', 'Đã xuất bản', 1280, 31, 'new', { missing: ['playlists'] }),
     vid('Lm8sN2rTq5Y', 'The Nephilim: Giants of the Bible Explained', 'Công khai', '22 thg 10, 2026', 'Đã xuất bản', 3540, 57, 'done'),
-    vid('Zx4cV6bNm1Q', 'Lilith: The Forbidden Story Before Eve', 'Công khai', '20 thg 10, 2026', 'Đã xuất bản', 2210, 44, 'done', { warnings: ['Đã bình luận nhưng chưa ghim được: menu không có “Ghim”.'] }),
+    vid('Zx4cV6bNm1Q', 'Lilith: The Forbidden Story Before Eve', 'Công khai', '20 thg 10, 2026', 'Đã xuất bản', 2210, 44, 'done', { warnings: ['Sau khi tải lại trang, bình luận của kênh không được ghim ở đầu phần bình luận.'], missing: ['ghim'] }),
     vid('Hj7gF3dSa9W', 'The Book of Enoch: Why It Was Removed', 'Không công khai', '18 thg 10, 2026', 'Đã tải lên', 96, 2, 'error', { error: 'Quá 5 giây vẫn chưa thấy "Lưu".' }),
     vid('Rt5yU1iOp3A', 'The Witch of Endor: Did Saul Really Speak to Samuel?', 'Công khai', '16 thg 10, 2026', 'Đã xuất bản', 733, 12, 'new', { note: 'Không đọc được trang Chi tiết: Quá 20 giây vẫn chưa thấy "Chi tiết video".' }),
     vid('Pq2wE8rTy6U', 'Cain’s Mark: What Was It Really?', 'Công khai', '15 thg 10, 2026', 'Đã xuất bản', 5021, 88, 'done'),
