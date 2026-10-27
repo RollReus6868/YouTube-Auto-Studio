@@ -29,6 +29,16 @@ module.exports = [
     assert.equal(list[6].id, 'HonorPar001', 'doc ca trang 2')
   }],
 
+  ['trang Noi dung kieu moi (tong quan): bam "Xem tất cả" o hang Video roi doc', async ({ page, urls, mock }) => {
+    await page.goto(`${urls.studio}/channel/${UC}/videos/upload`)
+    await page.eval(() => localStorage.setItem('opt-overview', 'true'))
+    try {
+      const list = await listVideos(page, UC, { urls, limit: 3 })
+      assert.deepEqual(list.map((v) => v.id), ['Prem0000001', VID, 'LostTribe01'])
+      assert.deepEqual((await events(mock, 'seeall')).map((e) => e.shelf), ['videos'], 'bam dung nut cua hang Video, khong bam hang Bai dang')
+    } finally { await page.eval(() => localStorage.removeItem('opt-overview')) }
+  }],
+
   ['chi doc N video moi nhat (limit)', async ({ page, urls }) => {
     await page.goto(`${urls.studio}/channel/${UC}/videos/upload`)
     await page.eval(() => localStorage.setItem('opt-pp', '2'))
@@ -131,6 +141,32 @@ module.exports = [
     assert.match(r.warnings.join('\n'), /Không thấy danh sách phát "Không Có Thật"/)
     assert.match(r.warnings.join('\n'), /Giấy phép bị khóa/)
     assert.deepEqual(await events(mock, 'endscreen'), [], 'man hinh ket thuc = giu nguyen')
+  }],
+
+  ['"Hiện thêm" bam lan dau bi mat: bam lai roi moi toi uu', async ({ page, urls, mock }) => {
+    await page.goto(`${urls.studio}/video/${VID}/edit`)
+    await page.eval(() => localStorage.setItem('opt-moreflaky', 'true'))
+    try {
+      const r = await optimizeVideo(page, VID, { ...KEEP, remix: 'none' }, { urls, now: NOW })
+      assert.deepEqual([r.changed, r.warnings], [['remix'], []])
+      const [save] = await events(mock, 'save')
+      assert.equal(save.data.remix, 'Không cho phép phối lại')
+    } finally { await page.eval(() => localStorage.removeItem('opt-moreflaky')) }
+  }],
+
+  ['Studio tieng Anh: van mo "Show more" va toi uu, ngay quay viet kieu tieng Anh', async ({ page, urls, mock }) => {
+    await page.goto(`${urls.studio}/video/${VID}/edit`)
+    await page.eval(() => localStorage.setItem('opt-english', 'true'))
+    try {
+      const logs = []
+      const r = await optimizeVideo(page, VID, { ...KEEP, remix: 'none', recordingDate: 'today' }, { urls, now: NOW, log: (l, m) => logs.push(`${l} ${m}`) })
+      assert.deepEqual([r.changed, r.warnings], [['recordingDate', 'remix'], []], logs.join('\n'))
+      assert(logs.some((l) => /đang dùng tiếng Anh/.test(l)))
+      const [save] = await events(mock, 'save')
+      assert.equal(save.data.remix, 'Không cho phép phối lại')
+      const i = await inspectVideo(page, VID, defaultTemplate(), { urls, now: NOW })
+      assert.deepEqual(i.notes, [])
+    } finally { await page.eval(() => localStorage.removeItem('opt-english')) }
   }],
 
   ['mau "giu nguyen" het: khong dung vao muc nao', async ({ page, urls, mock }) => {

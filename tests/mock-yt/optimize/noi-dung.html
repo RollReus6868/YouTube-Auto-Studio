@@ -2,7 +2,9 @@
 <!-- Gia lap Studio: Noi dung cua kenh -> tab Video. Cau truc theo HTML that (html/yt-2-videos-upload.html):
      ytcp-video-row[role=row] > div[role=cell].tablecell-*, a#thumbnail-anchor / a#video-title href="/video/<id>/edit",
      o luot xem them cua vidIQ (.tablecell-views.vidiq-scope), nut trang ytcp-icon-button#navigate-after.
-     Hang hien tre 500ms; localStorage 'opt-pp' = so hang moi trang (mac dinh 30). -->
+     Hang hien tre 500ms; localStorage 'opt-pp' = so hang moi trang (mac dinh 30).
+     localStorage 'opt-overview' = trang Noi dung kieu moi (anh nguoi dung 27/10): hang "Bài đăng" + hang "Video", moi hang co nut "Xem tất cả";
+     bam "Xem tất cả" cua hang Video moi hien bang video. -->
 <style>
   body { margin: 0; font: 13px Roboto, Arial, sans-serif; background: #282828; color: #fff }
   header { height: 56px; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid #3e3e3e }
@@ -26,6 +28,9 @@
 <script src="/__file/optimize/data.js"></script>
 <header><b>▶ Studio</b><input placeholder="Tìm kiếm trên kênh của bạn" style="width:420px"></header>
 <nav><div>Tổng quan</div><div><b>Nội dung</b></div><div>Số liệu phân tích</div><div>Cộng đồng</div><div>Bình luận</div></nav>
+<section id="overview" style="display:none;padding:16px 24px"><h1>Nội dung</h1>
+  <div class="shelf"><h2>Bài đăng</h2>${''}<button class="see-all" data-shelf="posts">Xem tất cả</button></div>
+  <div class="shelf"><h2>Video</h2><button class="see-all" data-shelf="videos">Xem tất cả</button><div>David's Forgotten Psalm…</div></div></section>
 <main>
   <h1>Nội dung của kênh</h1>
   <div class="tabs"><span class="on">Video</span><span>Shorts</span><span>Sự kiện phát trực tiếp</span><span>Bài đăng</span><span>Danh sách phát</span><span>Podcast</span></div>
@@ -69,6 +74,21 @@ function render() {
 document.getElementById('navigate-after').onclick = () => { if ((page + 1) * size < OPT.videos.length) { page++; document.getElementById('rows').innerHTML = 'Đang tải…'; setTimeout(render, 300) } }
 document.getElementById('navigate-before').onclick = () => { if (page) { page--; render() } }
 // kenh "Dark Bible Stories" cua Studio gia tai khoan (tests/mock-yt/accounts) dung chung danh sach video (e2e-accounts)
-if (uc !== OPT.channel.uc && uc !== 'UCmock000000000000000000') document.getElementById('rows').textContent = 'Không có nội dung nào'
-else setTimeout(render, 500)
+function start() {
+  if (uc !== OPT.channel.uc && uc !== 'UCmock000000000000000000') document.getElementById('rows').textContent = 'Không có nội dung nào'
+  else setTimeout(render, 500)
+}
+if (OPT.load('opt-overview', false)) {
+  document.querySelector('main').style.display = 'none'
+  document.getElementById('overview').style.display = ''
+  document.getElementById('overview').onclick = (e) => {
+    const b = e.target.closest('.see-all')
+    if (!b) return
+    OPT.log({ type: 'seeall', shelf: b.dataset.shelf })
+    if (b.dataset.shelf !== 'videos') return
+    document.getElementById('overview').style.display = 'none'
+    document.querySelector('main').style.display = ''
+    start()
+  }
+} else start()
 </script>

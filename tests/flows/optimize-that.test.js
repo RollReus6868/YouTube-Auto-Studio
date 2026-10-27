@@ -83,6 +83,36 @@ module.exports = [
     assert(r.filled.includes('tags'), 'tieu de da co trong the (khong phan biet hoa thuong)')
   }],
 
+  // Gia lap Studio o ngon ngu khac: xoa chu cua moi nhan co ma co dinh (any) -> phai tim duoc chi bang id / name
+  ['HTML that: moi muc tim duoc chi bang ma co dinh cua Studio (khong dua vao chu, moi ngon ngu)', async ({ page, urls }) => {
+    page.timeout = 3000
+    const saved = {}
+    for (const [k, v] of Object.entries(L)) if (v && v.any) { saved[k] = { text: v.text, regex: v.regex }; Object.assign(v, { text: '\u0000', regex: '^\u0000$' }) }
+    try {
+      assert(Object.keys(saved).length >= 20, 'so nhan co ma co dinh: ' + Object.keys(saved).length)
+      await page.goto(`${urls.studio}/that-optimize/chi-tiet`)
+      const o = { timeout: 3000 }
+      const read = {}
+      const bad = []
+      for (const k of ['playlists', 'paidPromotion', 'ai', 'remix', 'language', 'recordingDate', 'location', 'license', 'embeddable', 'category', 'comments']) {
+        try { read[k] = await _t.READ[k](page, o) } catch (e) { bad.push(`${k}: ${e.message}`) }
+      }
+      console.log(JSON.stringify(read))
+      assert.deepEqual(bad, [], bad.join('\n'))
+      assert.equal(read.playlists.count, 2)
+      assert.deepEqual([read.paidPromotion, read.ai, read.remix, read.recordingDate, read.location], ['', 'yes', 'none', '2 thg 8, 2026', ''])
+      assert.deepEqual(read.language, ['Tiếng Anh (Hoa Kỳ)', 'Tiếng Anh (Hoa Kỳ)'])
+      assert.deepEqual([read.license.locked, read.embeddable, read.category], [false, true, 'Mọi người và blog'])
+      for (const k of ['details', 'paidYes', 'paidNo', 'aiYes', 'aiNo', 'remixAll', 'remixAudio', 'remixNone', 'endScreen', 'save', 'embed']) assert.equal(await page.count(L[k]), 1, k)
+      assert.equal(await page.eval((s) => window.__ya.count({ selector: s.advanced }) > 0, SEL), true, 'nhan ra muc nang cao dang mo')
+      await page.goto(`${urls.studio}/that-optimize/danh-sach-phat`)
+      assert.equal(await page.count({ ...L.done, within: SEL.dialogs }), 1, 'nut Xong')
+      await page.goto(`${urls.studio}/that-optimize/man-hinh-ket-thuc`)
+      assert(await _t.markDialog(page, L.esEditor, 'es'), 'hop thoai man hinh ket thuc')
+      for (const k of ['esElements', 'esCancel', 'save']) assert(await page.count({ ...L[k], within: _t.sec('es') }) >= 1, k)
+    } finally { for (const [k, v] of Object.entries(saved)) Object.assign(L[k], v) }
+  }],
+
   ['HTML that (yt-4): hop thoai danh sach phat', async ({ page, urls }) => {
     page.timeout = 3000
     await page.goto(`${urls.studio}/that-optimize/danh-sach-phat`)
@@ -101,7 +131,7 @@ module.exports = [
   ['HTML that (yt-5): trinh chinh man hinh ket thuc', async ({ page, urls }) => {
     page.timeout = 3000
     await page.goto(`${urls.studio}/that-optimize/man-hinh-ket-thuc`)
-    await _t.markDialog(page, L.endScreen, 'es')
+    await _t.markDialog(page, L.esEditor, 'es')
     const r = {}
     for (const k of ['esElements', 'esLatest', 'esCancel', 'save']) r[k] = await page.count({ ...L[k], within: _t.sec('es') })
     console.log(JSON.stringify(r))

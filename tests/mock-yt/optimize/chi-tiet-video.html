@@ -311,17 +311,23 @@ function toast(text) {
 
 function bind() {
   $('ytcp-video-metadata-playlists').onclick = playlistDialog
+  // localStorage 'opt-moreflaky': lan bam "Hien them" dau tien bi mat; 'opt-english': nut viet tieng Anh (Show more / Show less)
+  const en = OPT.load('opt-english', false)
+  const MORE = en ? 'Show more' : 'Hiện thêm', LESS = en ? 'Show less' : 'Ẩn bớt'
+  let lost = OPT.load('opt-moreflaky', false)
+  $('#toggle-button .ytcpButtonShapeImpl__button-text-content').textContent = MORE
   $('#toggle-button').onclick = () => {
+    if (lost) { lost = false; return }
     const adv = $('#advanced')
     const label = $('#toggle-button .ytcpButtonShapeImpl__button-text-content')
     const b = $('#toggle-button button')
-    if (label.textContent === 'Hiện thêm') {
+    if (label.textContent === MORE) {
       if (!adv.innerHTML) { adv.innerHTML = advanced(); bindAdvanced() }
-      adv.style.display = ''; label.textContent = 'Ẩn bớt'; b.setAttribute('aria-label', 'Ẩn chế độ cài đặt nâng cao'); $('#more-hint').style.display = 'none'
-    } else { adv.style.display = 'none'; label.textContent = 'Hiện thêm'; b.setAttribute('aria-label', 'Hiện chế độ cài đặt nâng cao'); $('#more-hint').style.display = '' }
+      adv.style.display = ''; label.textContent = LESS; b.setAttribute('aria-label', en ? LESS : 'Ẩn chế độ cài đặt nâng cao'); $('#more-hint').style.display = 'none'
+    } else { adv.style.display = 'none'; label.textContent = MORE; b.setAttribute('aria-label', en ? MORE : 'Hiện chế độ cài đặt nâng cao'); $('#more-hint').style.display = '' }
     paint()
   }
-  $('#toggle-button button').setAttribute('aria-label', 'Hiện chế độ cài đặt nâng cao')
+  $('#toggle-button button').setAttribute('aria-label', en ? MORE : 'Hiện chế độ cài đặt nâng cao')
   $('#endscreen-editor-link').onclick = endScreen
 }
 

@@ -41,11 +41,14 @@ const HELPER = `(() => {
     const w = find(typeof t.within === 'string' ? { selector: t.within } : t.within, true)
     return w.length ? w : []
   }
+  // t.any: bo chon CSS theo ma co dinh cua Studio (id, name...) - khop o moi ngon ngu, uu tien truoc chu
   function find(t, many) {
     let found = []
     for (const root of scope(t)) {
-      const list = all(root.shadowRoot || root, t.selector || '*').filter((el) => (t.hidden || visible(el)) && matches(el, t))
-      found = found.concat(t.selector ? list : deepest(list))
+      const r = root.shadowRoot || root
+      const byId = t.any ? all(r, t.any).filter((el) => t.hidden || visible(el)) : []
+      const list = all(r, t.selector || '*').filter((el) => (t.hidden || visible(el)) && matches(el, t) && !byId.some((b) => b === el || b.contains(el)))
+      found = found.concat(byId, t.selector ? list : deepest(list))
     }
     if (t.nth !== undefined) { const el = found[t.nth < 0 ? found.length + t.nth : t.nth]; found = el ? [el] : [] }
     return many ? found : found.slice(0, 1)
