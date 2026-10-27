@@ -3,7 +3,7 @@
 import { AlertTriangle, CheckCircle2, LayoutPanelTop, ListMusic, LoaderCircle, Play, Square, Star, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { ActionBar, Button, Card, EmptyState, Field, PageBody, PageHeader, Pill, TextInput, ToggleRow, cn, type Tone } from '../kit'
-import type { AccountsState } from './AccountsPage'
+import { ChannelAvatar, type AccountsState } from './AccountsPage'
 import type { PageProps } from './index'
 
 type Parsed = { ok: boolean; error?: string; skip?: boolean; kind?: 'uc' | 'handle'; ucId?: string; handle?: string; url?: string; id?: string }
@@ -11,7 +11,7 @@ type Target = {
   key: string; name: string; status: 'queued' | 'run' | 'done' | 'skipped' | 'error' | 'stopped'
   step: string; error: string; channel: string; playlist: string; moved: boolean | null
 }
-type Chan = { key: string; name: string; handle: string; ucId: string; accountId: string; account?: string; subs?: string }
+type Chan = { key: string; name: string; handle: string; ucId: string; accountId: string; account?: string; subs?: string; avatar?: string }
 export type HomeTabState = {
   channelUrl: string; playlistUrl: string; position: string | number; doChannel: boolean; doPlaylist: boolean; selected: string[]
   check: { channel: Parsed; playlist: Parsed; position: { ok: boolean; value?: number; error?: string }; ok: boolean; errors: string[] }
@@ -28,17 +28,12 @@ const STATUS: Record<Target['status'], [Tone, string]> = {
 }
 const PART: Record<string, string> = { added: 'đã thêm', already: 'đã có sẵn', self: 'bỏ qua (kênh mới)', error: 'lỗi' }
 
-const COLORS = ['bg-rose-500', 'bg-violet-500', 'bg-sky-500', 'bg-emerald-500', 'bg-amber-500', 'bg-fuchsia-500', 'bg-teal-500']
-const colorOf = (s: string) => COLORS[[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length]
-const Avatar = ({ name }: { name: string }) => (
-  <span className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-extrabold text-white', colorOf(name))}>{([...name.trim()][0] || '?').toUpperCase()}</span>
-)
 
 // Kenh cua nguoi dung: lay truc tiep tu trang Tai khoan (luon moi), du phong danh sach cua tinh nang
 function channelsOf(state: PageProps['state'], s: HomeTabState | undefined): Chan[] {
   const acc = state.f.accounts as AccountsState | undefined
   if (acc && acc.list && acc.list.some((a) => a.channels.length)) {
-    return acc.list.flatMap((a) => a.channels.map((c) => ({ key: c.key, name: c.name, handle: c.handle, ucId: c.ucId, subs: c.subs, accountId: a.id, account: a.label })))
+    return acc.list.flatMap((a) => a.channels.map((c) => ({ key: c.key, name: c.name, handle: c.handle, ucId: c.ucId, subs: c.subs, avatar: c.avatar, accountId: a.id, account: a.label })))
   }
   return s?.channels ?? []
 }
@@ -183,7 +178,7 @@ export function HomeTabPage({ state, send, go }: PageProps) {
                             <li key={c.key} className={cn('flex items-center gap-2.5 rounded-lg px-2 py-1.5', on ? 'bg-primary/5' : 'hover:bg-muted/50', isNew && 'opacity-70')}>
                               <input type="checkbox" className="h-4 w-4 shrink-0 cursor-pointer accent-[hsl(var(--primary))]" checked={on}
                                 disabled={busy || (isNew && doChannel)} aria-label={`Chọn kênh ${c.name}`} onChange={() => toggle(c.key)} />
-                              <Avatar name={c.name} />
+                              <ChannelAvatar name={c.name} src={c.avatar} className="h-7 w-7 text-xs" />
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
                                   <span className="truncate text-sm font-semibold">{c.name}</span>

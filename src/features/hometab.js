@@ -28,7 +28,8 @@ module.exports = (ctx) => {
   const findNew = (ch) => (ch && ch.ok ? S.channels.find((c) => input.sameChannel(c, ch)) || null : null)
 
   function refresh() {
-    S.channels = listChannels().map((c) => ({ key: c.key, name: c.name, handle: c.handle || '', ucId: c.ucId || '', accountId: c.accountId || '' }))
+    // avatar: anh dai dien kenh doc san o trang Tai khoan (khong tai lai), giao dien hien thay chu cai
+    S.channels = listChannels().map((c) => ({ key: c.key, name: c.name, handle: c.handle || '', ucId: c.ucId || '', subs: c.subs || '', avatar: c.avatar || '', accountId: c.accountId || '' }))
     S.check = input.checkInput(S)
     const mine = findNew(S.check.channel)
     S.newKey = mine ? mine.key : ''
