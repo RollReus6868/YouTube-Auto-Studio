@@ -1,7 +1,7 @@
 // Kiem tung bo chon cua src/flows/optimize.js tren HTML THAT cua Studio / YouTube (nguoi dung luu ngay 26/10/2026).
 // Trang tinh (khong co script cua Studio) nen chi kiem "tim thay dung phan tu", khong bam.
 const assert = require('assert')
-const { LABELS: L, SEL, _t } = require('../../src/flows/optimize')
+const { LABELS: L, SEL, WATCH, _t } = require('../../src/flows/optimize')
 
 const probe = async (page, list) => {
   const bad = []
@@ -92,6 +92,37 @@ module.exports = [
     }
     console.log(JSON.stringify(r))
     for (const k of ['like', 'addComment', 'threads', 'content', 'menuBtn', 'pin']) assert(r[k] >= 1, `khong thay ${k}: ${JSON.stringify(r)}`)
+  }],
+
+  ['HTML that (yt-10): trang xem video - bo chon dung de KIEM LAI (tac gia, ghim, kenh dang binh luan, sap xep)', async ({ page, urls }) => {
+    page.timeout = 3000
+    await page.goto(`${urls.studio}/that-optimize/xem-video`)
+    const W = WATCH
+    const r = {
+      comments: await page.count({ selector: W.comments }),
+      threads: await page.count({ selector: W.thread, within: W.comments }),
+      signIn: await page.count(W.signIn), // da dang nhap: khong co nut "Dang nhap"
+      commentsOff: await page.count(W.commentsOff),
+      sortMenu: await page.count(W.sortMenu),
+      newest: await page.count(W.newest),
+      identity: await _t.commentIdentity(page),
+      // cua nguoi xem: a#author-text[href=/@handle], #author-comment-badge rong, #pinned-comment-badge rong
+      viewer: await _t.scanThreads(page, 'Bình luận mẫu 1', { handle: '@nguoixem3' }),
+      notMine: await _t.scanThreads(page, 'Bình luận mẫu 1', { name: 'Dark Bible Movie', handle: '@DarkBibleMovie' }),
+      badges: await page.eval((s) => window.__ya.find({ selector: s.thread, within: s.comments }, true).map((t) => [t.querySelector(s.top + ' ' + s.authorBadge), t.querySelector(s.top + ' ' + s.pinnedBadge)].map((b) => (b ? b.innerText.trim() : null)).join('|')), W),
+      likePressed: await page.eval((t) => { const el = window.__ya.one(t); return el && el.getAttribute('aria-pressed') }, { ...L.like, selector: SEL.likeButton }),
+    }
+    console.log(JSON.stringify(r, null, 1).slice(0, 3000))
+    assert.equal(r.comments, 1, 'chi lay khung binh luan chinh (bo ban sao trong engagement panel)')
+    assert.equal(r.threads, 8)
+    assert.deepEqual([r.signIn, r.commentsOff], [0, 0])
+    assert(r.sortMenu >= 1 && r.newest >= 1, 'menu "Sắp xếp bình luận" + muc "Mới nhất"')
+    assert.equal(r.identity, 'Dark Bible Movie', 'o binh luan: anh dai dien alt = ten kenh dang binh luan')
+    assert.deepEqual([r.viewer.count, r.viewer.match && r.viewer.match.author, r.viewer.match && r.viewer.match.mine, r.viewer.match && r.viewer.match.creator, r.viewer.match && r.viewer.match.pinned], [8, '@nguoixem3', true, false, false])
+    assert.deepEqual([r.notMine.match, r.notMine.other && r.notMine.other.author], [null, '@nguoixem3'], 'cung chu nhung khong phai kenh -> khong tinh')
+    assert.deepEqual([r.viewer.first.pinned, r.notMine.first.ours], [false, false], 'luot dau khong ghim')
+    assert(r.badges.every((b) => b === '|'), 'huy hieu chu kenh + ghim rong khi khong co: ' + r.badges)
+    assert.equal(r.likePressed, 'false')
   }],
 
   ['HTML that (yt-2): danh sach Noi dung', async ({ page, urls }) => {

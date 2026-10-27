@@ -50,7 +50,8 @@ module.exports = (ctx) => {
     try {
       const rows = await ctx.withChannel(key, (page) => listVideos(page, ucOf(key), { urls: ctx.urls, log: ctx.log, limit: LATEST }), { label: 'Quét video' })
       const db = readDb()
-      S.videos = rows.map((r) => ({ ...r, status: ot.isOptimized(db, key, r.id) ? 'done' : 'new', step: '', error: '', warnings: (db[key] && db[key][r.id] && db[key][r.id].warnings) || [] }))
+      const prev = (id) => (db[key] && db[key][id]) || {}
+      S.videos = rows.map((r) => ({ ...r, status: ot.isOptimized(db, key, r.id) ? 'done' : 'new', step: '', error: '', warnings: prev(r.id).warnings || [], missing: prev(r.id).missing || [] }))
       S.at = new Date().toISOString()
       cache.set(key, { videos: S.videos, at: S.at })
       const left = S.videos.filter((v) => v.status === 'new').length
@@ -75,6 +76,7 @@ module.exports = (ctx) => {
     for (const v of todo) setV(v.id, { status: 'run', step: 'Chờ', error: '' })
     ctx.log('info', `Bắt đầu tối ưu ${todo.length} video.`)
     let ok = 0
+    let partial = 0 // video chua thich / binh luan / ghim duoc
     try {
       await ctx.withChannel(key, async (page) => {
         for (const v of todo) {
@@ -90,7 +92,8 @@ module.exports = (ctx) => {
               if (!v.visibility || PUBLIC.test(v.visibility)) {
                 // phan Studio da luu: loi o trang xem video chi la canh bao (chay lai se khong dang trung)
                 try {
-                  c = await commentAndPin(page, v.id, text, { urls: ctx.urls, log: ctx.log, onStep, like: tpl.like, pin: tpl.pin })
+                  const ch = channel(key) || {}
+                  c = await commentAndPin(page, v.id, text, { urls: ctx.urls, log: ctx.log, onStep, like: tpl.like, pin: tpl.pin, channel: { name: ch.name || name, handle: ch.handle || '', ucId: ucOf(key) } })
                   warnings.push(...c.warnings)
                 } catch (e) {
                   if (ctx.stopped()) throw e
@@ -99,9 +102,15 @@ module.exports = (ctx) => {
                 }
               } else warnings.push(`Video đang "${v.visibility}" nên chưa thích / bình luận được. Tối ưu lại khi video đã công khai.`)
             }
+            // viec muon lam o trang xem video ma CHUA kiem lai duoc (sau khi tai lai trang)
+            const missing = [tpl.like && !(c && c.liked) && 'thích', text && !(c && c.commented) && 'bình luận', text && tpl.pin && !(c && c.pinned) && 'ghim'].filter(Boolean)
             for (const w of warnings) if (!r.warnings.includes(w)) ctx.log('warn', `${r.title || v.title}: ${w}`)
-            writeDb(ot.markOptimized(readDb(), key, v.id, { title: r.title, changed: r.changed, commented: !!(c && (c.commented || c.pinned)), pinned: !!(c && c.pinned), warnings }))
-            setV(v.id, { status: 'done', step: '', title: r.title || v.title, warnings })
+            if (missing.length) {
+              partial++
+              ctx.log('warn', `${r.title || v.title}: chưa ${missing.join(', ')} được (đã kiểm lại trên trang xem video).`)
+            }
+            writeDb(ot.markOptimized(readDb(), key, v.id, { title: r.title, changed: r.changed, liked: !!(c && c.liked), commented: !!(c && c.commented), pinned: !!(c && c.pinned), missing, warnings }))
+            setV(v.id, { status: 'done', step: '', title: r.title || v.title, warnings, missing })
             ok++
           } catch (e) {
             if (page.snapshot) await page.snapshot(`toi-uu-${v.id}`)
@@ -116,7 +125,7 @@ module.exports = (ctx) => {
     } finally {
       S.busy = false
       if (mine()) cache.set(key, { videos: S.videos, at: S.at })
-      ctx.log(ok === todo.length ? 'ok' : 'warn', `Xong: tối ưu được ${ok}/${todo.length} video.`)
+      ctx.log(ok === todo.length && !partial ? 'ok' : 'warn', `Xong: tối ưu được ${ok}/${todo.length} video${partial ? `, ${partial} video chưa thích / bình luận / ghim được (xem cảnh báo)` : ''}.`)
     }
     return ok
   }

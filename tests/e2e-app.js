@@ -108,5 +108,9 @@ run(9344, {}, async ({ ui, find, dataDir }) => {
     await sleep(800)
     require('child_process').execFileSync('import', ['-window', 'root', path.join(process.env.YA_SHOT, 'app-dang-video.png')])
   }
+  // nhat ky duoc ghi ra file (de nguoi dung gui lai khi bao loi)
+  const nk = fs.readFileSync(path.join(dataDir, 'nhat-ky.txt'), 'utf8')
+  assert.match(nk, /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d \[ok\] /m)
+  assert.match(nk, /Kênh Thử|Đã vào YouTube Studio/)
   console.log('E2E APP PASSED')
 })

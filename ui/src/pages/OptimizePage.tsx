@@ -9,6 +9,7 @@ import type { PageProps } from './index'
 export type OptVideo = {
   id: string; title: string; visibility: string; date: string; dateNote?: string; views: string | number; comments: string | number
   status: 'new' | 'run' | 'done' | 'error'; step: string; error: string; warnings?: string[]
+  missing?: string[] // viec o trang xem video (thich / binh luan / ghim) chua kiem lai duoc
 }
 export type OptimizeState = {
   channelKey: string
@@ -25,7 +26,8 @@ const STATUS: Record<OptVideo['status'], [Tone, string]> = {
 
 function VideoRow({ v, on, toggle, busy }: { v: OptVideo; on: boolean; toggle: () => void; busy: boolean }) {
   const [tone, text] = STATUS[v.status]
-  const warn = v.status === 'done' && v.warnings && v.warnings.length > 0
+  const missing = v.status === 'done' && v.missing && v.missing.length ? v.missing : null
+  const warn = v.status === 'done' && ((v.warnings && v.warnings.length > 0) || !!missing)
   return (
     <li className={cn('flex items-start gap-3 rounded-lg px-2 py-2', on ? 'bg-primary/5' : 'hover:bg-muted/40')}>
       <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-[hsl(var(--primary))]" checked={on} disabled={busy} onChange={toggle} aria-label={`Chọn ${v.title}`} />
@@ -35,10 +37,10 @@ function VideoRow({ v, on, toggle, busy }: { v: OptVideo; on: boolean; toggle: (
           {[v.visibility, [v.date, v.dateNote].filter(Boolean).join(' · '), `${v.views} lượt xem`, `${v.comments} bình luận`].filter(Boolean).join('  •  ')}
         </p>
         {v.status === 'error' && v.error && <p className="mt-0.5 line-clamp-2 text-[11px] text-red-600 dark:text-red-400">{v.error}</p>}
-        {warn && <p className="mt-0.5 line-clamp-2 text-[11px] text-amber-600 dark:text-amber-400" title={v.warnings!.join('\n')}>{v.warnings!.join(' · ')}</p>}
+        {warn && !!v.warnings?.length && <p className="mt-0.5 line-clamp-2 text-[11px] text-amber-600 dark:text-amber-400" title={v.warnings.join('\n')}>{v.warnings.join(' · ')}</p>}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
-        {v.status === 'run' ? <Pill tone="active">{v.step || text}</Pill> : <Pill tone={warn ? 'warning' : tone}>{warn ? 'Đã tối ưu, có cảnh báo' : text}</Pill>}
+        {v.status === 'run' ? <Pill tone="active">{v.step || text}</Pill> : <Pill tone={warn ? 'warning' : tone}>{missing ? `Đã tối ưu, chưa ${missing.join(', ')}` : warn ? 'Đã tối ưu, có cảnh báo' : text}</Pill>}
       </div>
     </li>
   )
@@ -188,7 +190,7 @@ export const optimizeDemo: OptimizeState = {
     vid('vyiSqHByq24', 'The Tower of Babel: Humanity’s First Rebellion Against God', 'Công khai', '25 thg 10, 2026', 'Đã xuất bản', 412, 9),
     vid('kQ1pB7xZt0E', 'Why Did God Harden Pharaoh’s Heart? The Dark Truth', 'Công khai', '24 thg 10, 2026', 'Đã xuất bản', 1280, 31),
     vid('Lm8sN2rTq5Y', 'The Nephilim: Giants of the Bible Explained', 'Công khai', '22 thg 10, 2026', 'Đã xuất bản', 3540, 57, 'done'),
-    vid('Zx4cV6bNm1Q', 'Lilith: The Forbidden Story Before Eve', 'Công khai', '20 thg 10, 2026', 'Đã xuất bản', 2210, 44, 'done', { warnings: ['Đã bình luận nhưng chưa ghim được: menu không có “Ghim”.'] }),
+    vid('Zx4cV6bNm1Q', 'Lilith: The Forbidden Story Before Eve', 'Công khai', '20 thg 10, 2026', 'Đã xuất bản', 2210, 44, 'done', { warnings: ['Sau khi tải lại trang, bình luận của kênh không được ghim ở đầu phần bình luận.'], missing: ['ghim'] }),
     vid('Hj7gF3dSa9W', 'The Book of Enoch: Why It Was Removed', 'Không công khai', '18 thg 10, 2026', 'Đã tải lên', 96, 2, 'error', { error: 'Quá 5 giây vẫn chưa thấy "Lưu".' }),
     vid('Pq2wE8rTy6U', 'Cain’s Mark: What Was It Really?', 'Công khai', '15 thg 10, 2026', 'Đã xuất bản', 5021, 88, 'done'),
   ],

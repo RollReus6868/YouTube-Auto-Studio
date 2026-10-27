@@ -16,6 +16,11 @@ module.exports = [
     assert.equal(await page.count({ regex: '^(Lưu|Save)$' }), 1, 'regex chi khop dung nut Luu')
     assert.equal(await page.has({ regex: '^(Không có|None)$' }), false)
     await assert.rejects(page.waitFor('Không có', { timeout: 600 }), /Quá 1 giây vẫn chưa thấy "Không có"/)
+    // anh + HTML luc loi: HTML co ca shadow DOM (nut "Chuyển đổi tài khoản" nam trong shadow root)
+    const shot = await page.snapshot('kiem-snapshot')
+    const html = fs.readFileSync(`${shot}.html`, 'utf8')
+    assert(fs.existsSync(`${shot}.png`))
+    assert.match(html, /<template shadowrootmode="open">[\s\S]*Chuyển đổi tài khoản/)
   }],
   ['go chu (input + contenteditable), chon file', async ({ page, urls, tmp }) => {
     await page.goto(`${urls.studio}/driver-test`, { wait: 'Lưu' })

@@ -88,6 +88,18 @@ const HELPER = `(() => {
   }
 })()`
 
+// HTML cua trang KEM shadow DOM (getHTML + moi shadow root dang mo), trinh duyet cu thi outerHTML
+const SNAPSHOT_HTML = `(() => {
+  try {
+    const roots = []
+    const walk = (r) => { for (const el of r.querySelectorAll('*')) if (el.shadowRoot) { roots.push(el.shadowRoot); walk(el.shadowRoot) } }
+    walk(document)
+    const el = document.documentElement
+    if (el.getHTML) return '<html' + [...el.attributes].map((a) => ' ' + a.name + '="' + a.value.replace(/"/g, '&quot;') + '"').join('') + '>' + el.getHTML({ serializableShadowRoots: true, shadowRoots: roots }) + '</html>'
+  } catch (_) {}
+  return document.documentElement.outerHTML
+})()`
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const describe = (t) => (typeof t === 'string' ? `"${t}"` : t.text !== undefined ? `"${t.text}"` : t.regex ? `/${t.regex}/` : t.selector)
 const target = (t) => (typeof t === 'string' ? { text: t } : t)
@@ -235,7 +247,7 @@ class Page {
       const base = path.join(this.shotDir, `${new Date().toISOString().replace(/[:.]/g, '-')}-${name}`)
       const img = await this.wc.capturePage()
       fs.writeFileSync(`${base}.png`, img.toPNG())
-      const html = await this.wc.executeJavaScript('document.documentElement.outerHTML').catch(() => '')
+      const html = await this.wc.executeJavaScript(SNAPSHOT_HTML).catch(() => '')
       fs.writeFileSync(`${base}.html`, `<!-- ${this.url()} -->\n${html}`)
       return base
     } catch (_) { return '' }
