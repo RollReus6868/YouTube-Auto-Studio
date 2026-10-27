@@ -67,9 +67,41 @@ test('ngay kieu Studio', () => {
 })
 
 test('muc mau dung toi / giu nguyen', () => {
-  assert.deepEqual(ot.touchedFields(ot.defaultTemplate()).sort(), ['ai', 'comment', 'endScreen', 'like', 'location', 'paidPromotion', 'recordingDate', 'remix', 'tags'].sort())
-  const keep = { playlists: [], paidPromotion: 'keep', ai: 'keep', tagsMode: 'keep', location: '', recordingDate: 'keep', remix: 'keep', endScreen: 'keep', like: false, comment: '', pin: false }
+  assert.deepEqual(ot.touchedFields(ot.defaultTemplate()).sort(), ['ai', 'comment', 'endScreen', 'like', 'location', 'paidPromotion', 'playlists', 'recordingDate', 'remix', 'tags'].sort())
+  const keep = { playlists: [], playlistAuto: 0, paidPromotion: 'keep', ai: 'keep', tagsMode: 'keep', location: '', recordingDate: 'keep', remix: 'keep', endScreen: 'keep', like: false, comment: '', pin: false }
   assert.deepEqual(ot.touchedFields(keep), [])
+})
+
+test('tu chon danh sach phat dau tien (playlistAuto)', () => {
+  assert.equal(ot.defaultTemplate().playlistAuto, 3)
+  assert.equal(ot.normalizeTemplate({ playlists: ['A'] }).playlistAuto, 3, 'mau cu chua co -> 3')
+  assert.deepEqual([0, 2, '4', 9, -1, 2.6, 'x', ''].map((n) => ot.normalizeTemplate({ playlistAuto: n }).playlistAuto), [0, 2, 4, 5, 0, 3, 3, 3])
+  assert.deepEqual(ot.touchedFields({ ...ot.defaultTemplate(), playlistAuto: 0 }).includes('playlists'), false)
+})
+
+test('quet: so gia tri doc duoc voi mau', () => {
+  const full = {
+    description: 'x', playlists: { count: 3 }, paidPromotion: 'no', ai: 'yes', remix: 'none', tags: ['A', 'Tieu De'], language: ['Tiếng Việt', 'Tiếng Việt'],
+    recordingDate: '2 thg 8, 2026', location: 'United States', license: { value: 'youtube', locked: false }, embeddable: true, category: 'Giáo dục', comments: 'on',
+  }
+  const all = { ...ot.defaultTemplate(), description: 'Mô tả', language: 'Tiếng Việt', category: '27', comments: 'on', license: 'youtube', embeddable: 'yes' }
+  let r = ot.compareFields(full, all, { title: 'tieu de' })
+  assert.deepEqual([r.missing, r.unknown], [[], ['endScreen']], 'man hinh ket thuc: khong doc duoc -> khong tinh')
+  assert.equal(r.filled.length, 13)
+  r = ot.compareFields({ playlists: { count: 0 }, paidPromotion: '', ai: 'no', remix: 'all', tags: [], recordingDate: '', location: '' }, ot.defaultTemplate(), { title: 'T' })
+  assert.deepEqual(r.missing, ['playlists', 'paidPromotion', 'ai', 'remix', 'tags', 'recordingDate', 'location'])
+  // muc 'keep' bo qua; giay phep khoa khong tinh la thieu
+  const keep = ot.normalizeTemplate({ playlistAuto: 0, paidPromotion: 'keep', ai: 'keep', tagsMode: 'keep', location: '', recordingDate: 'keep', remix: 'keep', endScreen: 'keep', license: 'creativeCommon' })
+  assert.deepEqual(ot.compareFields({ license: { value: 'youtube', locked: true } }, keep), { missing: [], filled: ['license'], unknown: [] })
+  // danh sach phat: du so tu chon / it danh sach hon N / ten trong mau
+  const items = [{ name: 'A', id: 'PL1', on: true }, { name: 'B', id: 'PL2', on: true }]
+  const pl = (p, t) => ot.compareFields({ playlists: p }, { ...keep, license: 'keep', ...t })
+  assert.deepEqual(pl({ count: 2 }, { playlistAuto: 3 }).missing, ['playlists'], 'chua mo hop thoai: 2 < 3')
+  assert.deepEqual(pl({ count: 2, items }, { playlistAuto: 3 }).filled, ['playlists'], 'kenh chi co 2 danh sach')
+  assert.deepEqual(pl({ count: 1 }, { playlistAuto: 0, playlists: ['A'] }).unknown, ['playlists'], 'co ten -> can hop thoai')
+  assert.deepEqual(pl({ count: 2, items: [...items, { name: 'C', on: false }] }, { playlistAuto: 0, playlists: ['C'] }).missing, ['playlists'])
+  assert.deepEqual(pl({ count: 2, items }, { playlistAuto: 0, playlists: ['Không có'] }).filled, ['playlists'], 'ten khong co trong kenh -> khong tinh la thieu')
+  assert.deepEqual(ot.compareFields({}, ot.defaultTemplate()).unknown.length, 8, 'khong doc duoc gi -> unknown')
 })
 
 test('danh dau video da toi uu', () => {

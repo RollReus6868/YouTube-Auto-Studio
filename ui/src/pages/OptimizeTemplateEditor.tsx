@@ -33,7 +33,7 @@ function Seg<T extends string>({ label, value, onChange, options }: { label: str
             aria-checked={v === value}
             onClick={() => onChange(v)}
             className={cn('min-w-0 flex-1 basis-auto whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold transition-colors',
-              v === value ? (v === 'keep' ? 'bg-muted text-foreground shadow-sm' : 'bg-primary text-primary-foreground shadow-sm') : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground')}
+              v === value ? (v === 'keep' || v === '0' ? 'bg-muted text-foreground shadow-sm' : 'bg-primary text-primary-foreground shadow-sm') : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground')}
           >{l}</button>
         ))}
       </div>
@@ -83,8 +83,11 @@ export function OptimizeTemplateEditor({ value: t, onChange, channelName = 'Dark
   return (
     <div className={cn('grid gap-3', wide ? 'xl:grid-cols-2' : !compact && '2xl:grid-cols-2')}>
       <div className="space-y-3">
-        <Group title="Danh sách phát" hint="Tick mọi danh sách phát trùng tên (Studio có thể có nhiều danh sách cùng tên). Để trống = giữ nguyên.">
+        <Group title="Danh sách phát" hint="Tick mọi danh sách phát trùng tên (Studio có thể có nhiều danh sách cùng tên). Để trống tên và tắt tự chọn = giữ nguyên.">
           <ListInput label="Tên danh sách phát" value={t.playlists} onChange={(playlists) => set({ playlists })} placeholder="Tên danh sách phát, cách nhau bằng dấu phẩy" />
+          <Seg label="Tự chọn danh sách phát đầu tiên trong hộp thoại" value={String(t.playlistAuto ?? 3)} onChange={(v) => set({ playlistAuto: Number(v) })}
+            options={[['0', 'Tắt'], ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'], ['5', '5']]} />
+          <p className="text-[11px] text-muted-foreground">Tick N danh sách phát đứng đầu trong hộp thoại “Danh sách phát” của Studio (danh sách đã tick sẵn vẫn được tính).</p>
         </Group>
         <Group title="Hiện thêm" hint="Các mục trong phần “Hiện thêm” của trang Chi tiết video.">
           {pair(

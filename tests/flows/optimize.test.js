@@ -1,6 +1,6 @@
 // Bai kiem cho src/flows/optimize.js tren trang gia tests/mock-yt/optimize
 const assert = require('assert')
-const { listVideos, optimizeVideo, commentAndPin } = require('../../src/flows/optimize')
+const { listVideos, optimizeVideo, inspectVideo, commentAndPin } = require('../../src/flows/optimize')
 const { defaultTemplate } = require('../../src/optimize-template')
 
 const UC = 'UC6roez1tiwHbdhvLWBvLRmQ'
@@ -9,7 +9,7 @@ const TITLE = 'The Cost of Being Chosen by God - Matthew 22 Explained'
 const NOW = new Date(2026, 9, 26, 21, 9)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const events = async (mock, type) => { await sleep(300); return mock.events.filter((e) => e.type === type) }
-const KEEP = { playlists: [], paidPromotion: 'keep', ai: 'keep', tagsMode: 'keep', extraTags: [], location: '', recordingDate: 'keep', remix: 'keep', endScreen: 'keep', category: 'keep', language: '', comments: 'keep', license: 'keep', embeddable: 'keep', like: false, description: '', comment: '', pin: false }
+const KEEP = { playlists: [], playlistAuto: 0, paidPromotion: 'keep', ai: 'keep', tagsMode: 'keep', extraTags: [], location: '', recordingDate: 'keep', remix: 'keep', endScreen: 'keep', category: 'keep', language: '', comments: 'keep', license: 'keep', embeddable: 'keep', like: false, description: '', comment: '', pin: false }
 
 module.exports = [
   ['doc danh sach video (2 trang)', async ({ page, urls }) => {
@@ -54,7 +54,7 @@ module.exports = [
     assert.deepEqual(r.changed, ['playlists', 'paidPromotion', 'ai', 'tags', 'recordingDate', 'location', 'remix', 'endScreen'])
     const [save] = await events(mock, 'save')
     const d = save.data
-    assert.deepEqual(d.playlists, ['PLa', 'PLb'], 'tich ca 2 danh sach trung ten (1 Podcast), khong tich "Bible Stories"')
+    assert.deepEqual(d.playlists, ['PLa', 'PLb', 'PLc'], 'tich ca 2 danh sach trung ten (1 Podcast) + tu chon 3 danh sach dau (PLc), khong tich "Sermons"')
     assert.equal(d.paid, 'Không, video của tôi không chứa nội dung được trả tiền để quảng cáo')
     assert.equal(d.ai, 'Có')
     assert.deepEqual(d.tags, ['Dark Bible Study', TITLE])
@@ -80,7 +80,7 @@ module.exports = [
     const r = await optimizeVideo(page, VID, { ...defaultTemplate(), location: 'Atlantis' }, { urls, now: NOW })
     await page.eval(() => localStorage.removeItem('opt-noai'))
     assert.equal(r.saved, true)
-    assert.deepEqual(r.changed, ['paidPromotion', 'tags', 'recordingDate', 'remix', 'endScreen'])
+    assert.deepEqual(r.changed, ['playlists', 'paidPromotion', 'tags', 'recordingDate', 'remix', 'endScreen'])
     assert.match(r.warnings.join('\n'), /Bỏ qua mục "Sử dụng AI": Quá 3 giây vẫn chưa thấy mục "Sử dụng AI"/)
     assert.match(r.warnings.join('\n'), /Không thấy "Atlantis" trong gợi ý vị trí, giữ nguyên vị trí/)
     const [save] = await events(mock, 'save')
@@ -214,4 +214,122 @@ module.exports.push(['tinh nang: quet, toi uu da chon, nho video da toi uu', asy
   ctx.withChannel = null
   await f.commands.optimize_list(UC)
   assert.match(logs[logs.length - 1], /Chưa có tài khoản Google nào/)
+}])
+
+// ---- tu chon danh sach phat + quet (chi doc) ----
+module.exports.push(['tu chon 3 danh sach phat dau tien (da tich san van tinh), khong tich danh sach thu 4', async ({ page, urls, mock }) => {
+  await page.goto(`${urls.studio}/video/${VID}/edit`)
+  await page.eval(() => OPT.save('opt-video-vyiSqHByq24', { ...OPT.fresh(), desc: 'Có mô tả', playlists: ['PLb'] }))
+  const r = await optimizeVideo(page, VID, { ...KEEP, playlistAuto: 3 }, { urls, now: NOW })
+  assert.deepEqual([r.changed, r.saved, r.warnings], [['playlists'], true, []])
+  const [save] = await events(mock, 'save')
+  assert.deepEqual(save.data.playlists, ['PLa', 'PLb', 'PLc'], 'PLb da tich tinh vao 3, khong tich PLd')
+  assert.equal(await page.text({ selector: '#pl-trigger .dropdown-trigger-text' }), '3 danh sách phát')
+  mock.events.length = 0
+  const two = await optimizeVideo(page, VID, { ...KEEP, playlistAuto: 2 }, { urls, now: NOW })
+  assert.deepEqual([two.changed, two.saved], [[], false], 'du roi -> khong bam gi')
+  assert.deepEqual(await events(mock, 'save'), [])
+}])
+
+module.exports.push(['quet: video da dien du -> khong thieu muc nao, khong doi gi', async ({ page, urls, mock }) => {
+  const steps = []
+  const t0 = Date.now()
+  const r = await inspectVideo(page, 'DoneVideo01', defaultTemplate(), { urls, onStep: (s) => steps.push(s) })
+  const ms = Date.now() - t0
+  console.log('quet 1 video:', ms, 'ms', JSON.stringify(r.read))
+  assert.deepEqual(r.missing, [], JSON.stringify(r))
+  assert.deepEqual(r.filled, ['playlists', 'paidPromotion', 'ai', 'remix', 'tags', 'recordingDate', 'location'])
+  assert.deepEqual(r.unknown, ['endScreen'], 'trang Chi tiet khong cho biet man hinh ket thuc')
+  assert.deepEqual(r.notes, [])
+  assert.equal(r.read.playlists.count, 3)
+  assert.equal(r.read.playlists.items, undefined, 'du 3 danh sach -> khong can mo hop thoai')
+  assert.equal(r.read.recordingDate, '2 thg 8, 2026')
+  assert(ms < 6000, `qua cham: ${ms} ms`)
+  assert(steps.includes('Đọc thông tin'))
+  assert.deepEqual(await events(mock, 'save'), [])
+  assert.equal(await page.eval(() => document.querySelector('#save').getAttribute('aria-disabled')), 'true', 'khong co thay doi')
+}])
+
+module.exports.push(['quet: video moi -> danh sach muc con thieu (mo hop thoai danh sach phat roi dong)', async ({ page, urls, mock }) => {
+  const tpl = { ...defaultTemplate(), description: 'Mô tả {tieu_de}', language: 'Tiếng Việt', category: '22', comments: 'on', license: 'creativeCommon', embeddable: 'yes', endScreen: 'keep' }
+  const r = await inspectVideo(page, VID, tpl, { urls })
+  assert.deepEqual(r.missing, ['playlists', 'paidPromotion', 'ai', 'remix', 'tags', 'language', 'recordingDate', 'location'], JSON.stringify(r))
+  assert.deepEqual(r.filled, ['description', 'comments', 'license', 'embeddable', 'category'], 'giay phep bi khoa -> khong tinh la thieu')
+  assert.deepEqual(r.unknown, [])
+  assert.equal(r.title, TITLE)
+  assert.deepEqual([r.read.playlists.text, r.read.playlists.count, r.read.playlists.items.length], ['Chọn', 0, 4])
+  assert.deepEqual([r.read.paidPromotion, r.read.ai, r.read.remix, r.read.recordingDate, r.read.location], ['', '', 'all', '', ''])
+  assert.deepEqual(r.read.license, { value: 'youtube', locked: true })
+  assert.equal(await page.count({ selector: 'ytcp-playlist-dialog' }), 0, 'hop thoai da dong')
+  assert.deepEqual(await events(mock, 'save'), [])
+  assert.equal(await page.eval(() => document.querySelector('#save').getAttribute('aria-disabled')), 'true', 'chi doc: khong co thay doi')
+  // sau khi toi uu theo mau -> quet lai khong con thieu (tru muc mau khong lam duoc)
+  await optimizeVideo(page, VID, { ...tpl, endScreen: 'keep' }, { urls, now: NOW })
+  const again = await inspectVideo(page, VID, tpl, { urls })
+  assert.deepEqual(again.missing, [], JSON.stringify(again))
+  // mau co ten danh sach phat: 1 danh sach tich + ten khac chua tich -> thieu
+  await page.eval(() => OPT.save('opt-video-LostTribe01', { ...OPT.fresh(), desc: 'x', playlists: ['PLa'] }))
+  const named = await inspectVideo(page, 'LostTribe01', { ...KEEP, playlists: ['Sermons'] }, { urls })
+  assert.deepEqual(named.missing, ['playlists'])
+}])
+
+module.exports.push(['quet: muc doc loi -> tinh la thieu kem ghi chu', async ({ page, urls }) => {
+  await page.goto(`${urls.studio}/video/DoneVideo02/edit`)
+  await page.eval(() => localStorage.setItem('opt-noai', '1'))
+  page.timeout = 3000
+  const r = await inspectVideo(page, 'DoneVideo02', defaultTemplate(), { urls })
+  await page.eval(() => localStorage.removeItem('opt-noai'))
+  assert.deepEqual(r.missing, ['ai'])
+  assert.match(r.notes.join('\n'), /Không đọc được mục "ai"/)
+}])
+
+// Quet trong tinh nang: danh dau trang thai tung video, "toi uu tat ca chua toi uu" chi chay video con thieu.
+module.exports.push(['tinh nang: quet doc tung video, chi toi uu video con thieu', async ({ page, urls, mock, tmp }) => {
+  const path = require('path')
+  const logs = []
+  const steps = new Set()
+  let saved = {}
+  const state = { f: {} }
+  const ctx = {
+    state, log: (l, m) => logs.push(`${l} ${m}`), logFile: (n) => path.join(tmp, n), urls,
+    push: () => { for (const v of (state.f.optimize && state.f.optimize.videos) || []) if (v.step) steps.add(v.step) },
+    store: { get settings() { return saved }, save: (p) => { saved = { ...saved, ...p } } }, refreshSettings: () => {},
+    stopped: () => false, resetStop: () => {},
+    accounts: { channels: () => [{ key: UC, ucId: UC, name: 'Dark Bible Study', handle: '@DarkBibleStudy999' }], find: (k) => (k === UC ? { key: UC, ucId: UC, name: 'Dark Bible Study' } : null) },
+    withChannel: async (key, fn) => fn(page),
+  }
+  // 4 video da dien du, NeverProp01 thieu, Maccabee001 trang loi, VID moi
+  await page.goto(`${urls.studio}/video/${VID}/edit`)
+  await page.eval(() => {
+    for (const id of ['Prem0000001', 'LostTribe01', 'TheCross001', 'HonorPar001']) OPT.save('opt-video-' + id, { ...OPT.optimized(OPT.videoOf(id)), desc: 'x' })
+    OPT.save('opt-video-NeverProp01', { ...OPT.optimized(OPT.videoOf('NeverProp01')), desc: 'x', location: '', playlists: ['PLa'] })
+    localStorage.setItem('opt-broken', 'Maccabee001')
+  })
+  page.timeout = 4000
+  const f = require('../../src/features/optimize')(ctx)
+  f.start()
+  const S = state.f.optimize
+  f.commands.optimize_template_save({ channelKey: UC, template: { ...defaultTemplate(), comment: '', like: false } })
+  const t0 = Date.now()
+  await f.commands.optimize_list(UC)
+  console.log('quet 7 video:', Date.now() - t0, 'ms')
+  const by = Object.fromEntries(S.videos.map((v) => [v.id, v]))
+  assert.deepEqual(S.videos.map((v) => v.status), ['done', 'new', 'done', 'new', 'new', 'done', 'done'], JSON.stringify(S.videos.map((v) => [v.id, v.status, v.missing, v.note])))
+  assert.deepEqual(by[VID].missing, ['playlists', 'paidPromotion', 'ai', 'remix', 'tags', 'recordingDate', 'location'])
+  assert.deepEqual(by.NeverProp01.missing, ['playlists', 'location'])
+  assert.match(by.Maccabee001.note, /Không đọc được trang Chi tiết/)
+  assert(steps.has('Đang đọc 1/7…') && steps.has('Đang đọc 7/7…'), [...steps].join(', '))
+  assert(S.videos.every((v) => !v.step))
+  assert.match(logs.join('\n'), /7 video, 3 chưa tối ưu/)
+  await page.goto(`${urls.studio}/video/${VID}/edit`)
+  await page.eval(() => localStorage.removeItem('opt-broken'))
+  // "toi uu tat ca chua toi uu": chi 3 video con thieu
+  mock.events.length = 0
+  await f.commands.optimize_run({ channelKey: UC })
+  const saves = (await events(mock, 'save')).map((e) => e.id)
+  assert.deepEqual(saves, [VID, 'NeverProp01', 'Maccabee001'], logs.slice(-6).join('\n'))
+  assert(S.videos.every((v) => v.status === 'done'), JSON.stringify(S.videos.map((v) => [v.id, v.status, v.missing, v.warnings])))
+  // mo lai trang: giu trang thai cua lan quet / toi uu
+  f.commands.optimize_open()
+  assert(S.videos.every((v) => v.status === 'done'))
 }])

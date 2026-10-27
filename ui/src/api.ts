@@ -12,6 +12,7 @@ export type Update = {
 type K3 = 'keep' | 'yes' | 'no'
 export type OptimizeTemplate = {
   playlists: string[]
+  playlistAuto: number // tu tich N danh sach phat dau tien trong hop thoai (0 = tat)
   paidPromotion: K3
   ai: K3
   tagsMode: 'keep' | 'title'
@@ -32,7 +33,7 @@ export type OptimizeTemplate = {
 }
 // giong defaultTemplate() trong src/optimize-template.js
 export const defaultOptimizeTemplate = (): OptimizeTemplate => ({
-  playlists: [], paidPromotion: 'no', ai: 'yes', tagsMode: 'title', extraTags: [], location: 'United States',
+  playlists: [], playlistAuto: 3, paidPromotion: 'no', ai: 'yes', tagsMode: 'title', extraTags: [], location: 'United States',
   recordingDate: 'today', remix: 'none', endScreen: 'latest', category: 'keep', language: '', comments: 'keep',
   license: 'keep', embeddable: 'keep', like: true, description: '', comment: '{tieu_de}', pin: true,
 })

@@ -5,6 +5,7 @@ window.OPT = {
     { id: 'PLa', name: 'Dark Bible Study' },
     { id: 'PLb', name: 'Dark Bible Study', podcast: true },
     { id: 'PLc', name: 'Bible Stories' },
+    { id: 'PLd', name: 'Sermons' },
   ],
   videos: [
     { id: 'Prem0000001', title: 'The Dead in Christ Shall Rise — Why Black Christians Say “Gone Home”', vis: 'Đang công chiếu', date: '26 thg 10, 2026', note: 'Đã lên lịch', views: 0, comments: 0, len: 'CÔNG CHIẾU' },
@@ -20,6 +21,11 @@ window.OPT = {
     playlists: [], paid: '', ai: '', tags: ['Dark Bible Study'], language: 'Tiếng Anh (Hoa Kỳ)', titleLanguage: 'Tiếng Anh (Hoa Kỳ)',
     recDate: '', location: '', license: 'Giấy phép chuẩn của YouTube', licenseLocked: true, embed: true,
     remix: 'Cho phép phối lại video và âm thanh', category: 'Mọi người và blog', comments: 'Bật', endscreen: false,
+  }),
+  // video da dien du theo mau mac dinh (de kiem "quet": khong thieu muc nao)
+  optimized: (v) => ({
+    ...window.OPT.fresh(), playlists: ['PLa', 'PLb', 'PLc'], paid: 'Không, video của tôi không chứa nội dung được trả tiền để quảng cáo', ai: 'Có',
+    tags: ['Dark Bible Study', v.title.replace(/,/g, ' ').replace(/\s+/g, ' ').trim()], recDate: '2 thg 8, 2026', location: 'United States', remix: 'Không cho phép phối lại', endscreen: true,
   }),
   load(key, def) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def } catch (_) { return def } },
   save(key, v) { localStorage.setItem(key, JSON.stringify(v)) },
@@ -48,7 +54,7 @@ window.OPT = {
   },
   // ytcp-dropdown-trigger[role=button] > div.container > .left-container > (.label-text) + span.dropdown-trigger-text
   trigger(label, value, attrs = '') {
-    return `<ytcp-dropdown-trigger role="button" ${attrs}><div role="button" class="container"><div class="left-container">${label ? `<div class="label-area"><div class="label-text">${this.esc(label)}</div></div>` : ''}<span class="dropdown-trigger-text">${this.esc(value)}</span></div><div class="right-container">▾</div></div></ytcp-dropdown-trigger>`
+    return `<ytcp-dropdown-trigger role="button" ${attrs}><div role="button" class="container"><div class="left-container">${label ? `<div class="label-area"><div class="label-text">${this.esc(label)}</div></div>` : ''}<span class="dropdown-trigger-text">${this.esc(value)}</span></div><div class="right-container"><yt-icon id="right-icon" class="right-icon"></yt-icon></div></div></ytcp-dropdown-trigger>`
   },
   radio(name, label, aria) {
     return `<tp-yt-paper-radio-button role="radio" name="${name}" aria-checked="false" aria-disabled="false"${aria ? ` aria-label="${this.esc(aria)}"` : ''}><div id="radioContainer"><div id="offRadio"></div><div id="onRadio"></div></div><div id="radioLabel">${this.esc(label)}</div></tp-yt-paper-radio-button>`

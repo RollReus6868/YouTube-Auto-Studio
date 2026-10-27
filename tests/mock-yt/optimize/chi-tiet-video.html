@@ -30,7 +30,7 @@
   ytcp-dropdown-trigger { display: block; border: 1px solid #555; border-radius: 4px; padding: 6px 10px; width: 200px; position: relative; cursor: pointer }
   ytcp-dropdown-trigger[aria-disabled=true] { opacity: .4 }
   .label-text { font-size: 11px; color: #aaa } .dropdown-trigger-text { font-size: 14px }
-  .right-container { position: absolute; right: 8px; top: 8px }
+  .right-container { position: absolute; right: 8px; top: 8px } .right-icon::after { content: "▾" } /* that: yt-icon svg, khong co chu */
   ytcp-text-menu { position: absolute; z-index: 20; left: 0; top: 100% }
   ytcp-text-menu tp-yt-paper-dialog { display: block; background: #1f1f1f; border: 1px solid #555; min-width: 220px; max-height: 260px; overflow: auto }
   tp-yt-paper-item { display: block; padding: 8px 12px } tp-yt-paper-item:hover { background: #333 }
@@ -73,8 +73,11 @@
 const id = (/\/video\/([\w-]+)\/edit/.exec(location.pathname) || [])[1]
 const KEY = 'opt-video-' + id
 const video = OPT.videoOf(id)
+// localStorage 'opt-broken' = id: trang loi (khong co "Chi tiet video"), de kiem quet bo qua video loi
+if (localStorage.getItem('opt-broken') === id) document.querySelector('.top h1').textContent = 'Đã xảy ra lỗi'
 // video id bat dau bang NoDesc: chua co mo ta (de kiem "mo ta trong thi dien, co roi thi giu")
-let saved = OPT.load(KEY, { ...OPT.fresh(), desc: id.startsWith('NoDesc') ? '' : `${video.title}\n\nIn this episode of Dark Bible Study…` })
+// video id bat dau bang Done: da dien du theo mau mac dinh (de kiem "quet")
+let saved = OPT.load(KEY, { ...(id.startsWith('Done') ? OPT.optimized(video) : OPT.fresh()), desc: id.startsWith('NoDesc') ? '' : `${video.title}\n\nIn this episode of Dark Bible Study…` })
 let W = JSON.parse(JSON.stringify(saved))
 const $ = (s, r = document) => r.querySelector(s)
 const esc = OPT.esc

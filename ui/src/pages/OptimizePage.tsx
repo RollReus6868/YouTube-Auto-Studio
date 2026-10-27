@@ -8,7 +8,9 @@ import type { PageProps } from './index'
 
 export type OptVideo = {
   id: string; title: string; visibility: string; date: string; dateNote?: string; views: string | number; comments: string | number
-  status: 'new' | 'run' | 'done' | 'error'; step: string; error: string; warnings?: string[]
+  status: 'new' | 'scan' | 'run' | 'done' | 'error'; step: string; error: string; warnings?: string[]
+  missing?: string[] // muc mau con thieu (lan quet doc trang Chi tiet video)
+  note?: string // ghi chu khi quet (doc loi...)
 }
 export type OptimizeState = {
   channelKey: string
@@ -20,7 +22,13 @@ export type OptimizeState = {
 }
 
 const STATUS: Record<OptVideo['status'], [Tone, string]> = {
-  new: ['muted', 'Chưa tối ưu'], run: ['active', 'Đang tối ưu'], done: ['success', 'Đã tối ưu'], error: ['error', 'Lỗi'],
+  new: ['muted', 'Chưa tối ưu'], scan: ['muted', 'Chờ đọc'], run: ['active', 'Đang tối ưu'], done: ['success', 'Đã tối ưu'], error: ['error', 'Lỗi'],
+}
+// ten muc mau (src/optimize-template.js compareFields) -> chu hien thi
+const FIELD_VI: Record<string, string> = {
+  playlists: 'danh sách phát', paidPromotion: 'quảng cáo trả phí', ai: 'nội dung AI', remix: 'phối lại Shorts', tags: 'thẻ',
+  language: 'ngôn ngữ', recordingDate: 'ngày quay', location: 'vị trí', license: 'giấy phép', embeddable: 'cho phép nhúng',
+  category: 'danh mục', comments: 'bình luận', description: 'mô tả', endScreen: 'màn hình kết thúc',
 }
 
 function VideoRow({ v, on, toggle, busy }: { v: OptVideo; on: boolean; toggle: () => void; busy: boolean }) {
@@ -35,10 +43,17 @@ function VideoRow({ v, on, toggle, busy }: { v: OptVideo; on: boolean; toggle: (
           {[v.visibility, [v.date, v.dateNote].filter(Boolean).join(' · '), `${v.views} lượt xem`, `${v.comments} bình luận`].filter(Boolean).join('  •  ')}
         </p>
         {v.status === 'error' && v.error && <p className="mt-0.5 line-clamp-2 text-[11px] text-red-600 dark:text-red-400">{v.error}</p>}
-        {warn && <p className="mt-0.5 line-clamp-2 text-[11px] text-amber-600 dark:text-amber-400" title={v.warnings!.join('\n')}>{v.warnings!.join(' · ')}</p>}
+        {v.status !== 'run' && v.status !== 'scan' && v.missing && v.missing.length > 0 && (
+          <div className="mt-1 flex flex-wrap items-center gap-1" title={`Thiếu: ${v.missing.map((k) => FIELD_VI[k] ?? k).join(', ')}`}>
+            <span className="text-[11px] font-semibold text-muted-foreground">Thiếu:</span>
+            {v.missing.map((k) => <span key={k} className="rounded-full bg-amber-500/10 px-1.5 py-px text-[10px] font-semibold text-amber-700 ring-1 ring-amber-500/25 dark:text-amber-300">{FIELD_VI[k] ?? k}</span>)}
+          </div>
+        )}
+        {v.note && v.status !== 'scan' && <p className="mt-0.5 line-clamp-2 text-[11px] text-amber-600 dark:text-amber-400" title={v.note}>{v.note}</p>}
+        {(warn || (v.status === 'new' && v.warnings && v.warnings.length > 0)) && <p className="mt-0.5 line-clamp-2 text-[11px] text-amber-600 dark:text-amber-400" title={v.warnings!.join('\n')}>{v.warnings!.join(' · ')}</p>}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
-        {v.status === 'run' ? <Pill tone="active">{v.step || text}</Pill> : <Pill tone={warn ? 'warning' : tone}>{warn ? 'Đã tối ưu, có cảnh báo' : text}</Pill>}
+        {v.status === 'run' || (v.status === 'scan' && v.step) ? <Pill tone="active">{v.step || text}</Pill> : <Pill tone={warn ? 'warning' : tone}>{warn ? 'Đã tối ưu, có cảnh báo' : text}</Pill>}
       </div>
     </li>
   )
@@ -98,12 +113,14 @@ export function OptimizePage({ state, send, go }: PageProps) {
   const done = videos.filter((v) => v.status === 'done').length
   const toggle = (id: string) => setSel((x) => { const n = new Set(x); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const allOn = videos.length > 0 && chosen.length === videos.length
+  const scanning = s.busy && !videos.some((v) => v.status === 'run')
+  const read = videos.filter((v) => v.status !== 'scan').length
   return (
     <>
       <PageHeader
         icon={Wand2}
         title="Tối ưu video"
-        description="Quét 10 video mới nhất của kênh, tối ưu trong YouTube Studio theo mẫu, rồi thích + bình luận + ghim."
+        description="Quét 10 video mới nhất, đọc trang Chi tiết của từng video để biết video nào còn thiếu thông tin so với mẫu, rồi tối ưu trong YouTube Studio + thích, bình luận, ghim."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -117,7 +134,7 @@ export function OptimizePage({ state, send, go }: PageProps) {
               {s.channels.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}
             </select>
             <Button variant="outline" size="sm" disabled={s.busy || !s.channelKey} onClick={() => send('optimize_list', s.channelKey)}>
-              {s.busy && !videos.some((v) => v.status === 'run') ? <LoaderCircle className="animate-spin" /> : <ScanSearch />} Quét video
+              {scanning ? <LoaderCircle className="animate-spin" /> : <ScanSearch />} Quét video
             </Button>
           </div>
         }
@@ -131,7 +148,7 @@ export function OptimizePage({ state, send, go }: PageProps) {
             </div>
           </Card>
         )}
-        <Card title="Video đã đăng" hint={s.at ? `${videos.length} video · ${done} đã tối ưu · quét lúc ${new Date(s.at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : 'Bấm “Quét video” để đọc 10 video mới nhất trong Studio'}>
+        <Card title="Video đã đăng" hint={scanning && videos.length ? `Đang đọc trang Chi tiết: ${read}/${videos.length} video` : s.at ? `${videos.length} video · ${done} đã tối ưu · quét lúc ${new Date(s.at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : 'Bấm “Quét video” để đọc 10 video mới nhất trong Studio'}>
           {videos.length ? (
             <>
               <div className="mb-1 flex items-center gap-3 px-2 text-xs text-muted-foreground">
@@ -146,14 +163,14 @@ export function OptimizePage({ state, send, go }: PageProps) {
               </ul>
             </>
           ) : (
-            <EmptyState icon={ListChecks} text={s.busy ? 'Đang quét video trong Studio…' : 'Chưa có danh sách. Tool mở trang Nội dung của kênh trong Studio và đọc mọi video (cả video mới chỉ có mô tả, thumbnail).'} />
+            <EmptyState icon={ListChecks} text={s.busy ? 'Đang quét video trong Studio…' : 'Chưa có danh sách. Tool mở trang Nội dung của kênh trong Studio, rồi đọc (không sửa) trang Chi tiết của từng video để xem còn thiếu mục nào so với mẫu.'} />
           )}
         </Card>
         <TemplateCard s={s} send={send} />
       </PageBody>
       <ActionBar>
-        {s.busy && videos.some((v) => v.status === 'run') ? (
-          <Button variant="danger" size="sm" onClick={() => send('stop')}><Square /> Dừng sau video đang tối ưu</Button>
+        {s.busy && videos.some((v) => v.status === 'run' || v.status === 'scan') ? (
+          <Button variant="danger" size="sm" onClick={() => send('stop')}><Square /> {videos.some((v) => v.status === 'scan') ? 'Dừng quét' : 'Dừng sau video đang tối ưu'}</Button>
         ) : (
           <>
             <Button variant="gradient" size="sm" disabled={s.busy || !chosen.length} onClick={() => send('optimize_run', { channelKey: s.channelKey, ids: chosen.map((v) => v.id) })}>
@@ -184,12 +201,13 @@ export const optimizeDemo: OptimizeState = {
     default: { ...defaultOptimizeTemplate(), playlists: ['Dark Bible Study', 'Bible Podcast'] },
   },
   videos: [
-    vid('Prem0000001', 'The Prophet Who Ran From God: Jonah’s Untold Story', 'Riêng tư', '27 thg 10, 2026', 'Đang công chiếu', 0, 0),
-    vid('vyiSqHByq24', 'The Tower of Babel: Humanity’s First Rebellion Against God', 'Công khai', '25 thg 10, 2026', 'Đã xuất bản', 412, 9),
-    vid('kQ1pB7xZt0E', 'Why Did God Harden Pharaoh’s Heart? The Dark Truth', 'Công khai', '24 thg 10, 2026', 'Đã xuất bản', 1280, 31),
+    vid('Prem0000001', 'The Prophet Who Ran From God: Jonah’s Untold Story', 'Riêng tư', '27 thg 10, 2026', 'Đang công chiếu', 0, 0, 'new', { missing: ['playlists', 'paidPromotion', 'ai', 'tags', 'recordingDate', 'location', 'remix'] }),
+    vid('vyiSqHByq24', 'The Tower of Babel: Humanity’s First Rebellion Against God', 'Công khai', '25 thg 10, 2026', 'Đã xuất bản', 412, 9, 'new', { missing: ['playlists', 'location', 'recordingDate'] }),
+    vid('kQ1pB7xZt0E', 'Why Did God Harden Pharaoh’s Heart? The Dark Truth', 'Công khai', '24 thg 10, 2026', 'Đã xuất bản', 1280, 31, 'new', { missing: ['playlists'] }),
     vid('Lm8sN2rTq5Y', 'The Nephilim: Giants of the Bible Explained', 'Công khai', '22 thg 10, 2026', 'Đã xuất bản', 3540, 57, 'done'),
     vid('Zx4cV6bNm1Q', 'Lilith: The Forbidden Story Before Eve', 'Công khai', '20 thg 10, 2026', 'Đã xuất bản', 2210, 44, 'done', { warnings: ['Đã bình luận nhưng chưa ghim được: menu không có “Ghim”.'] }),
     vid('Hj7gF3dSa9W', 'The Book of Enoch: Why It Was Removed', 'Không công khai', '18 thg 10, 2026', 'Đã tải lên', 96, 2, 'error', { error: 'Quá 5 giây vẫn chưa thấy "Lưu".' }),
+    vid('Rt5yU1iOp3A', 'The Witch of Endor: Did Saul Really Speak to Samuel?', 'Công khai', '16 thg 10, 2026', 'Đã xuất bản', 733, 12, 'new', { note: 'Không đọc được trang Chi tiết: Quá 20 giây vẫn chưa thấy "Chi tiết video".' }),
     vid('Pq2wE8rTy6U', 'Cain’s Mark: What Was It Really?', 'Công khai', '15 thg 10, 2026', 'Đã xuất bản', 5021, 88, 'done'),
   ],
 }

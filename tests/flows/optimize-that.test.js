@@ -2,6 +2,7 @@
 // Trang tinh (khong co script cua Studio) nen chi kiem "tim thay dung phan tu", khong bam.
 const assert = require('assert')
 const { LABELS: L, SEL, _t } = require('../../src/flows/optimize')
+const ot = require('../../src/optimize-template')
 
 const probe = async (page, list) => {
   const bad = []
@@ -54,19 +55,47 @@ module.exports = [
     assert.deepEqual(r['binh luan'].lines, ['Bình luận', 'Bật'])
   }],
 
+  ['HTML that (yt-3): quet (inspectVideo) doc dung gia tri hien tai cua video', async ({ page, urls }) => {
+    page.timeout = 3000
+    await page.goto(`${urls.studio}/that-optimize/chi-tiet`)
+    const o = { timeout: 3000 }
+    const read = {}
+    const bad = []
+    for (const k of ['description', 'playlists', 'paidPromotion', 'ai', 'remix', 'tags', 'language', 'recordingDate', 'location', 'license', 'embeddable', 'category', 'comments']) {
+      try { read[k] = await _t.READ[k](page, o) } catch (e) { bad.push(`${k}: ${e.message}`) }
+    }
+    const title = await _t.READ.title(page)
+    console.log(JSON.stringify({ ...read, description: read.description && read.description.slice(0, 40) }))
+    assert.deepEqual(bad, [], bad.join('\n'))
+    assert.deepEqual(read.playlists, { text: '2 danh sách phát', count: 2 })
+    assert.equal(read.recordingDate, '2 thg 8, 2026')
+    assert.equal(read.location, '', 'vi tri trong (nhan "Vị trí video" NFD)')
+    assert.match(read.description, /^EBED MELECH 2026/)
+    assert.deepEqual([read.paidPromotion, read.ai, read.remix], ['', 'yes', 'none'], 'quang cao tra phi chua chon, AI = Co, khong cho phoi lai')
+    assert(read.tags.includes('Dark Bible Movie') && read.tags.length >= 2, JSON.stringify(read.tags))
+    assert.deepEqual(read.language, ['Tiếng Anh (Hoa Kỳ)', 'Tiếng Anh (Hoa Kỳ)'])
+    assert.deepEqual(read.license, { value: 'youtube', locked: false })
+    assert.deepEqual([read.embeddable, read.category, read.comments], [true, 'Mọi người và blog', 'on'])
+    // so voi mau mac dinh (danh sach phat: chua mo hop thoai -> 2 < 3 la thieu)
+    const r = ot.compareFields(read, ot.defaultTemplate(), { title })
+    assert.deepEqual(r.missing, ['playlists', 'paidPromotion', 'location'], JSON.stringify(r))
+    assert.deepEqual(r.unknown, ['endScreen'])
+    assert(r.filled.includes('tags'), 'tieu de da co trong the (khong phan biet hoa thuong)')
+  }],
+
   ['HTML that (yt-4): hop thoai danh sach phat', async ({ page, urls }) => {
     page.timeout = 3000
     await page.goto(`${urls.studio}/that-optimize/danh-sach-phat`)
-    const b = { selector: SEL.plBox, within: SEL.dialogs }
-    const items = await page.eval((b) => window.__ya.find(b, true).map((cb) => {
-      const it = cb.closest('li, [role=listitem], ytcp-ve') || cb.parentElement
-      const lab = it.querySelector('.label-text, .checkbox-label, #checkbox-label')
-      const host = cb.closest('ytcp-checkbox-lit')
-      return { name: String(cb.getAttribute('aria-label') || (lab ? lab.innerText : it.innerText) || '').replace(/\s+/g, ' ').trim(), id: (host && host.getAttribute('test-id')) || '', on: cb.getAttribute('aria-checked') === 'true' }
-    }), b)
+    const items = await _t.playlistItems(page)
     console.log(JSON.stringify(items))
     assert(items.length >= 2 && items.every((x) => x.name), 'doc ten tung danh sach phat')
+    // tu chon 3 danh sach dau: chi co o tich danh sach phat (nut "Danh sach phat moi" khong phai o tich)
+    assert.deepEqual(items.map((x) => [x.name, x.on]), [['Dark Bible Movie', true], ['Bible Movie', true], ['LIVE', false]])
     assert(await page.count({ ...L.done, within: SEL.dialogs }), 'nut Xong')
+    // quet: hop thoai cho biet 2/3 danh sach dang tich -> mau tu chon 3 thi con thieu, tu chon 2 thi du
+    assert.equal(ot.compareFields({ playlists: { count: 2, items } }, { playlistAuto: 3 }).missing.includes('playlists'), true)
+    assert.deepEqual(ot.compareFields({ playlists: { count: 2, items } }, { playlistAuto: 2 }).filled.includes('playlists'), true)
+    assert.deepEqual(ot.compareFields({ playlists: { count: 2, items } }, { playlistAuto: 0, playlists: ['Bible Movie'] }).filled.includes('playlists'), true)
   }],
 
   ['HTML that (yt-5): trinh chinh man hinh ket thuc', async ({ page, urls }) => {

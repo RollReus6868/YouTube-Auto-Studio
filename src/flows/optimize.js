@@ -3,10 +3,11 @@
 //   optimizeVideo  /video/<id>/edit: danh sach phat, Hien them, quang cao tra tien, AI, the, ngon ngu,
 //                  ngay quay, vi tri, giay phep, nhung, phoi lai Shorts, danh muc, binh luan,
 //                  man hinh ket thuc (luu rieng) -> Luu -> "Da luu thay doi"
+//   inspectVideo   /video/<id>/edit: CHI DOC gia tri hien tai, so voi mau -> muc nao con thieu (khong bam Luu)
 //   commentAndPin  trang xem video: Thich, binh luan, ⋮ -> Ghim -> Ghim -> "Da ghim binh luan"
 // Ham thuan tren mot Page da o dung kenh (ctx.withChannel lo chuyen kenh). Muc mau = 'keep' -> bo qua.
 const { StepError, channelOf, sleep } = require('../studio/driver')
-const { CATEGORY_NAMES, normalizeTemplate, tagsToAdd, fmtStudioDate, recordingDateFor, renderComment } = require('../optimize-template')
+const { CATEGORY_NAMES, normalizeTemplate, tagsToAdd, fmtStudioDate, recordingDateFor, renderComment, compareFields } = require('../optimize-template')
 
 // Chu tren man hinh (Studio tieng Viet + tieng Anh). Sua o day khi co HTML that.
 const L = (text, regex) => ({ text, regex })
@@ -27,6 +28,9 @@ const LABELS = {
   videoLanguage: L('Ngôn ngữ video', '^(ngôn ngữ video|video language)$'),
   titleLanguage: L('Ngôn ngữ của tiêu đề và nội dung mô tả', '^(ngôn ngữ của tiêu đề và nội dung mô tả|title and description language)$'),
   recDate: L('Ngày quay', '^(ngày quay|recording date)$'),
+  noDate: L('Không chọn', '^(không chọn|none)$'), // o ngay quay chua dat
+  noPlaylist: L('Chọn', '^(chọn|select)$'), // o danh sach phat chua chon
+  plCount: L('2 danh sách phát', '^(\\d+) (danh sách phát|playlists)$'),
   location: L('Vị trí video', '^(vị trí video|video location)$'),
   license: L('Giấy phép', '^(giấy phép|license)$'),
   licenseYoutube: 'Giấy phép chuẩn của YouTube', // tieng Anh: Standard YouTube License
@@ -172,6 +176,19 @@ async function pickOption(page, t, option) {
   return 'changed'
 }
 
+// Cac o tich trong hop thoai danh sach phat (theo thu tu hien): [{ name, id, on }].
+// Luu y: chi o tich co ten moi la danh sach phat (nut "Danh sach phat moi" khong phai o tich).
+const playlistItems = (page) => page.eval((b) => window.__ya.find(b, true).map((cb) => {
+  const it = cb.closest('li, [role=listitem], ytcp-ve') || cb.parentElement
+  const lab = it.querySelector('.label-text, .checkbox-label, #checkbox-label')
+  const host = cb.closest('ytcp-checkbox-lit')
+  return {
+    name: String(cb.getAttribute('aria-label') || (lab ? lab.innerText : it.innerText) || '').replace(/\s+/g, ' ').trim(),
+    id: (host && host.getAttribute('test-id')) || '', // ID danh sach phat (PL...)
+    on: cb.getAttribute('aria-checked') === 'true',
+  }
+}), { selector: SEL.plBox, within: SEL.dialogs })
+
 // ---- (a) danh sach video ---------------------------------------------------------
 const CONTENT_QS = '?filter=%5B%5D&sort=%7B%22columnType%22%3A%22date%22%2C%22sortOrder%22%3A%22DESCENDING%22%7D'
 
@@ -254,33 +271,32 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
     })
   }
 
-  if (t.playlists.length) {
+  if (t.playlists.length || t.playlistAuto) {
     await soft('Danh sách phát', async () => {
       await markSection(page, LABELS.playlists, 'pl', SEL.trigger)
       await page.click({ selector: SEL.trigger, within: sec('pl') })
       const box = { selector: SEL.plBox, within: SEL.dialogs }
       await page.waitFor(box)
-      const items = await page.eval((b) => window.__ya.find(b, true).map((cb) => {
-        const it = cb.closest('li, [role=listitem], ytcp-ve') || cb.parentElement
-        const lab = it.querySelector('.label-text, .checkbox-label, #checkbox-label')
-        const host = cb.closest('ytcp-checkbox-lit')
-        return {
-          name: String(cb.getAttribute('aria-label') || (lab ? lab.innerText : it.innerText) || '').replace(/\s+/g, ' ').trim(),
-          id: (host && host.getAttribute('test-id')) || '', // ID danh sach phat (PL...)
-          on: cb.getAttribute('aria-checked') === 'true',
-        }
-      }), box)
+      const items = await playlistItems(page)
       let ticked = 0
+      const tick = async (i, what) => {
+        if (items[i].on) return
+        await page.click({ ...box, nth: i })
+        await page.until((b, i) => { const el = window.__ya.find(b, true)[i]; return el && el.getAttribute('aria-checked') === 'true' }, [box, i], { what: `danh sách phát "${what}" được tích` })
+        items[i].on = true
+        ticked++
+      }
       for (const want of t.playlists) {
         // mau ghi ten (tich moi danh sach trung ten) hoac ID "PL..." (dung mot danh sach)
-        const hits = items.map((x, i) => [x, i]).filter(([x]) => norm(x.name) === norm(want) || (x.id && x.id === want))
+        const hits = items.map((x, i) => [x, i]).filter(([x]) => x.name && (norm(x.name) === norm(want) || (x.id && x.id === want)))
         if (!hits.length) { warn(`Không thấy danh sách phát "${want}" trong kênh.`); continue }
-        for (const [x, i] of hits) {
-          if (x.on) continue
-          await page.click({ ...box, nth: i })
-          await page.until((b, i) => { const el = window.__ya.find(b, true)[i]; return el && el.getAttribute('aria-checked') === 'true' }, [box, i], { what: `danh sách phát "${want}" được tích` })
-          ticked++
-        }
+        for (const [, i] of hits) await tick(i, want)
+      }
+      // tu chon N danh sach phat dau tien (da tich san van tinh vao N)
+      if (t.playlistAuto) {
+        const first = items.map((x, i) => [x, i]).filter(([x]) => x.name).slice(0, t.playlistAuto)
+        if (!first.length) warn('Kênh chưa có danh sách phát nào để tự chọn.')
+        for (const [x, i] of first) await tick(i, x.name)
       }
       await page.click({ ...LABELS.done, within: SEL.dialogs })
       await page.waitGone(box)
@@ -467,6 +483,153 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
   return { id: videoId, title: after, changed, warnings, saved }
 }
 
+// ---- (b2) doc trang Chi tiet video: CHI DOC (khong bam Luu, khong doi muc nao) ------
+// Gia tri cua o tha xuong (bo dong nhan `label`): dong cuoi con lai, '' neu khong co.
+const valueOf = (info, label) => {
+  if (!info) throw new StepError(`Không thấy ô "${label ? label.text : ''}".`, '')
+  const re = label && new RegExp(label.regex, 'i')
+  const v = info.lines.filter((l) => /[\p{L}\p{N}]/u.test(l) && (!re || !re.test(norm(l)))) // bo dong chi co ky hieu (mui ten)
+  return v.length ? v[v.length - 1] : ''
+}
+const keyOf = (text, map) => (Object.entries(map).find(([, v]) => norm(v) === norm(text)) || [''])[0]
+
+// Radio dang chon trong muc `label`: key trong opts ('' = chua chon)
+async function readRadio(page, label, name, opts, o) {
+  await markSection(page, label, name, SEL.radio, o)
+  let found = 0
+  for (const [k, lab] of opts) {
+    const t = { ...lab, within: sec(name) }
+    if (!(await page.has(t))) continue
+    found++
+    if (await isChecked(page, t, SEL.radio)) return k
+  }
+  if (!found) throw new StepError(`Không thấy lựa chọn trong mục "${label.text}".`, page.step)
+  return ''
+}
+
+// Moi ham doc mot muc (nem loi neu khong thay o). o = { timeout }
+const READ = {
+  title: async (page) => String((await page.text({ selector: SEL.title })) || '').trim(),
+  description: async (page, o) => {
+    await page.waitFor({ selector: SEL.desc }, o)
+    return String((await page.text({ selector: SEL.desc })) || '').trim()
+  },
+  // o "Danh sach phat": "Chọn" (0) | ten mot danh sach (1) | "2 danh sách phát"
+  playlists: async (page, o) => {
+    await markSection(page, LABELS.playlists, 'pl', SEL.trigger, o)
+    const text = valueOf(await triggerInfo(page, { selector: SEL.trigger, within: sec('pl') }), LABELS.playlists)
+    const m = new RegExp(LABELS.plCount.regex, 'i').exec(norm(text))
+    return { text, count: !text || new RegExp(LABELS.noPlaylist.regex, 'i').test(norm(text)) ? 0 : m ? Number(m[1]) : 1 }
+  },
+  paidPromotion: (page, o) => readRadio(page, LABELS.paid, 'paid', [['yes', LABELS.paidYes], ['no', LABELS.paidNo]], o),
+  ai: (page, o) => readRadio(page, LABELS.ai, 'ai', [['yes', LABELS.yes], ['no', LABELS.no]], o),
+  remix: (page, o) => readRadio(page, LABELS.remix, 'remix', [['all', LABELS.remixAll], ['audio', LABELS.remixAudio], ['none', LABELS.remixNone]], o),
+  tags: async (page, o) => {
+    await page.waitFor({ selector: SEL.tagInput }, o)
+    return page.eval((s) => window.__ya.find({ selector: s, hidden: true }, true).map((e) => String(e.innerText || e.textContent || '').trim()).filter(Boolean), SEL.chip)
+  },
+  language: async (page, o) => {
+    const out = []
+    for (const lab of [LABELS.videoLanguage, LABELS.titleLanguage]) {
+      await page.waitFor(lab, o)
+      out.push(valueOf(await triggerInfo(page, lab), lab))
+    }
+    return out
+  },
+  // '' = chua dat ("Không chọn")
+  recordingDate: async (page, o) => {
+    await page.waitFor(LABELS.recDate, o)
+    const v = valueOf(await triggerInfo(page, LABELS.recDate), LABELS.recDate)
+    return new RegExp(LABELS.noDate.regex, 'i').test(norm(v)) ? '' : v
+  },
+  location: async (page, o) => {
+    await markSection(page, LABELS.location, 'loc', 'input', o)
+    return String((await page.value({ selector: 'input', within: sec('loc') })) || '').trim()
+  },
+  license: async (page, o) => {
+    await markSection(page, LABELS.license, 'lic', SEL.trigger, o)
+    const info = await triggerInfo(page, { selector: SEL.trigger, within: sec('lic') })
+    return { value: keyOf(valueOf(info, LABELS.license), { youtube: LABELS.licenseYoutube, creativeCommon: LABELS.licenseCc }), locked: !!info.disabled }
+  },
+  embeddable: async (page, o) => {
+    await page.waitFor(LABELS.embed, o)
+    return isChecked(page, LABELS.embed, '[role=checkbox], ytcp-checkbox-lit')
+  },
+  category: async (page, o) => {
+    await markSection(page, LABELS.category, 'cat', SEL.trigger, o)
+    return valueOf(await triggerInfo(page, { selector: SEL.trigger, within: sec('cat') }), LABELS.category)
+  },
+  comments: async (page, o) => {
+    await markSection(page, LABELS.commentsSection, 'cmt', SEL.trigger, o)
+    const v = valueOf(await triggerInfo(page, { ...LABELS.comments, within: sec('cmt') }), LABELS.comments)
+    return keyOf(v, { on: LABELS.commentsOn, pause: LABELS.commentsPause, off: LABELS.commentsOff })
+  },
+  // Mo hop thoai danh sach phat chi de doc o nao dang tich, roi dong bang "Xong" (khong tich/bo tich gi).
+  playlistDialog: async (page, o) => {
+    await markSection(page, LABELS.playlists, 'pl', SEL.trigger, o)
+    await page.click({ selector: SEL.trigger, within: sec('pl') })
+    const box = { selector: SEL.plBox, within: SEL.dialogs }
+    await page.waitFor(box, o)
+    const items = (await playlistItems(page)).filter((x) => x.name)
+    await page.click({ ...LABELS.done, within: SEL.dialogs })
+    await page.waitGone(box, o)
+    return items
+  },
+}
+// Muc can "Hien them" moi co tren trang
+const ADVANCED = ['paidPromotion', 'ai', 'remix', 'tags', 'language', 'recordingDate', 'location', 'license', 'embeddable', 'category', 'comments']
+
+// Doc 1 video va so voi mau: { id, title, missing, filled, unknown, notes, read }.
+// Muc doc loi -> tinh la thieu (kem ghi chu); man hinh ket thuc: trang Chi tiet khong cho biet -> unknown.
+async function inspectVideo(page, videoId, template, { urls, log = () => {}, onStep = () => {}, video = {}, now = new Date() } = {}) {
+  const t = normalizeTemplate(template)
+  const o = { timeout: Math.min(page.timeout, 8000) }
+  const notes = []
+  const read = {}
+  onStep('Mở trang Chi tiết video')
+  await page.run('Đọc trang Chi tiết video', async () => {
+    await page.goto(`${urls.studio}/video/${videoId}/edit`)
+    await page.waitFor(LABELS.details)
+    await page.waitFor({ selector: SEL.title }, { timeout: Math.max(page.timeout, 20000) })
+  })
+  const title = (await READ.title(page)) || video.title || ''
+  // muc nao mau can (giong compareFields)
+  const want = []
+  if (t.description) want.push('description')
+  if (t.playlists.length || t.playlistAuto) want.push('playlists')
+  for (const k of ['paidPromotion', 'ai', 'remix', 'recordingDate', 'license', 'embeddable', 'category', 'comments']) if (t[k] !== 'keep') want.push(k)
+  if (t.tagsMode !== 'keep' || t.extraTags.length) want.push('tags')
+  if (t.language) want.push('language')
+  if (t.location) want.push('location')
+  const failed = []
+  const tryRead = async (k, fn) => {
+    try { read[k] = await fn() } catch (e) { failed.push(k); notes.push(`Không đọc được mục "${k}": ${e.message}`) }
+  }
+  onStep('Đọc thông tin')
+  for (const k of want.filter((k) => !ADVANCED.includes(k))) await tryRead(k, () => READ[k](page, o))
+  // danh sach phat: chua du so luong / co ten trong mau -> mo hop thoai xem dang tich nhung danh sach nao
+  const pl = read.playlists
+  if (pl && (t.playlists.length || pl.count < t.playlistAuto)) {
+    await tryRead('playlists', async () => ({ ...pl, items: await READ.playlistDialog(page, o) }))
+  }
+  if (want.some((k) => ADVANCED.includes(k))) {
+    let shown = true
+    try {
+      await page.until((a, b) => window.__ya.count(a) || window.__ya.count(b), [LABELS.showMore, LABELS.showLess], { what: '"Hiện thêm"', ...o })
+      if (await page.has(LABELS.showMore)) await page.click(LABELS.showMore) // chi la nut xem them, khong doi gi
+      await page.waitFor(LABELS.showLess, o)
+    } catch (e) { shown = false; notes.push(`Không mở được "Hiện thêm": ${e.message}`) }
+    for (const k of want.filter((k) => ADVANCED.includes(k))) {
+      if (shown) await tryRead(k, () => READ[k](page, o))
+      else failed.push(k)
+    }
+  }
+  const r = compareFields(read, t, { title })
+  for (const k of failed) if (!r.missing.includes(k)) { r.missing.push(k); r.unknown = r.unknown.filter((x) => x !== k) }
+  for (const n of notes) log('warn', `${title || videoId}: ${n}`)
+  return { id: videoId, title, missing: r.missing, filled: r.filled, unknown: r.unknown, notes, read }
+}
+
 // ---- (c) binh luan + ghim tren trang xem video ----------------------------------
 async function commentAndPin(page, videoId, text, { urls, log = () => {}, onStep = () => {}, like = true, pin = true } = {}) {
   text = String(text || '').trim()
@@ -566,4 +729,4 @@ async function commentAndPin(page, videoId, text, { urls, log = () => {}, onStep
   return out
 }
 
-module.exports = { LABELS, SEL, listVideos, optimizeVideo, commentAndPin, _t: { markSection, markDialog, triggerInfo, isChecked, isEnabled, sec } }
+module.exports = { LABELS, SEL, listVideos, optimizeVideo, inspectVideo, commentAndPin, _t: { markSection, markDialog, triggerInfo, isChecked, isEnabled, sec, playlistItems, READ } }

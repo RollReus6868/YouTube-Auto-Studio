@@ -1,7 +1,8 @@
 // Tinh nang "Toi uu video": quet video da dang cua kenh, toi uu trong Studio theo mau cua kenh,
 // roi Thich + binh luan + ghim tren trang xem video. Nho video da toi uu o optimized.json.
+// Quet: doc 10 video moi nhat, mo tung trang Chi tiet (chi doc) xem con thieu muc nao so voi mau.
 const fs = require('fs')
-const { listVideos, optimizeVideo, commentAndPin } = require('../flows/optimize')
+const { listVideos, optimizeVideo, inspectVideo, commentAndPin } = require('../flows/optimize')
 const ot = require('../optimize-template')
 
 // Binh luan duoc tren trang xem: video cong khai / khong cong khai (rieng tu, len lich thi khong)
@@ -27,7 +28,8 @@ module.exports = (ctx) => {
     S.videos = c ? c.videos : []
     S.at = c ? c.at : ''
     const db = readDb()
-    for (const v of S.videos) if (v.status !== 'run') v.status = ot.isOptimized(db, S.channelKey, v.id) ? 'done' : v.status === 'error' ? 'error' : 'new'
+    // video da quet (co missing) giu trang thai cua lan quet / lan toi uu
+    for (const v of S.videos) if (v.status !== 'run' && v.status !== 'scan' && !v.missing) v.status = ot.isOptimized(db, S.channelKey, v.id) ? 'done' : v.status === 'error' ? 'error' : 'new'
     ctx.push()
   }
   const set = (id, patch) => { const v = S.videos.find((x) => x.id === id); if (v) Object.assign(v, patch); ctx.push() }
@@ -47,17 +49,37 @@ module.exports = (ctx) => {
     S.channelKey = key
     S.busy = true
     ctx.push()
+    ctx.resetStop()
     try {
-      const rows = await ctx.withChannel(key, (page) => listVideos(page, ucOf(key), { urls: ctx.urls, log: ctx.log, limit: LATEST }), { label: 'Quét video' })
-      const db = readDb()
-      S.videos = rows.map((r) => ({ ...r, status: ot.isOptimized(db, key, r.id) ? 'done' : 'new', step: '', error: '', warnings: (db[key] && db[key][r.id] && db[key][r.id].warnings) || [] }))
-      S.at = new Date().toISOString()
+      const tpl = ot.templateFor(templates(), key)
+      await ctx.withChannel(key, async (page) => {
+        const rows = await listVideos(page, ucOf(key), { urls: ctx.urls, log: ctx.log, limit: LATEST })
+        const db = readDb()
+        S.videos = rows.map((r) => ({ ...r, status: 'scan', step: 'Chờ đọc', error: '', warnings: (db[key] && db[key][r.id] && db[key][r.id].warnings) || [] }))
+        S.at = new Date().toISOString()
+        ctx.push()
+        // doc tung video (chi doc): loi o mot video khong dung ca lan quet
+        for (const [i, v] of S.videos.entries()) {
+          if (ctx.stopped()) { Object.assign(v, { status: 'new', step: '', note: 'Chưa đọc (đã dừng).' }); continue }
+          set(v.id, { step: `Đang đọc ${i + 1}/${S.videos.length}…` })
+          try {
+            const r = await inspectVideo(page, v.id, tpl, { urls: ctx.urls, log: ctx.log, video: v })
+            Object.assign(v, { missing: r.missing, note: r.notes.join(' · '), title: r.title || v.title, status: r.missing.length ? 'new' : 'done' })
+          } catch (e) {
+            if (page.snapshot) await page.snapshot(`quet-${v.id}`).catch(() => {})
+            Object.assign(v, { missing: [], note: `Không đọc được trang Chi tiết: ${e.message}`, status: 'new' })
+            ctx.log('warn', `${v.title || v.id}: không đọc được trang Chi tiết (${e.message}).`)
+          }
+          set(v.id, { step: '' })
+        }
+      }, { label: 'Quét video' })
       cache.set(key, { videos: S.videos, at: S.at })
       const left = S.videos.filter((v) => v.status === 'new').length
       ctx.log('ok', `Kênh ${(channel(key) || {}).name || key}: ${S.videos.length} video, ${left} chưa tối ưu.`)
     } catch (e) {
       ctx.log('error', `Không quét được video: ${e.message}`)
     } finally {
+      for (const v of S.videos) if (v.status === 'scan') Object.assign(v, { status: 'new', step: '', note: v.note || 'Chưa đọc được.' })
       S.busy = false
       ctx.push()
     }
@@ -101,7 +123,9 @@ module.exports = (ctx) => {
             }
             for (const w of warnings) if (!r.warnings.includes(w)) ctx.log('warn', `${r.title || v.title}: ${w}`)
             writeDb(ot.markOptimized(readDb(), key, v.id, { title: r.title, changed: r.changed, commented: !!(c && (c.commented || c.pinned)), pinned: !!(c && c.pinned), warnings }))
-            setV(v.id, { status: 'done', step: '', title: r.title || v.title, warnings })
+            // khong quet lai: muc con thieu = muc quet thay thieu ma toi uu chua doi duoc (chi khi co canh bao Studio)
+            const left = r.warnings.length ? (v.missing || []).filter((k) => !r.changed.includes(k)) : []
+            setV(v.id, { status: left.length ? 'new' : 'done', step: '', title: r.title || v.title, warnings, missing: left, note: '' })
             ok++
           } catch (e) {
             if (page.snapshot) await page.snapshot(`toi-uu-${v.id}`)

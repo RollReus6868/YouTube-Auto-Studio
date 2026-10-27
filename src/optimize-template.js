@@ -32,6 +32,7 @@ const ONE_OF = {
 function defaultTemplate() {
   return {
     playlists: [],
+    playlistAuto: 3, // tu tich N danh sach phat dau tien trong hop thoai (0 = tat)
     paidPromotion: 'no',
     ai: 'yes',
     tagsMode: 'title',
@@ -62,6 +63,9 @@ function normalizeTemplate(t) {
   // ten danh sach phat: bo trung (cung ten -> tool tich moi danh sach trung ten)
   out.playlists = [...new Set(list(src.playlists !== undefined ? src.playlists : d.playlists))]
   out.extraTags = [...new Set(list(src.extraTags))]
+  // mau cu chua co playlistAuto -> mac dinh 3 cho moi mau (nguoi dung muon tu chon)
+  const n = Number(src.playlistAuto)
+  if (src.playlistAuto !== undefined && src.playlistAuto !== '' && Number.isFinite(n)) out.playlistAuto = Math.max(0, Math.min(5, Math.round(n)))
   if (typeof src.location === 'string') out.location = src.location.trim()
   out.category = src.category === 'keep' || CATEGORY_NAMES[src.category] ? String(src.category) : d.category
   if (typeof src.language === 'string') out.language = src.language.trim()
@@ -165,7 +169,7 @@ function recordingDateFor(template, video, now = new Date()) {
 function touchedFields(template) {
   const t = normalizeTemplate(template)
   const out = []
-  if (t.playlists.length) out.push('playlists')
+  if (t.playlists.length || t.playlistAuto) out.push('playlists')
   for (const k of ['paidPromotion', 'ai', 'remix', 'endScreen', 'recordingDate', 'license', 'embeddable', 'comments', 'category']) if (t[k] !== 'keep') out.push(k)
   if (t.tagsMode !== 'keep' || t.extraTags.length) out.push('tags')
   if (t.location) out.push('location')
@@ -184,8 +188,51 @@ function markOptimized(db, channelKey, videoId, info = {}) {
 }
 const isOptimized = (db, channelKey, videoId) => !!(db && db[channelKey] && db[channelKey][videoId])
 
+// ---- quet: so gia tri doc duoc tren trang Chi tiet video voi mau ----
+// read: gia tri doc boi inspectVideo (src/flows/optimize.js); muc undefined = khong doc duoc / khong doc.
+//   playlists: { count, items?: [{ name, id, on }] }, paidPromotion/ai/remix: 'yes'|'no'|'all'|... ('' = chua chon),
+//   tags: [..], language: [ngon ngu video, ngon ngu tieu de], recordingDate/location/category: chu,
+//   license: { value: 'youtube'|'creativeCommon'|'', locked }, embeddable: bool, comments: 'on'|'pause'|'off'|''
+// Tra ve { missing, filled, unknown } (ten muc cua mau). Muc 'keep' bo qua.
+const lc = (s) => String(s || '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()
+function playlistsFilled(p, t) {
+  if (!p) return undefined
+  if (p.items) {
+    const named = t.playlists.every((want) => {
+      const hits = p.items.filter((x) => lc(x.name) === lc(want) || (x.id && x.id === want))
+      return hits.every((x) => x.on) // khong co danh sach nay trong kenh -> khong tinh la thieu
+    })
+    const on = p.items.filter((x) => x.on).length
+    return named && on >= Math.min(t.playlistAuto, p.items.length)
+  }
+  if (t.playlists.length) return p.count ? undefined : false // co ten -> can mo hop thoai moi biet
+  return p.count >= t.playlistAuto
+}
+function compareFields(read, template, { title = '' } = {}) {
+  const t = normalizeTemplate(template)
+  const r = read || {}
+  const checks = []
+  const add = (k, v) => checks.push([k, v])
+  const has = (k) => r[k] !== undefined && r[k] !== null
+  if (t.description) add('description', has('description') ? !!String(r.description).trim() : undefined)
+  if (t.playlists.length || t.playlistAuto) add('playlists', playlistsFilled(r.playlists, t))
+  for (const k of ['paidPromotion', 'ai', 'remix', 'comments']) if (t[k] !== 'keep') add(k, has(k) ? r[k] === t[k] : undefined)
+  if (t.tagsMode !== 'keep' || t.extraTags.length) add('tags', has('tags') ? tagsToAdd(r.tags, t, title).add.length === 0 : undefined)
+  if (t.language) add('language', has('language') ? r.language.every((x) => lc(x) === lc(t.language)) : undefined)
+  if (t.recordingDate !== 'keep') add('recordingDate', has('recordingDate') ? !!String(r.recordingDate).trim() : undefined)
+  if (t.location) add('location', has('location') ? !!String(r.location).trim() : undefined)
+  // giay phep bi khoa: Studio khong cho doi -> khong tinh la thieu
+  if (t.license !== 'keep') add('license', has('license') ? r.license.locked || r.license.value === t.license : undefined)
+  if (t.embeddable !== 'keep') add('embeddable', has('embeddable') ? r.embeddable === (t.embeddable === 'yes') : undefined)
+  if (t.category !== 'keep') add('category', has('category') ? lc(r.category) === lc(CATEGORY_NAMES[t.category]) : undefined)
+  if (t.endScreen !== 'keep') add('endScreen', has('endScreen') ? !!r.endScreen : undefined) // trang Chi tiet khong cho biet
+  const out = { missing: [], filled: [], unknown: [] }
+  for (const [k, v] of checks) out[v === true ? 'filled' : v === false ? 'missing' : 'unknown'].push(k)
+  return out
+}
+
 module.exports = {
   CATEGORY_NAMES, STUDIO_LANGUAGES, COMMENT_VARS, defaultTemplate, normalizeTemplate, templateFor, setTemplate,
   API_FIELDS, withoutApiFields, presetSeed,
-  renderComment, tagsToAdd, tagLength, fmtStudioDate, parseStudioDate, recordingDateFor, touchedFields, markOptimized, isOptimized,
+  renderComment, tagsToAdd, tagLength, fmtStudioDate, parseStudioDate, recordingDateFor, touchedFields, markOptimized, isOptimized, compareFields,
 }
