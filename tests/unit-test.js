@@ -440,6 +440,134 @@ test('preset cu (dang qua API): muc khac mac dinh chuyen sang mau Studio, bo kho
   assert.equal(set.optimize.category, '10')
 })
 
+test('mo ta mac dinh (Cai dat): ghep tren / duoi, bo phan trong, bien, gioi han', () => {
+  assert.equal(md.composeDescription('Riêng', 'Mặc định'), 'Riêng\n\nMặc định')
+  assert.equal(md.composeDescription('Riêng\n\n', '\n Mặc định\nDòng 2 ', 'above'), 'Riêng\n\nMặc định\nDòng 2')
+  assert.equal(md.composeDescription('Riêng', 'Mặc định', 'below'), 'Mặc định\n\nRiêng')
+  assert.equal(md.composeDescription('', 'Mặc định', 'below'), 'Mặc định')
+  assert.equal(md.composeDescription('Riêng', '  ', 'below'), 'Riêng')
+  assert.equal(md.composeDescription('', ''), '')
+  assert.equal(md.composeDescription('A', 'B', 'la'), 'A\n\nB', 'gia tri la = tren')
+  const item = { name: 'Bí ẩn tập 7', titleFromName: true, info: { vars: {}, mo_ta: 'Gemini viết: {ten_video}.' } }
+  const def = 'Ủng hộ kênh "{ten_kenh}": https://example.org/donate\nSách: https://example.org/ebook\n{tieu_de}'
+  const above = md.buildVideoMeta(item, md.defaultPreset(), { channel: 'Kênh A', settings: { descDefault: def, descPosition: 'above' } })
+  assert.equal(above.description, 'Gemini viết: Bí ẩn tập 7.\n\nỦng hộ kênh "Kênh A": https://example.org/donate\nSách: https://example.org/ebook\nBí ẩn tập 7')
+  assert.equal(above.descReplace, true)
+  assert.deepEqual(md.validateMeta(above), [])
+  const below = md.buildVideoMeta(item, md.defaultPreset(), { channel: 'Kênh A', settings: { descDefault: def, descPosition: 'below' } })
+  assert.equal(below.description, 'Ủng hộ kênh "Kênh A": https://example.org/donate\nSách: https://example.org/ebook\nBí ẩn tập 7\n\nGemini viết: Bí ẩn tập 7.')
+  // khong co mo ta rieng: dung mo ta cua mau
+  const tpl = md.buildVideoMeta({ name: 'X', info: { vars: {} } }, { ...md.defaultPreset(), description: '{ten_video}' }, { settings: { descDefault: 'Link', descPosition: 'above' } })
+  assert.equal(tpl.description, 'X\n\nLink')
+  // khong co phan mac dinh: nhu cu, giu mo ta Studio dien san khi dang
+  const none = md.buildVideoMeta(item, md.defaultPreset(), { settings: { descDefault: '  ', descPosition: 'below' } })
+  assert.deepEqual([none.description, none.descReplace], ['Gemini viết: Bí ẩn tập 7.', false])
+  assert.equal(md.buildVideoMeta(item, md.defaultPreset()).descReplace, false)
+  // gioi han 5000 byte va dau < > tinh tren mo ta da ghep
+  const long = md.buildVideoMeta(item, md.defaultPreset(), { settings: { descDefault: 'ệ'.repeat(1660), descPosition: 'above' } })
+  assert.match(md.validateMeta(long).join('\n'), /byte \(tính cả phần mô tả mặc định trong Cài đặt\)/)
+  const lt = md.buildVideoMeta(item, md.defaultPreset(), { settings: { descDefault: 'Tặng <3', descPosition: 'above' } })
+  assert.match(md.validateMeta(lt).join('\n'), /dấu < hoặc >/)
+  // hop thoai tai len: co phan mac dinh -> thay mo ta Studio dien san
+  const up = require('../src/uploader')
+  assert.equal(up.jobOf({ video: '/v.mp4', meta: above }, 'UC1').replaceDescription, true)
+  assert.equal(up.jobOf({ video: '/v.mp4', meta: none }, 'UC1').replaceDescription, false)
+})
+
+// .docx toi gian (zip) dung ngay trong bai kiem: [Content_Types].xml (luu thang) + word/document.xml (nen deflate)
+function makeDocx(xml, { stored = false } = {}) {
+  const zlib = require('zlib')
+  const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0 })
+  const crc = (b) => { let c = 0xffffffff; for (const x of b) c = crcTable[(c ^ x) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0 }
+  const entries = [
+    ['[Content_Types].xml', Buffer.from('<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>'), true],
+    ['word/document.xml', Buffer.from(xml, 'utf8'), stored],
+  ]
+  const locals = []
+  const centrals = []
+  let off = 0
+  for (const [name, data, keep] of entries) {
+    const body = keep ? data : zlib.deflateRawSync(data)
+    const n = Buffer.from(name)
+    const lh = Buffer.alloc(30)
+    lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(keep ? 0 : 8, 8)
+    lh.writeUInt32LE(crc(data), 14); lh.writeUInt32LE(body.length, 18); lh.writeUInt32LE(data.length, 22); lh.writeUInt16LE(n.length, 26)
+    const ch = Buffer.alloc(46)
+    ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(20, 4); ch.writeUInt16LE(20, 6); ch.writeUInt16LE(keep ? 0 : 8, 10)
+    ch.writeUInt32LE(crc(data), 16); ch.writeUInt32LE(body.length, 20); ch.writeUInt32LE(data.length, 24); ch.writeUInt16LE(n.length, 28); ch.writeUInt32LE(off, 42)
+    locals.push(lh, n, body)
+    centrals.push(ch, n)
+    off += 30 + n.length + body.length
+  }
+  const cd = Buffer.concat(centrals)
+  const end = Buffer.alloc(22)
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(entries.length, 8); end.writeUInt16LE(entries.length, 10)
+  end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(off, 16)
+  return Buffer.concat([...locals, cd, end])
+}
+
+test('kich ban: doc .docx (zip + deflate), .txt / .md / .srt', () => {
+  const docx = require('../src/docx')
+  const xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' +
+    '<w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="720"/></w:tabs></w:pPr><w:r><w:t>Cảnh 1: </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">Rừng &amp; sông </w:t></w:r><w:r><w:t>&lt;đêm&gt; &#272;i &#x1EA1;</w:t></w:r></w:p>' +
+    '<w:p/><w:p><w:r><w:t>An</w:t><w:tab/><w:t>nói:</w:t><w:br/><w:t>"Đi thôi"</w:t></w:r></w:p>' +
+    '<w:p><w:r><w:delText>đã xóa</w:delText></w:r></w:p></w:body></w:document>'
+  const want = 'Cảnh 1: Rừng & sông <đêm> Đi ạ\n\nAn\tnói:\n"Đi thôi"'
+  assert.equal(docx.docxText(makeDocx(xml)), want)
+  assert.equal(docx.docxText(makeDocx(xml, { stored: true })), want, 'muc luu thang (khong nen)')
+  assert.throws(() => docx.docxText(Buffer.from('khong phai zip')), /không phải \.docx/)
+  const d = tmp()
+  write(path.join(d, 'a.docx'), makeDocx(xml))
+  write(path.join(d, 'a.txt'), '\uFEFFDòng 1\r\nDòng 2   \r\n\r\n\r\n\r\nDòng 3\r\n')
+  write(path.join(d, 'a.md'), '# Tiêu đề\n\nNội dung')
+  write(path.join(d, 'a.srt'), '1\n00:00:01,000 --> 00:00:02,000\nXin chào\n\n2\n00:00:03,000 --> 00:00:04,000\nTạm biệt\n')
+  write(path.join(d, 'a.pdf'), 'x')
+  assert.equal(docx.readScript(path.join(d, 'a.docx')), want)
+  assert.equal(docx.readScript(path.join(d, 'a.txt')), 'Dòng 1\nDòng 2\n\nDòng 3', 'bo BOM, CRLF, dong trong thua')
+  assert.equal(docx.readScript(path.join(d, 'a.md')), '# Tiêu đề\n\nNội dung')
+  assert.equal(docx.readScript(path.join(d, 'a.srt')), 'Xin chào\n\nTạm biệt', 'bo so thu tu va dong thoi gian')
+  assert.throws(() => docx.readScript(path.join(d, 'a.pdf')), /\.pdf/)
+})
+
+test('kich ban: tu nhan canh video trong thu muc phang, gui cho Gemini (cat 30.000 ky tu)', () => {
+  const d = tmp()
+  write(path.join(d, 'Bí ẩn tập 7.mp4'))
+  write(path.join(d, 'Bí ẩn tập 7.txt'), '---\nMô tả') // file thong tin, khong phai kich ban
+  write(path.join(d, 'Bí ẩn tập 7 - kịch bản.docx'))
+  write(path.join(d, 'Bí ẩn tập 7.kich-ban.txt'))
+  write(path.join(d, 'Bí ẩn tập 70.mp4'))
+  write(path.join(d, 'Bí ẩn tập 70 (Script).md'))
+  write(path.join(d, 'Khác.mp4'))
+  write(path.join(d, 'Khác.vi.srt'))
+  write(path.join(d, 'Khác ghi chú.txt'))
+  const by = Object.fromEntries(sc.scanVideos(d).videos.map((v) => [v.name, v]))
+  const a = by['Bí ẩn tập 7']
+  assert.equal(a.script, path.join(d, 'Bí ẩn tập 7.kich-ban.txt'), '.txt truoc .docx')
+  assert(a.files.includes(a.script), 'kich ban chuyen vao da-dang cung video')
+  assert.match(a.warnings.join('\n'), /2 file kịch bản cùng tên/)
+  assert.equal(a.infoFile, path.join(d, 'Bí ẩn tập 7.txt'))
+  assert.equal(a.info.mo_ta, 'Mô tả')
+  assert.equal(by['Bí ẩn tập 70'].script, path.join(d, 'Bí ẩn tập 70 (Script).md'), 'khong nham sang video ten dai hon')
+  assert.equal(by['Khác'].script, undefined)
+  for (const [f, ok] of [['Tên.kich-ban.txt', true], ['Tên - KỊCH BẢN v2.docx', true], ['Tên_script.md', true], ['Tên.txt', false], ['Tên 2.kich-ban.txt', false], ['Tên.kich-ban.pdf', false], ['Tên.script.srt', false]]) {
+    assert.equal(sc.scriptOf(f, 'Tên'), ok, f)
+  }
+  // thu muc con kieu cu: file co "kich ban" trong ten
+  write(path.join(d, 'cu', 'video.mp4'))
+  write(path.join(d, 'cu', 'description.txt')) // co chu "script" ben trong: khong phai kich ban
+  write(path.join(d, 'cu', 'kich-ban.docx'))
+  assert.equal(sc.scanVideos(d).videos.find((v) => v.layout === 'folder').script, path.join(d, 'cu', 'kich-ban.docx'))
+  // loi nhac Gemini
+  const g = require('../src/google')
+  const p = g.descriptionPrompt({ title: 'Bí ẩn tập 7', script: 'Cảnh 1: An vào rừng.' })
+  assert.match(p, /Kịch bản của video[\s\S]*Cảnh 1: An vào rừng\./)
+  assert.match(p, /dựa trên nội dung thật của kịch bản/)
+  assert.match(p, /Không bịa thông tin không có trong kịch bản/)
+  assert(!/Kịch bản/.test(g.descriptionPrompt({ title: 'X' })), 'khong co kich ban thi khong nhac')
+  const big = g.descriptionPrompt({ title: 'X', script: `${'a'.repeat(g.SCRIPT_MAX)}ĐUÔI` })
+  assert(!big.includes('ĐUÔI') && big.includes('a'.repeat(g.SCRIPT_MAX)) && /chỉ là phần đầu/.test(big))
+})
+
 ;(async () => {
   let failed = 0
   for (const [name, fn] of tests) {

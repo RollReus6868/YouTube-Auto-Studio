@@ -385,7 +385,8 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
       throw new StepError(`Không điền được tiêu đề (ô tiêu đề đang là "${String(await page.text(box) || '').slice(0, 60)}").`, page.step)
     })
 
-    // mo ta: giu mo ta mac dinh cua kenh Studio dien san, xuong 2 dong roi them mo ta cua video
+    // mo ta: giu mo ta mac dinh cua kenh Studio dien san, xuong 2 dong roi them mo ta cua video.
+    // job.replaceDescription (co phan mo ta mac dinh trong Cai dat): thay het mo ta Studio dien san bang mo ta da ghep
     const desc = String(job.description || '').trim() ||
       (t.description ? renderComment(t.description, { tieu_de: job.title, link: '', ten_kenh: job.channelName || '' }).trim() : '')
     if (desc) {
@@ -394,6 +395,18 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
         await page.waitFor(box)
         await page.until((t) => String((window.__ya.one(t) || {}).textContent || '').trim(), [box], { timeout: 2500 }).catch(() => {})
         const cur = String((await page.text(box)) || '').replace(/\s+$/, '')
+        if (job.replaceDescription) {
+          if (norm(cur) === norm(desc)) return log('info', 'Mô tả đã đúng: giữ nguyên.')
+          let full = desc
+          if (Buffer.byteLength(full) > 5000) {
+            full = Buffer.from(full).subarray(0, 5000).toString().replace(/\uFFFD+$/, '')
+            warn('Mô tả bị cắt bớt vì dài quá 5000 byte.')
+          }
+          await page.type(box, full)
+          await page.until((t, w) => window.__ya.norm((window.__ya.one(t) || {}).innerText) === w, [box, norm(full)], { what: 'mô tả được thay', timeout: 5000 })
+          if (cur.trim()) log('info', 'Đã thay mô tả Studio điền sẵn bằng mô tả của video + phần mô tả mặc định (Cài đặt).')
+          return
+        }
         if (norm(cur).includes(norm(desc))) return log('info', 'Mô tả đã có nội dung của video: giữ nguyên.')
         let add = cur.trim() ? `\n\n${desc}` : desc
         const room = 5000 - Buffer.byteLength(cur)

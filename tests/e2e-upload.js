@@ -31,6 +31,8 @@ const CHANNEL_DESC = 'Donate to Us: https://example.org/donate\nGet the ebook he
   write(vid, Buffer.alloc(3 * 1024 * 1024 + 7, 1))
   write(path.join(dir, `${NAME}.jpg`), fs.readFileSync(path.join(__dirname, 'fixture-thumb.jpg')))
   write(path.join(dir, `${NAME}.vi.srt`), '1\n00:00:01,000 --> 00:00:02,000\nXin chào\n')
+  // kich ban canh video (tu nhan): Gemini viet mo ta theo kich ban
+  write(path.join(dir, `${NAME}.kich-ban.txt`), '\uFEFFCảnh 1: Đoàn thám hiểm vào rừng Amazon lúc bình minh.\r\nCảnh 2: Tìm thấy ngôi đền cổ.\r\n')
   // du lieu ban cu (dang qua YouTube Data API): OAuth client + token -> bo khi mo app
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ya-dang-e2e-'))
   const b64 = (s) => Buffer.from(s).toString('base64')
@@ -97,17 +99,27 @@ const CHANNEL_DESC = 'Donate to Us: https://example.org/donate\nGet the ebook he
     await ui.getByText(/Đã lưu API key/).waitFor()
     await ui.getByRole('button', { name: 'Đăng video', exact: true }).click()
     await card.click()
-    await ui.getByRole('button', { name: 'Gemini viết mô tả' }).click()
+    await ui.getByText(`Kịch bản: ${NAME}.kich-ban.txt`).first().waitFor()
+    await ui.getByText('(tự nhận, cùng tên video)', { exact: false }).waitFor()
+    await ui.getByRole('button', { name: 'Gemini viết mô tả theo kịch bản' }).click()
     const box = ui.getByLabel('Mô tả Gemini viết')
     await box.waitFor()
     assert.equal(await box.inputValue(), 'Mô tả do Gemini viết.\n\n#a #b #c')
-    assert(JSON.stringify(gm.lastGemini).includes(NAME), 'ten video duoc gui cho Gemini')
+    await ui.getByText(`Theo kịch bản: ${NAME}.kich-ban.txt`).waitFor()
+    const prompt = gm.lastGemini.contents[0].parts[0].text
+    assert(prompt.includes(NAME), 'ten video duoc gui cho Gemini')
+    assert(prompt.includes('Cảnh 1: Đoàn thám hiểm vào rừng Amazon lúc bình minh.\nCảnh 2: Tìm thấy ngôi đền cổ.'), `kich ban duoc gui cho Gemini: ${prompt}`)
+    assert(/dựa trên nội dung thật của kịch bản/.test(prompt), prompt)
     await box.fill('Mô tả đã sửa tay.\n#bian')
     const txt = path.join(dir, `${NAME}.txt`)
     await ui.getByRole('button', { name: `Lưu vào ${NAME}.txt` }).click()
     await waitFor(() => fs.existsSync(txt) && fs.readFileSync(txt, 'utf8').includes('Mô tả đã sửa tay.'), 'ghi file .txt cung ten')
     assert.equal(fs.readFileSync(txt, 'utf8'), '---\r\nMô tả đã sửa tay.\r\n#bian\r\n')
     await ui.getByText('Mô tả đã sửa tay.').first().waitFor()
+    // bo kich ban tu nhan: nut tro lai "Dinh kem kich ban", Gemini viet khong kem kich ban
+    await ui.getByRole('button', { name: 'Bỏ kịch bản' }).click()
+    await ui.getByRole('button', { name: 'Đính kèm kịch bản' }).waitFor()
+    assert.equal((await call('hello')).scan.videos[0].script, null)
 
     // dang video: hop thoai tai len cua Studio trong cua so an cua tai khoan
     await ui.getByRole('button', { name: 'Đăng 1 video' }).click()
@@ -131,8 +143,8 @@ const CHANNEL_DESC = 'Donate to Us: https://example.org/donate\nGet the ebook he
     await waitFor(() => fs.existsSync(path.join(moved, `${NAME}.ket-qua.txt`)), 'chuyen vao da-dang')
     const res = fs.readFileSync(path.join(moved, `${NAME}.ket-qua.txt`), 'utf8')
     assert(res.includes(`https://youtu.be/${u.id}`) && /Công chiếu/.test(res), res)
-    assert.deepEqual(fs.readdirSync(dir), ['da-dang'], 'video, anh, phu de, .txt da chuyen di')
-    assert.deepEqual(fs.readdirSync(moved).sort(), [`${NAME}.jpg`, `${NAME}.ket-qua.txt`, `${NAME}.mp4`, `${NAME}.txt`, `${NAME}.vi.srt`].sort())
+    assert.deepEqual(fs.readdirSync(dir), ['da-dang'], 'video, anh, phu de, .txt, kich ban da chuyen di')
+    assert.deepEqual(fs.readdirSync(moved).sort(), [`${NAME}.jpg`, `${NAME}.ket-qua.txt`, `${NAME}.kich-ban.txt`, `${NAME}.mp4`, `${NAME}.txt`, `${NAME}.vi.srt`].sort())
     st = await call('hello')
     assert(st.logs.some((l) => /Bắt đầu đăng 1 video lên kênh "Dark Bible - in a Nutshell"/.test(l.msg)), st.logs.slice(-10).map((l) => l.msg).join('\n'))
 

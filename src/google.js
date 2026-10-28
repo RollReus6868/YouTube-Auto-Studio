@@ -70,15 +70,21 @@ async function gemini({ key, model, prompt, system, json = false, thinking = '',
   return out
 }
 
-// Loi nhac cho Gemini viet mo ta video
-function descriptionPrompt({ title, name, notes, channel, language, current }) {
+// Loi nhac cho Gemini viet mo ta video. script: chu cua kich ban dinh kem (chi gui SCRIPT_MAX ky tu dau).
+const SCRIPT_MAX = 30000
+function descriptionPrompt({ title, name, notes, channel, language, current, script }) {
+  let s = String(script || '').trim()
+  const cut = s.length > SCRIPT_MAX
+  if (cut) s = s.slice(0, SCRIPT_MAX)
   return [
     `Viết mô tả cho video YouTube${channel ? ` của kênh "${channel}"` : ''}. Ngôn ngữ: ${!language ? 'cùng ngôn ngữ với tiêu đề' : language === 'vi' ? 'tiếng Việt' : language}.`,
     `Tiêu đề: ${title || name}`,
     notes ? `Ghi chú của chủ kênh về nội dung: ${notes}` : '',
     current ? `Mô tả hiện tại (có thể dùng lại ý): ${current}` : '',
+    s ? `Kịch bản của video (nội dung thật của video, nằm giữa hai dòng ===):\n===\n${s}\n===${cut ? '\n(Kịch bản dài, trên đây chỉ là phần đầu.)' : ''}` : '',
     'Yêu cầu: 2 đến 4 đoạn ngắn, mở đầu hấp dẫn trong 2 câu đầu (hiện trên kết quả tìm kiếm), có lời kêu gọi đăng ký kênh, kết thúc bằng 3 đến 5 hashtag liên quan.',
-    'Không dùng dấu < hoặc >. Không bịa thông tin không có trong tiêu đề hay ghi chú. Chỉ trả về nội dung mô tả, không giải thích thêm.',
+    s ? 'Viết dựa trên nội dung thật của kịch bản: nêu đúng chủ đề, nhân vật, sự kiện và ý chính có trong kịch bản, không chép nguyên văn đoạn dài. Không bịa thông tin không có trong kịch bản, tiêu đề hay ghi chú.' : '',
+    `Không dùng dấu < hoặc >.${s ? '' : ' Không bịa thông tin không có trong tiêu đề hay ghi chú.'} Chỉ trả về nội dung mô tả, không giải thích thêm.`,
   ].filter(Boolean).join('\n')
 }
 
@@ -125,4 +131,4 @@ async function geminiModels({ key, fetchFn = fetch, ep = endpoints() }) {
   return list.map(([id, name]) => [id, name && name !== id ? `${name} (${id})` : id])
 }
 
-module.exports = { ApiError, endpoints, explain, gemini, geminiModels, GEMINI_MODELS, GEMINI_DEFAULT, GEMINI_UPGRADE, THINKING, descriptionPrompt, replyPrompt, parseReply, KINDS }
+module.exports = { ApiError, endpoints, explain, gemini, geminiModels, GEMINI_MODELS, GEMINI_DEFAULT, GEMINI_UPGRADE, THINKING, SCRIPT_MAX, descriptionPrompt, replyPrompt, parseReply, KINDS }

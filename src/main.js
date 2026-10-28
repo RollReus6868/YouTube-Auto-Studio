@@ -8,7 +8,8 @@ const { pathToFileURL } = require('url')
 
 const updater = require('./updater')
 const scanner = require('./scanner')
-const { buildVideoMeta, validateMeta, planSchedule, CATEGORIES } = require('./metadata')
+const { buildVideoMeta, validateMeta, planSchedule, CATEGORIES, DESC_POSITIONS } = require('./metadata')
+const { readScript, SCRIPT_EXT } = require('./docx')
 const { Store, dropApiData } = require('./store')
 const { endpoints, gemini, geminiModels, GEMINI_MODELS, descriptionPrompt } = require('./google')
 const { CommentDesk } = require('./comments')
@@ -40,6 +41,8 @@ let busy = false
 let release = null // ban moi tim thay tren GitHub
 let stop = false
 let raw = new Map() // id -> du lieu quet day du (duong dan file) cho viec dang
+// kich ban cho Gemini viet mo ta, chon tay theo id video (chi giu trong bo nho): duong dan, '' = bo kich ban tu nhan
+const scripts = new Map()
 let desk = null // CommentDesk
 const kind = updater.installKind({ exe: process.execPath, packaged: app.isPackaged, platform: process.platform })
 const state = {
@@ -54,7 +57,7 @@ const state = {
   studio: { channelId: '', channelName: '', url: '', visible: false },
   upload: { channelKey: '', channels: [] }, // kenh dang video (trang Dang video) + cac kenh da tick o trang Tai khoan
   jobs: {}, // id video -> { status: queued|run|done|error|stopped, step, progress, error, url }
-  draft: null, // { id, text, loading, error } mo ta Gemini dang soan
+  draft: null, // { id, text, loading, error, script } mo ta Gemini dang soan (script: ten file kich ban da gui)
   comments: { items: [], busy: false, at: '', sentLastHour: 0 },
   categories: CATEGORIES,
   f: {}, // trang thai rieng cua tung tinh nang (src/features/*), vd f.optimize
@@ -113,6 +116,12 @@ function addHistory(entry) {
 // Thu muc video cua trang Dang video: da chon rieng, chua chon thi dung thu muc goc (ban cu: <goc>/videos/<thu muc>)
 const videoDir = () => store.settings.videoDir || store.settings.root || ''
 
+// Kich ban cua video: chon tay (scripts) truoc, khong thi file tu nhan canh video (scanner: "Ten.kich-ban.txt"...)
+function scriptFor(v) {
+  if (scripts.has(v.id)) return scripts.get(v.id) ? { path: scripts.get(v.id), auto: false } : null
+  return v.script ? { path: v.script, auto: true } : null
+}
+
 function runScan(quiet = false) {
   const root = store.settings.root
   const vdir = videoDir()
@@ -135,15 +144,17 @@ function runScan(quiet = false) {
     videos: r.videos.map((v) => {
       const preset = store.presetFor(v)
       const p = planOf.get(v.id) || { publishAt: null, warning: '' }
-      const meta = buildVideoMeta(v, preset, { publishAt: p.publishAt, channel })
+      const meta = buildVideoMeta(v, preset, { publishAt: p.publishAt, channel, settings: store.settings })
       const problems = v.errors.length ? v.errors : validateMeta(meta)
-      raw.set(v.id, { layout: v.layout, key: v.key, folder: v.folder, video: v.video, files: v.files, doneDir: v.doneDir, infoFile: v.infoFile, thumbnail: v.thumbnail, meta, info: v.info, name: v.name, ok: !problems.length })
+      const script = scriptFor(v)
+      raw.set(v.id, { layout: v.layout, key: v.key, folder: v.folder, video: v.video, files: v.files, doneDir: v.doneDir, infoFile: v.infoFile, thumbnail: v.thumbnail, meta, info: v.info, name: v.name, script, ok: !problems.length })
       return {
         id: v.id, layout: v.layout, dir: v.dir, folder: v.folder, name: v.name, size: v.size || 0,
         thumb: v.thumbnail ? path.basename(v.thumbnail) : '', infoFile: v.infoFile ? path.basename(v.infoFile) : '',
         video: v.video ? path.basename(v.video) : '', thumbUrl: fileUrl(v.thumbnail),
         subtitles: v.subtitles.map((s) => ({ file: path.basename(s.file), lang: s.lang || '' })),
         preset: preset.name, meta: { ...meta, thumbnail: undefined, subtitles: undefined },
+        script: script ? { file: path.basename(script.path), auto: script.auto } : null,
         errors: problems, warnings: v.warnings.concat(p.warning ? [p.warning] : []),
       }
     }),
@@ -365,18 +376,50 @@ async function runUploads(ids) {
 async function describe(id) {
   const item = raw.get(id)
   if (!item) return
-  state.draft = { id, text: '', loading: true, error: '' }
+  const file = item.script ? path.basename(item.script.path) : ''
+  state.draft = { id, text: '', loading: true, error: '', script: file }
   push()
   try {
+    let script = ''
+    if (item.script) {
+      try { script = readScript(item.script.path) } catch (e) { throw new Error(`Không đọc được kịch bản "${file}": ${e.code === 'ENOENT' ? 'không tìm thấy file' : e.message}.`) }
+      if (!script.trim()) throw new Error(`Kịch bản "${file}" không có chữ.`)
+      log('info', `Gemini viết mô tả cho "${item.meta.title}" theo kịch bản ${file} (${script.length.toLocaleString('vi-VN')} ký tự).`)
+    }
     const text = await gemini({
       key: store.getSecret('gemini'), model: store.settings.geminiModel, thinking: store.settings.geminiThinking, fetchFn: net.fetch, ep: endpoints(),
-      prompt: descriptionPrompt({ title: item.meta.title, name: item.name, notes: item.info.ghi_chu, channel: store.settings.channel, language: (store.presetFor({ info: item.info }).optimize || {}).language || '', current: item.info.mo_ta }),
+      prompt: descriptionPrompt({ title: item.meta.title, name: item.name, notes: item.info.ghi_chu, channel: store.settings.channel, language: (store.presetFor({ info: item.info }).optimize || {}).language || '', current: item.info.mo_ta, script }),
     })
-    state.draft = { id, text: text.replace(/[<>]/g, ''), loading: false, error: '' }
+    state.draft = { id, text: text.replace(/[<>]/g, ''), loading: false, error: '', script: file }
   } catch (e) {
-    state.draft = { id, text: '', loading: false, error: e.message }
+    state.draft = { id, text: '', loading: false, error: e.message, script: file }
   }
   push()
+}
+
+// Dinh kem kich ban cho video (hop thoai mo file); Gemini viet mo ta theo kich ban nay
+async function attachScript(id) {
+  const item = raw.get(id)
+  if (!item) return
+  const r = await dialog.showOpenDialog(win, {
+    title: `Chọn kịch bản cho "${item.meta.title || item.name}"`,
+    defaultPath: item.folder || videoDir() || undefined,
+    properties: ['openFile'],
+    filters: [{ name: 'Kịch bản (.txt, .md, .docx, .srt)', extensions: SCRIPT_EXT.map((e) => e.slice(1)) }],
+  })
+  if (r.canceled || !r.filePaths[0]) return
+  setScript(id, r.filePaths[0])
+}
+function setScript(id, file) {
+  const item = raw.get(id)
+  if (!item) return
+  if (file && !SCRIPT_EXT.includes(path.extname(file).toLowerCase())) return log('warn', `Kịch bản phải là file .txt, .md, .docx hoặc .srt ("${path.basename(file)}").`)
+  scripts.set(id, file || '')
+  // sua tai cho (khong quet lai thu muc: co the dang dang video)
+  item.script = file ? { path: file, auto: false } : null
+  const v = state.scan.videos.find((x) => x.id === id)
+  if (v) v.script = file ? { file: path.basename(file), auto: false } : null
+  log(file ? 'ok' : 'info', file ? `Đã đính kèm kịch bản ${path.basename(file)} cho "${item.meta.title}".` : `Đã bỏ kịch bản của "${item.meta.title}".`)
 }
 
 // Ghi mo ta vao "<ten video>.txt" (thu muc phang) hoac info.txt (thu muc con kieu cu): giu cac dong khoa, thay phan sau "---"
@@ -441,6 +484,8 @@ const commands = {
   upload_channel: (key) => !busy && setUploadChannel(key),
   describe: (id) => describe(id),
   draft_close: () => { state.draft = null },
+  script_attach: (id) => attachScript(id),
+  script_remove: (id) => setScript(id, ''),
   save_description: (p) => !busy && saveDescription(p || {}),
   pane: (r) => setPane(r),
   clear: () => { state.logs = [] },
@@ -458,12 +503,15 @@ const commands = {
   open_url: (u) => /^https:\/\//.test(u) && shell.openExternal(u),
   settings_save: (patch) => {
     // chi nhan cac truong cai dat thuong; khoa bi mat di lenh rieng
-    const allowed = ['channel', 'presets', 'defaultPreset', 'geminiModel', 'geminiThinking', 'replyStyle', 'replyMode', 'replyPerHour', 'skipWords']
+    const allowed = ['channel', 'presets', 'defaultPreset', 'geminiModel', 'geminiThinking', 'replyStyle', 'replyMode', 'replyPerHour', 'skipWords', 'descDefault', 'descPosition']
     const clean = {}
     for (const k of allowed) if (patch && patch[k] !== undefined) clean[k] = patch[k]
+    if (clean.descDefault !== undefined) clean.descDefault = String(clean.descDefault).replace(/\r\n?/g, '\n')
+    if (clean.descPosition !== undefined && !DESC_POSITIONS.includes(clean.descPosition)) clean.descPosition = 'above'
+    const rescan = clean.presets || clean.defaultPreset || ['channel', 'descDefault', 'descPosition'].some((k) => clean[k] !== undefined && clean[k] !== store.settings[k])
     store.save(clean)
     refreshSettings()
-    if (clean.presets || clean.defaultPreset || clean.channel !== undefined) runScan(true)
+    if (rescan) runScan(true)
   },
   gemini_set: (key) => {
     key = String(key || '').trim()
