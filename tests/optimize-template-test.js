@@ -201,6 +201,45 @@ test('danh dau video da toi uu', () => {
   assert.equal(db.UCa.v1.title, 'A')
 })
 
+test('quet: bo qua video lan truoc da "Đã tối ưu" (the xanh)', () => {
+  const at = (s) => `2026-10-2${s}T10:00:00.000Z`
+  const done = { status: 'done', missing: [], warnings: [] }
+  const skip = (x) => ot.alreadyOptimized(x)
+  // ket qua quet da luu (the tren giao dien): chi the xanh moi bo qua
+  assert.equal(skip({ video: done }), true, 'ban cu: chua co gi trong optimized.json, ket qua quet da luu la "Đã tối ưu"')
+  assert.equal(skip({ video: { ...done, note: 'đã thích và bình luận - chưa ghim' } }), true, 'kenh khong ghim duoc van tinh la xong')
+  for (const v of [{ status: 'new' }, { status: 'error' }, { status: 'scan' }, { status: 'run' }, { ...done, missing: ['ghim'] }, { ...done, warnings: ['x'] }, { ...done, unread: true }]) {
+    assert.equal(skip({ video: v, record: { at: at(5), missing: [] } }), false, JSON.stringify(v))
+  }
+  assert.equal(skip({}), false, 'chua tung doc / toi uu')
+  assert.equal(skip({ video: null, record: null, scanned: null }), false)
+  // ban ghi toi uu (optimized.json)
+  assert.equal(skip({ record: { at: at(5), missing: [], warnings: [] } }), true)
+  assert.equal(skip({ record: { at: at(5), missing: [], cannotPin: true, note: 'đã thích và bình luận - chưa ghim' } }), true)
+  assert.equal(skip({ record: { at: at(5), title: 'cu', pinned: true } }), true, 'ban ghi kieu cu (chua co missing)')
+  assert.equal(skip({ record: { at: at(5), missing: ['thích', 'bình luận', 'ghim'] } }), false, 'toi uu mot phan (cong chieu)')
+  assert.equal(skip({ record: { at: at(5), missing: [], warnings: ['Bỏ qua mục "Sử dụng AI"'] } }), false, 'co canh bao -> quet lai')
+  // ket qua quet da luu (_scanned): ban moi nhat quyet dinh
+  assert.equal(skip({ scanned: { at: at(5), done: true } }), true, 'lan quet truoc khong thieu gi')
+  assert.equal(skip({ scanned: { at: at(5), done: false } }), false)
+  assert.equal(skip({ record: { at: at(4), missing: [] }, scanned: { at: at(5), done: false } }), false, 'quet sau khi toi uu thay thieu')
+  assert.equal(skip({ record: { at: at(6), missing: [] }, scanned: { at: at(5), done: false } }), true, 'toi uu sau lan quet')
+  assert.equal(skip({ record: { at: at(4), missing: ['ghim'] }, scanned: { at: at(5), done: true } }), true)
+  assert.equal(skip({ video: done, scanned: { at: at(5), done: false } }), false, 'ket qua quet da luu va ban ghi khong khop -> quet lai')
+  assert.equal(skip({ video: { status: 'new', missing: ['tags'] }, scanned: { at: at(5), done: true } }), false)
+  // markScanned: truong rieng, khong dung toi ban ghi toi uu
+  let db = ot.markOptimized({}, 'UCa', 'v1', { missing: [] })
+  db = ot.markScanned(db, 'UCa', 'v2', { title: 'B', done: true })
+  db = ot.markScanned(db, 'UCa', 'v3', { done: false })
+  assert.deepEqual(Object.keys(db.UCa), ['v1'], 'ban ghi toi uu giu nguyen')
+  assert.equal(ot.isOptimized(db, 'UCa', 'v2'), false, 'chi quet: chua phai tool toi uu (thich / binh luan)')
+  assert.deepEqual([db._scanned.UCa.v2.title, db._scanned.UCa.v2.done, db._scanned.UCa.v3.done], ['B', true, false])
+  assert(ot.scannedRecord(db, 'UCa', 'v2').at && !ot.scannedRecord(db, 'UCb', 'v2') && !ot.scannedRecord(null, 'UCa', 'v2'))
+  assert.equal(ot.optimizedRecord(db, 'UCa', 'v1').missing.length, 0)
+  assert.equal(ot.optimizedRecord(db, ot.SCANNED_KEY, 'UCa'), null)
+  assert.equal(ot.isDoneRow({ ...done, note: 'x' }), true)
+})
+
 test('mau tai len: tuy chon tu toi uu sau khi dang', () => {
   const p = md.normalizePreset({ name: 'Cũ', id: 'x' })
   assert.equal(p.optimizeAfterUpload, false, 'preset cu -> tat')

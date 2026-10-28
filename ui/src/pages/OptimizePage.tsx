@@ -39,7 +39,8 @@ const FIELD_VI: Record<string, string> = {
   category: 'danh mục', comments: 'bình luận', description: 'mô tả', endScreen: 'màn hình kết thúc',
 }
 
-function VideoRow({ v, on = false, toggle, busy, open }: { v: OptVideo; on?: boolean; toggle?: () => void; busy: boolean; open: () => void }) {
+// rescan: "Quét lại" o video da toi uu (quet bo qua video lan truoc da toi uu) -> doc lai trang Chi tiet
+function VideoRow({ v, on = false, toggle, busy, open, rescan }: { v: OptVideo; on?: boolean; toggle?: () => void; busy: boolean; open: () => void; rescan?: () => void }) {
   const [tone, text] = STATUS[v.status]
   const missing = v.status === 'done' && v.missing && v.missing.length ? v.missing : null
   const warn = v.status === 'done' && ((v.warnings && v.warnings.length > 0) || !!missing)
@@ -69,6 +70,11 @@ function VideoRow({ v, on = false, toggle, busy, open }: { v: OptVideo; on?: boo
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
         {v.status === 'run' || (v.status === 'scan' && v.step) ? <Pill tone="active">{v.step || text}</Pill> : <Pill tone={warn ? 'warning' : tone}>{warn ? 'Đã tối ưu, có cảnh báo' : text}</Pill>}
+        {rescan && v.status === 'done' && (
+          <Button variant="subtle" size="sm" className="h-6 rounded-md px-2 text-[11px]" disabled={busy} onClick={rescan} title="Đọc lại trang Chi tiết của video này (lần quét sau sẽ theo kết quả mới)" aria-label={`Quét lại ${v.title}`}>
+            <ScanSearch /> Quét lại
+          </Button>
+        )}
       </div>
     </li>
   )
@@ -113,7 +119,7 @@ function ScanAllCard({ s, send, go }: { s: OptimizeState; send: PageProps['send'
               {g.error && <p className="px-3 pt-2 text-[11px] text-red-600 dark:text-red-400">{g.error}</p>}
               {g.videos.length ? (
                 <ul className="space-y-0.5 p-1">
-                  {g.videos.map((v) => <VideoRow key={v.id} v={v} busy={s.busy} open={() => openVideo(g.key, v.id)} />)}
+                  {g.videos.map((v) => <VideoRow key={v.id} v={v} busy={s.busy} open={() => openVideo(g.key, v.id)} rescan={() => send('optimize_rescan', { channelKey: g.key, id: v.id })} />)}
                 </ul>
               ) : !g.error && <p className="px-3 py-2 text-[11px] text-muted-foreground">{all.running ? 'Chờ quét…' : 'Không có video.'}</p>}
             </section>
@@ -190,7 +196,7 @@ export function OptimizePage({ state, send, go }: PageProps) {
       <PageHeader
         icon={Wand2}
         title="Tối ưu video"
-        description="Quét các video mới nhất (chọn số video), đọc trang Chi tiết của từng video để biết video nào còn thiếu thông tin so với mẫu, rồi tối ưu trong YouTube Studio + thích, bình luận, ghim."
+        description="Quét các video mới nhất (chọn số video), đọc trang Chi tiết của từng video để biết video nào còn thiếu thông tin so với mẫu, rồi tối ưu trong YouTube Studio + thích, bình luận, ghim. Video đã tối ưu ở lần trước được bỏ qua (bấm “Quét lại” ở video để đọc lại)."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -242,7 +248,7 @@ export function OptimizePage({ state, send, go }: PageProps) {
                 <button className="font-semibold hover:text-foreground disabled:opacity-50" disabled={s.busy} onClick={() => setSel(new Set(todo.map((v) => v.id)))}>Chọn video chưa tối ưu ({todo.length})</button>
               </div>
               <ul className="max-h-[420px] space-y-0.5 overflow-y-auto">
-                {videos.map((v) => <VideoRow key={v.id} v={v} on={sel.has(v.id)} toggle={() => toggle(v.id)} busy={s.busy} open={() => openVideo(v.id)} />)}
+                {videos.map((v) => <VideoRow key={v.id} v={v} on={sel.has(v.id)} toggle={() => toggle(v.id)} busy={s.busy} open={() => openVideo(v.id)} rescan={() => send('optimize_rescan', { channelKey: s.channelKey, id: v.id })} />)}
               </ul>
             </>
           ) : (
@@ -294,7 +300,7 @@ export const optimizeDemo: OptimizeState = {
     vid('Zx4cV6bNm1Q', 'Lilith: The Forbidden Story Before Eve', 'Công khai', '20 thg 10, 2026', 'Đã xuất bản', 2210, 44, 'done', { missing: [], note: 'đã thích và bình luận - chưa ghim' }),
     vid('Hj7gF3dSa9W', 'The Book of Enoch: Why It Was Removed', 'Không công khai', '18 thg 10, 2026', 'Đã tải lên', 96, 2, 'error', { error: 'Quá 5 giây vẫn chưa thấy "Lưu".' }),
     vid('Rt5yU1iOp3A', 'The Witch of Endor: Did Saul Really Speak to Samuel?', 'Công khai', '16 thg 10, 2026', 'Đã xuất bản', 733, 12, 'new', { note: 'Không đọc được trang Chi tiết: Quá 20 giây vẫn chưa thấy "Chi tiết video".' }),
-    vid('Pq2wE8rTy6U', 'Cain’s Mark: What Was It Really?', 'Công khai', '15 thg 10, 2026', 'Đã xuất bản', 5021, 88, 'done'),
+    vid('Pq2wE8rTy6U', 'Cain’s Mark: What Was It Really?', 'Công khai', '15 thg 10, 2026', 'Đã xuất bản', 5021, 88, 'done', { missing: [], note: 'Đã tối ưu ở lần trước: không quét lại.' }),
   ],
   all: {
     at: '2026-10-26T12:20:00Z', running: false, current: '', perChannel: 2,

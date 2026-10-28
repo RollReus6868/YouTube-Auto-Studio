@@ -771,3 +771,105 @@ module.exports.push(['tinh nang: quet toan bo (2 video moi kenh), toi uu cac ken
   await f.commands.optimize_scan_all()
   assert.match(logs[logs.length - 1], /Chưa tick kênh nào/)
 }])
+
+// Video lan truoc da "Đã tối ưu" (quet thay du, hoac tool da toi uu xong): quet lai KHONG mo trang Chi tiet cua video do,
+// hien "Đã tối ưu" ngay kem ghi chu; nho qua lan mo lai tool (optimized.json, ca khi mat optimize-scan.json).
+// "Quét lại" o mot video: ep doc lai, ket qua moi quyet dinh lan quet sau.
+module.exports.push(['tinh nang: quet lai bo qua video da toi uu (khong mo trang Chi tiet), "Quét lại" ep doc', async ({ page, urls, mock, tmp }) => {
+  const path = require('path')
+  const logs = []
+  let saved = {}
+  const chans = [{ key: UC, ucId: UC, name: 'Dark Bible Study', handle: '@DarkBibleStudy999' }]
+  const mk = (state) => ({
+    state, log: (l, m) => logs.push(`${l} ${m}`), logFile: (n) => path.join(tmp, n), urls, push: () => {},
+    store: { get settings() { return saved }, save: (p) => { saved = { ...saved, ...p } } }, refreshSettings: () => {},
+    stopped: () => false, resetStop: () => {},
+    accounts: { channels: () => chans, find: (k) => chans.find((c) => c.key === k) || null },
+    withChannel: async (key, fn) => fn(page),
+  })
+  // trang Chi tiet da mo tu moc `from` (GET /studio/video/<id>/edit)
+  const opened = (from) => mock.hits.slice(from).map((h) => /^GET \/studio\/video\/([\w-]+)\/edit/.exec(h)).filter(Boolean).map((m) => m[1])
+  const DONE4 = ['Prem0000001', 'LostTribe01', 'TheCross001', 'HonorPar001']
+  await page.goto(`${urls.studio}/video/${VID}/edit`)
+  await page.eval((ids) => {
+    for (const id of ids) OPT.save('opt-video-' + id, { ...OPT.optimized(OPT.videoOf(id)), desc: 'x' })
+    OPT.save('opt-video-NeverProp01', { ...OPT.optimized(OPT.videoOf('NeverProp01')), desc: 'x', location: '', playlists: ['PLa'] })
+    localStorage.setItem('opt-broken', 'Maccabee001')
+  }, DONE4)
+  page.timeout = 4000
+  let state = { f: {} }
+  let f = require('../../src/features/optimize')(mk(state))
+  f.start()
+  let S = state.f.optimize
+  f.commands.optimize_template_save({ channelKey: UC, template: { ...defaultTemplate(), comment: '', like: false } })
+  const by = () => Object.fromEntries(S.videos.map((v) => [v.id, v]))
+  // lan 1: doc ca 7 video
+  let mark = mock.hits.length
+  await f.commands.optimize_list(UC)
+  assert.deepEqual(opened(mark).sort(), S.videos.map((v) => v.id).sort(), 'lan dau mo trang Chi tiet cua moi video')
+  assert.deepEqual(S.videos.map((v) => v.status), ['done', 'new', 'done', 'new', 'new', 'done', 'done'])
+  assert.match(logs[logs.length - 1], /: 7 video, 3 chưa tối ưu\.$/, 'chua bo qua video nao')
+  const db1 = JSON.parse(fs.readFileSync(path.join(tmp, 'optimized.json'), 'utf8'))
+  assert.deepEqual(Object.keys(db1), ['_scanned'], 'chi quet: khong tao ban ghi toi uu')
+  assert.deepEqual(Object.entries(db1._scanned[UC]).filter(([, r]) => r.done).map(([id]) => id).sort(), [...DONE4].sort())
+  // lan 2 (mo lai tool): 4 video da du -> khong mo trang Chi tiet, "Đã tối ưu" ngay
+  state = { f: {} }
+  f = require('../../src/features/optimize')(mk(state))
+  f.start()
+  S = state.f.optimize
+  mark = mock.hits.length
+  await f.commands.optimize_list(UC)
+  assert.deepEqual(opened(mark).sort(), [VID, 'NeverProp01', 'Maccabee001'].sort(), 'chi doc video chua toi uu')
+  for (const id of DONE4) assert.deepEqual([by()[id].status, by()[id].missing, by()[id].note], ['done', [], 'Đã tối ưu ở lần trước: không quét lại.'], id)
+  assert.deepEqual(by().NeverProp01.missing, ['location'])
+  assert.match(logs[logs.length - 1], /^ok Kênh Dark Bible Study: 7 video, 3 chưa tối ưu \(bỏ qua 4 video đã tối ưu\)\.$/)
+  // toi uu 3 video con lai; video bo qua khong bi toi uu lai
+  await page.goto(`${urls.studio}/video/${VID}/edit`)
+  await page.eval(() => localStorage.removeItem('opt-broken'))
+  mock.events.length = 0
+  await f.commands.optimize_run({ channelKey: UC })
+  assert.deepEqual((await events(mock, 'save')).map((e) => e.id), [VID, 'NeverProp01', 'Maccabee001'], logs.slice(-6).join('\n'))
+  assert(S.videos.every((v) => v.status === 'done'))
+  // lan 3: moi video da toi uu -> khong mo trang Chi tiet nao
+  mark = mock.hits.length
+  await f.commands.optimize_list(UC)
+  assert.deepEqual(opened(mark), [])
+  assert.match(logs[logs.length - 1], /: 7 video, 0 chưa tối ưu \(bỏ qua 7 video đã tối ưu\)\.$/)
+  assert(S.videos.every((v) => v.status === 'done' && /không quét lại/.test(v.note)))
+  // "Tối ưu tất cả chưa tối ưu": khong co video nao
+  await f.commands.optimize_run({ channelKey: UC })
+  assert.match(logs[logs.length - 1], /Không có video nào cần tối ưu/)
+  // mat optimize-scan.json: van nho qua optimized.json (ban ghi toi uu + ket qua quet)
+  fs.unlinkSync(path.join(tmp, 'optimize-scan.json'))
+  state = { f: {} }
+  f = require('../../src/features/optimize')(mk(state))
+  f.start()
+  S = state.f.optimize
+  assert.equal(S.videos.length, 0)
+  mark = mock.hits.length
+  await f.commands.optimize_list(UC)
+  assert.deepEqual(opened(mark), [], 'khong co ket qua quet da luu van bo qua')
+  assert(S.videos.every((v) => v.status === 'done'), JSON.stringify(S.videos.map((v) => [v.id, v.status])))
+  // "Quét lại" mot video: doc lai trang Chi tiet; thay thieu -> lan quet sau doc lai video do
+  await page.goto(`${urls.studio}/video/${VID}/edit`)
+  await page.eval(() => OPT.save('opt-video-LostTribe01', { ...OPT.optimized(OPT.videoOf('LostTribe01')), desc: 'x', location: '' }))
+  mark = mock.hits.length
+  await f.commands.optimize_rescan({ channelKey: UC, id: 'LostTribe01' })
+  assert.deepEqual(opened(mark), ['LostTribe01'])
+  assert.deepEqual([by().LostTribe01.status, by().LostTribe01.missing], ['new', ['location']], logs.slice(-3).join('\n'))
+  assert.match(logs[logs.length - 1], /quét lại xong, còn thiếu 1 mục/)
+  mark = mock.hits.length
+  await f.commands.optimize_list(UC)
+  assert.deepEqual(opened(mark), ['LostTribe01'], 'chi doc lai video con thieu')
+  assert.match(logs[logs.length - 1], /: 7 video, 1 chưa tối ưu \(bỏ qua 6 video đã tối ưu\)\.$/)
+  // "Quét lại" video da du: van "Đã tối ưu" (lan sau lai bo qua)
+  mark = mock.hits.length
+  await f.commands.optimize_rescan({ channelKey: UC, id: 'HonorPar001' })
+  assert.deepEqual([opened(mark), by().HonorPar001.status, by().HonorPar001.note], [['HonorPar001'], 'done', ''])
+  // quet toan bo: 2 video moi nhat da toi uu -> khong mo trang Chi tiet
+  mark = mock.hits.length
+  await f.commands.optimize_scan_all()
+  assert.deepEqual(opened(mark), [])
+  assert.deepEqual(S.all.groups[0].videos.map((v) => [v.id, v.status]), [['Prem0000001', 'done'], [VID, 'done']])
+  assert.match(logs[logs.length - 1], /Quét toàn bộ xong: 1 kênh, 0 video chưa tối ưu \(bỏ qua 2 video đã tối ưu\)\./)
+}])

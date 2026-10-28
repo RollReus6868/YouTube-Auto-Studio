@@ -4,6 +4,8 @@
 // Quet toan bo: 2 video moi nhat cua MOI kenh da tick (trang Tai khoan), lan luot tung kenh (ctx.withChannel).
 // Toi uu: chi lam cac muc lan quet bao thieu (muc da dien giu nguyen, tinh la xong).
 // Ket qua quet luu o optimize-scan.json (mo lai tool van con).
+// Video lan truoc da "Đã tối ưu" (the xanh) thi quet bo qua, khong mo trang Chi tiet nua (ot.alreadyOptimized);
+// "Quét lại" o tung video (optimize_rescan) ep doc lai. Ket qua quet cua tung video luu them o optimized.json (_scanned).
 const fs = require('fs')
 const { listVideos, optimizeVideo, inspectVideo, commentAndPin, pinNote } = require('../flows/optimize')
 const ot = require('../optimize-template')
@@ -14,6 +16,7 @@ const ot = require('../optimize-template')
 const LIMITS = [5, 10, 20, 30, 50]
 const LATEST = 10
 const ALL_LIMIT = 2 // quet toan bo: so video moi nhat moi kenh
+const SKIP_NOTE = 'Đã tối ưu ở lần trước: không quét lại.'
 const limitOf = (n) => (LIMITS.includes(Number(n)) ? Number(n) : LATEST)
 const WATCH = ot.WATCH_KEYS // 'thích' | 'bình luận' | 'ghim'
 
@@ -97,6 +100,16 @@ module.exports = (ctx) => {
     const notes = [...r.notes]
     if (prev.cannotPin && prev.note && !missing.includes('ghim')) notes.push(prev.note)
     Object.assign(v, { missing, unread: false, note: notes.join(' · '), title: r.title || v.title, status: missing.length ? 'new' : 'done' })
+    // nho ket qua quet (ca khi con thieu): lan quet sau biet video nao da "Đã tối ưu" ma khong mo lai trang Chi tiet
+    try { writeDb(ot.markScanned(readDb(), key, v.id, { title: v.title, done: !missing.length })) } catch (e) { ctx.log('warn', `Không lưu được kết quả quét: ${e.message}`) }
+  }
+  // Lan truoc video da "Đã tối ưu" (old: video trong ket qua quet da luu) -> khong quet lai
+  const skipScan = (key, id, db, old) => ot.alreadyOptimized({ video: old || null, record: ot.optimizedRecord(db, key, id), scanned: ot.scannedRecord(db, key, id) })
+  // video bo qua: "Đã tối ưu" ngay, giu ghi chu "đã thích và bình luận - chưa ghim" (kenh khong ghim duoc)
+  function skippedPatch(key, id, db) {
+    const rec = ot.optimizedRecord(db, key, id) || {}
+    const note = [rec.cannotPin && rec.note, SKIP_NOTE].filter(Boolean).join(' · ')
+    return { status: 'done', step: '', error: '', missing: [], unread: false, note }
   }
   // doc lan luot `list` cua kenh key; hop thoai xac minh danh tinh -> dung cac video con lai cua kenh nay
   async function scanList(page, key, list, tpl) {
@@ -132,21 +145,27 @@ module.exports = (ctx) => {
     push()
     ctx.resetStop()
     const limit = S.limit
+    let skipped = 0 // video lan truoc da toi uu: khong quet lai
     try {
       const tpl = ot.templateFor(templates(), key)
       await ctx.withChannel(key, async (page) => {
         const rows = await listVideos(page, ucOf(key), { urls: ctx.urls, log: ctx.log, limit, maxPages: Math.max(10, Math.ceil(limit / 5)) })
         const db = readDb()
         const prev = (id) => (db[key] && db[key][id]) || {}
-        S.videos = rows.map((r) => ({ ...r, status: 'scan', step: 'Chờ đọc', error: '', warnings: prev(r.id).warnings || [] }))
+        const old = (cache.get(key) || {}).videos || []
+        S.videos = rows.map((r) => {
+          const v = { ...r, error: '', warnings: prev(r.id).warnings || [] }
+          return Object.assign(v, skipScan(key, r.id, db, old.find((x) => x.id === r.id)) ? skippedPatch(key, r.id, db) : { status: 'scan', step: 'Chờ đọc' })
+        })
+        skipped = S.videos.filter((v) => v.status === 'done').length
         S.at = new Date().toISOString()
         cache.set(key, { videos: S.videos, at: S.at })
         push()
         // doc tung video (chi doc): loi o mot video khong dung ca lan quet
-        await scanList(page, key, S.videos, tpl)
+        await scanList(page, key, S.videos.filter((v) => v.status === 'scan'), tpl)
       }, { label: 'Quét video' })
       const left = S.videos.filter((v) => v.status === 'new').length
-      ctx.log('ok', `Kênh ${nameOf(key)}: ${S.videos.length} video, ${left} chưa tối ưu.`)
+      ctx.log('ok', `Kênh ${nameOf(key)}: ${S.videos.length} video, ${left} chưa tối ưu${skipped ? ` (bỏ qua ${skipped} video đã tối ưu)` : ''}.`)
     } catch (e) {
       ctx.log('error', `Không quét được video: ${e.message}`)
     } finally {
@@ -159,12 +178,14 @@ module.exports = (ctx) => {
 
   // ---- quet toan bo: 2 video moi nhat cua moi kenh da tick ----
   // video cua lan quet nay hop vao danh sach cua kenh (cung doi tuong): trang tung kenh va nhom "Quet toan bo" cung trang thai
+  // video lan truoc da toi uu: "Đã tối ưu" ngay, khong quet (status 'done'); con lai status 'scan'
   function mergeIntoChannel(key, rows, db) {
     const c = cache.get(key) || { videos: [], at: '' }
     const prev = (id) => (db[key] && db[key][id]) || {}
     const out = rows.map((r) => {
       const old = c.videos.find((x) => x.id === r.id)
-      return Object.assign(old || { warnings: prev(r.id).warnings || [] }, r, { status: 'scan', step: 'Chờ đọc', error: '' })
+      const patch = skipScan(key, r.id, db, old) ? skippedPatch(key, r.id, db) : { status: 'scan', step: 'Chờ đọc', error: '' }
+      return Object.assign(old || { warnings: prev(r.id).warnings || [] }, r, patch)
     })
     c.videos.unshift(...out.filter((v) => !c.videos.includes(v))) // giu mang cu (S.videos tro toi cung mang)
     if (!c.at) c.at = new Date().toISOString()
@@ -184,6 +205,7 @@ module.exports = (ctx) => {
     push()
     ctx.log('info', `Quét toàn bộ: ${ALL_LIMIT} video mới nhất của ${chans.length} kênh.`)
     let left = 0
+    let skipped = 0
     try {
       for (const ch of chans) {
         if (ctx.stopped()) { allMeta.errors[ch.key] = 'Chưa quét (đã dừng).'; continue }
@@ -195,8 +217,9 @@ module.exports = (ctx) => {
             const rows = await listVideos(page, ucOf(ch.key), { urls: ctx.urls, log: ctx.log, limit: ALL_LIMIT, maxPages: 1 })
             const vids = mergeIntoChannel(ch.key, rows, readDb())
             allMeta.ids[ch.key] = vids.map((v) => v.id)
+            skipped += vids.filter((v) => v.status === 'done').length
             push()
-            await scanList(page, ch.key, vids, tpl)
+            await scanList(page, ch.key, vids.filter((v) => v.status === 'scan'), tpl)
             left += vids.filter((v) => v.status === 'new').length
           }, { label: 'Quét toàn bộ' })
         } catch (e) {
@@ -205,11 +228,35 @@ module.exports = (ctx) => {
         }
         for (const id of allMeta.ids[ch.key] || []) { const v = findV(ch.key, id); if (v && v.status === 'scan') Object.assign(v, { status: 'new', step: '', note: v.note || 'Chưa đọc được.' }) }
       }
-      ctx.log('ok', `Quét toàn bộ xong: ${chans.length} kênh, ${left} video chưa tối ưu.`)
+      ctx.log('ok', `Quét toàn bộ xong: ${chans.length} kênh, ${left} video chưa tối ưu${skipped ? ` (bỏ qua ${skipped} video đã tối ưu)` : ''}.`)
     } finally {
       S.busy = false
       S.all.running = false
       S.all.current = ''
+      saveScan()
+      push()
+    }
+  }
+
+  // "Quét lại" mot video (ke ca video da toi uu / bo qua): doc lai trang Chi tiet; ket qua quet moi nhat
+  // (markScanned) quyet dinh lan quet sau co bo qua video nay khong
+  async function rescan({ channelKey, id } = {}) {
+    const key = String(channelKey || S.channelKey || '')
+    if (!ready(key)) return
+    const v = findV(key, String(id || ''))
+    if (!v) return ctx.log('warn', 'Không rõ video cần quét lại.')
+    S.busy = true
+    ctx.resetStop()
+    Object.assign(v, { status: 'scan', step: 'Chờ đọc', error: '', note: '' })
+    push()
+    try {
+      await ctx.withChannel(key, (page) => scanList(page, key, [v], ot.templateFor(templates(), key)), { label: 'Quét lại video' })
+      if (!v.unread && v.status !== 'scan') ctx.log('ok', `${v.title || v.id}: quét lại xong, ${v.missing && v.missing.length ? `còn thiếu ${v.missing.length} mục` : 'không thiếu mục nào'}.`)
+    } catch (e) {
+      ctx.log('error', `Không quét lại được video: ${e.message}`)
+    } finally {
+      if (v.status === 'scan') Object.assign(v, { status: 'new', step: '', note: v.note || 'Chưa đọc được.' })
+      S.busy = false
       saveScan()
       push()
     }
@@ -390,6 +437,7 @@ module.exports = (ctx) => {
       optimize_select: (key) => { if (!S.busy) { S.channelKey = String(key || ''); refresh() } },
       optimize_list: (p) => list(p),
       optimize_scan_all: () => scanAll(),
+      optimize_rescan: (p) => rescan(p || {}),
       optimize_limit: (n) => setLimit(n),
       optimize_open_video: (p) => openVideo(p || {}),
       optimize_run: (p) => run(p || {}),

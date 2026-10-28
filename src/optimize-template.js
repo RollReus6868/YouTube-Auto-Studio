@@ -327,6 +327,39 @@ function markOptimized(db, channelKey, videoId, info = {}) {
 }
 const isOptimized = (db, channelKey, videoId) => !!(db && db[channelKey] && db[channelKey][videoId])
 
+// Ket qua quet (doc trang Chi tiet) cung luu trong optimized.json, o truong rieng SCANNED_KEY (khong dung toi ban ghi
+// toi uu cua tung video: ban ghi do con dung de biet tool da lam o trang xem video chua):
+//   { _scanned: { [channelKey]: { [videoId]: { at, title, done } } } }  done = quet xong khong con thieu muc nao
+const SCANNED_KEY = '_scanned'
+function markScanned(db, channelKey, videoId, info = {}) {
+  const out = { ...(db || {}) }
+  const all = { ...(out[SCANNED_KEY] || {}) }
+  all[channelKey] = { ...(all[channelKey] || {}), [videoId]: { at: new Date().toISOString(), ...info, done: !!info.done } }
+  out[SCANNED_KEY] = all
+  return out
+}
+const scannedRecord = (db, channelKey, videoId) => (db && db[SCANNED_KEY] && db[SCANNED_KEY][channelKey] && db[SCANNED_KEY][channelKey][videoId]) || null
+const optimizedRecord = (db, channelKey, videoId) => (db && channelKey !== SCANNED_KEY && db[channelKey] && db[channelKey][videoId]) || null
+
+// Video dang hien the xanh "Đã tối ưu" (giong OptimizePage VideoRow): status 'done', khong con muc thieu, khong canh bao,
+// da doc duoc. Ghi chu "đã thích và bình luận - chưa ghim" (kenh khong ghim duoc) van tinh la da toi uu.
+const isDoneRow = (v) => !!(v && v.status === 'done' && !(v.missing || []).length && !(v.warnings || []).length && !v.unread)
+
+// Lan truoc video da "Đã tối ưu" -> quet bo qua (khong mo trang Chi tiet nua).
+//   video: video trong ket qua quet da luu (optimize-scan.json) hoac null; record: ban ghi toi uu (optimized.json);
+//   scanned: ket qua quet da luu (markScanned). Ban ghi toi uu / quet: lay ban moi nhat (theo at).
+// Video co trong ket qua quet ma khong xanh ('new', 'error', thieu mot phan, chua doc duoc) -> quet lai.
+// Chua co ban ghi nao trong optimized.json -> chi dua vao ket qua quet da luu (ban cu chua co _scanned).
+function alreadyOptimized({ video = null, record = null, scanned = null } = {}) {
+  if (video && !isDoneRow(video)) return false
+  const warnings = (record && record.warnings) || []
+  if (warnings.length) return false // the "Đã tối ưu, có cảnh báo": quet lai
+  const ms = (x) => (x && Date.parse(x.at)) || 0
+  if (record && (!scanned || ms(record) >= ms(scanned))) return !(record.missing || []).length // ban cu khong co missing = xong
+  if (scanned) return !!scanned.done
+  return !!video
+}
+
 // ---- quet: so gia tri doc duoc tren trang Chi tiet video voi mau ----
 // read: gia tri doc boi inspectVideo (src/flows/optimize.js); muc undefined = khong doc duoc / khong doc.
 //   playlists: { count, items?: [{ name, id, on }] }, paidPromotion/ai/remix: 'yes'|'no'|'all'|... ('' = chua chon),
@@ -372,4 +405,5 @@ module.exports = {
   CATEGORY_NAMES, CATEGORY_NAMES_EN, STUDIO_LANGUAGES, LANGUAGE_EN, optionNames, calendarMonthLabels, parseMonthLabel, visibilityKind, canCommentVisibility, COMMENT_VARS, defaultTemplate, normalizeTemplate, templateFor, setTemplate,
   keepAll, afterUploadTemplate, missingTemplate, studioFields, WATCH_KEYS, refreshPending, API_PRESET_FIELDS, migrateApiPreset, presetSeed,
   renderComment, tagsToAdd, tagLength, fmtStudioDate, parseStudioDate, recordingDateFor, touchedFields, markOptimized, isOptimized, compareFields,
+  SCANNED_KEY, markScanned, scannedRecord, optimizedRecord, isDoneRow, alreadyOptimized,
 }
