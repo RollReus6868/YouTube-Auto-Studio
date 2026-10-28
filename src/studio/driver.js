@@ -119,6 +119,8 @@ class Page {
     // show(): cho cua so chay ngam "hien" (trong suot, ngoai tam bam) de Chromium ve trang -> tra ve ham an lai.
     // Trang YouTube can ve that moi tai binh luan (IntersectionObserver); cua so an tren Windows khong ve.
     this.show = opts.show || null
+    // wake(): khung trinh duyet cua tool - mo lai cua so chinh dang thu nho (thu nho = Chromium dung ve trang)
+    this.wake = opts.wake || null
   }
 
   url() { return this.wc.getURL() }
@@ -304,6 +306,23 @@ class Page {
     ]).catch(() => null)
     if (!r) return 'trang không trả lời'
     return `trang ${r.vis === 'visible' ? 'đang hiện' : 'bị ẩn'}, ${r.raf ? 'đang vẽ' : 'KHÔNG được vẽ'}`
+  }
+
+  // Cho trang duoc ve (requestAnimationFrame chay) truoc buoc quan trong. Trang khong duoc ve thi Studio lam do dang
+  // (vd tai video len: chua doc xong quyen cua kenh -> hien "Ban da hoan tat ... Hay thu lam moi trang").
+  // Goi wake() (mo lai cua so thu nho) + chup trang (Chromium ve tam) roi doi toi da ms. Tra ve trang thai cuoi.
+  async awake(ms = 6000) {
+    let r = await this.renderState()
+    if (/, đang vẽ$/.test(r) || this.wc.isDestroyed()) return r
+    if (this.wake) { try { await this.wake() } catch (_) { /* cua so da dong */ } }
+    const end = Date.now() + ms
+    while (Date.now() < end && !this.wc.isDestroyed()) {
+      await Promise.race([this.wc.capturePage().catch(() => {}), sleep(2000)])
+      r = await this.renderState()
+      if (/, đang vẽ$/.test(r)) return r
+      await sleep(300)
+    }
+    return r
   }
 
   // Dat ten buoc dang lam (hien trong loi va nhat ky).

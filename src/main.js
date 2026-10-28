@@ -573,6 +573,12 @@ const ctx = {
     // viec tu dong chay trong khung (de nguoi dung theo doi): giao dien hien khung o moi trang khi job != ''
     claim: (job) => { state.studio.job = job || 'Tool đang chạy'; push() },
     release: () => { state.studio.job = ''; push() },
+    // cua so chinh thu nho / an -> Chromium dung ve khung (Studio lam do dang): mo lai, khong cuop focus
+    wake: () => {
+      if (!win || win.isDestroyed()) return
+      if (win.isMinimized()) { log('warn', 'Cửa sổ tool đang thu nhỏ trong lúc tool chạy: đã mở lại để YouTube Studio chạy đúng.'); win.restore() }
+      else if (!win.isVisible()) win.showInactive()
+    },
   },
   get desk() { return desk }, // CommentDesk chung (binh luan API + hop thu Studio), co sau app.whenReady
 }
@@ -603,6 +609,8 @@ function createWindow() {
   win.loadFile(path.join(__dirname, '..', 'ui_dist', 'index.html'))
   createStudioView((ctx.accounts && ctx.accounts.panePartition()) || 'persist:youtube')
   win.on('closed', () => { win = null })
+  // thu nho luc tool dang chay trong khung: Windows dung ve trang -> menu / hop thoai Studio hong
+  win.on('minimize', () => { if (state.studio.job) log('warn', `Đừng thu nhỏ cửa sổ khi tool đang chạy ("${state.studio.job}"): YouTube Studio sẽ ngừng chạy đúng. Có thể để cửa sổ khác che lên.`) })
 }
 
 function fatal(err) {

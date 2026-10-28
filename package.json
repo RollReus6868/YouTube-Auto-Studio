@@ -1,7 +1,7 @@
 {
   "name": "yt-auto-studio",
   "productName": "YTAutoStudio",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "description": "Tool desktop tu dong dang video, bai cong dong va tra loi binh luan YouTube (Gemini)",
   "main": "src/main.js",
   "author": "RollReus6868",

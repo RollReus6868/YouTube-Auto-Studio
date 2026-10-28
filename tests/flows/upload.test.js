@@ -247,6 +247,20 @@ module.exports = [
     assert(shots().some((x) => /dang-video-ban-da-hoan-tat/.test(x)), 'luu anh trang khi gap hop thoai')
   }],
 
+  ['Studio chua san sang (chon file < 2 giay sau khi mo hop thoai -> "Ban da hoan tat"): doi roi bam "Chon tep" -> khong gap hop thoai', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { trustfast: true, nocheckwarn: true })
+    const uc = await login(ctx)
+    const r = await run(ctx, JOB(f, { uc, thumbnail: null, privacy: 'private' })).p
+    const [u] = await uploads(ctx.mock)
+    assert.equal(r.id, u.id)
+    assert.equal(ctx.mock.events.filter((e) => e.type === 'trust-shown').length, 0, 'khong chon file qua som')
+    const [c] = ctx.mock.events.filter((e) => e.type === 'file-chosen')
+    assert(c.viaButton, 'chon file bang nut "Chọn tệp" nhu nguoi that')
+    assert(c.ms >= 2000, `doi Studio tai xong hop thoai (${c.ms} ms)`)
+    assert.doesNotMatch(ctx.logs.join('\n'), /KHÔNG được vẽ/)
+  }],
+
   ['Studio tieng Anh: van "You\'re all set ... refresh" sau 3 lan lam moi -> dung, bao ro, khong noi ban nhap', async (ctx) => {
     const f = files(ctx.tmp)
     await flags(ctx, { trust: 4, en: true })

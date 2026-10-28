@@ -19,7 +19,7 @@
 // hien hop thoai chia se), nocheckwarn (kiem tra xong ngay: khong hoi "Van xuat ban"), hidelabel (khong co chu tien do
 // trong hop thoai; sau khi dong chi con o tien do goc trang), morepl (kenh co them 2 danh sach phat),
 // trust (= N: N lan dau chon file hien "Ban da hoan tat ... Hay thu lam moi trang", hop thoai tai len dung o buoc chon tep;
-// dem giam trong localStorage), verify (Google doi "Xac minh danh tinh cua ban"), notypedate (o nhap ngay trong lich khong nhan
+// dem giam trong localStorage), trustfast (chon file < 2 giay sau khi hop thoai mo / trang an -> "Ban da hoan tat"), verify (Google doi "Xac minh danh tinh cua ban"), notypedate (o nhap ngay trong lich khong nhan
 // chu go: phai bam lich), timepick (o gio khong nhan chu go: phai chon trong danh sach), nopremiere (kenh khong co Cong chieu).
 (() => {
   const F = (k) => OPT.load('up-' + k, false)
@@ -192,7 +192,9 @@
     document.body.appendChild(dlg)
     $('#ytcp-uploads-dialog-close-button', dlg).onclick = () => { log({ type: 'upload-closed' }); dlg.remove(); dlg = null }
     const input = $('input[name=Filedata]', dlg)
-    $('#select-files-button', dlg).onclick = () => input.click()
+    const opened = Date.now()
+    let clicked = false
+    $('#select-files-button', dlg).onclick = () => { clicked = true; input.click() }
     input.addEventListener('change', () => {
       const f = input.files[0]
       if (!f) return
@@ -204,6 +206,13 @@
         return
       }
       // video dai hon 15 phut, trang Studio cu: "Ban da hoan tat" che hop thoai, hop thoai van o buoc chon tep
+      // trustfast: Studio that chua doc xong quyen cua kenh (hop thoai vua mo < 2 giay, hoac trang khong duoc ve)
+      //   -> "Ban da hoan tat" du kenh da co quyen
+      if (F('trustfast') && (Date.now() - opened < 2000 || document.visibilityState !== 'visible')) {
+        log({ type: 'trust-shown', file: f.name, fast: true, ms: Date.now() - opened, vis: document.visibilityState })
+        return setTimeout(trustDialog, 400)
+      }
+      log({ type: 'file-chosen', file: f.name, ms: Date.now() - opened, viaButton: clicked })
       const trust = Number(OPT.load('up-trust', 0)) || 0
       if (trust > 0) {
         localStorage.setItem('up-trust', JSON.stringify(trust - 1))

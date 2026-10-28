@@ -45,6 +45,8 @@ const inD = (t) => ({ ...t, within: DLG })
 const TRUST = 'yt-trust-tiers-wizard-dialog'
 // "Ban da hoan tat - hay thu lam moi trang": so lan lam moi Studio, moi lan manh tay hon
 const STALE_TRIES = 3
+// doi sau khi hop thoai tai len mo roi moi chon file (ms): lan dau + moi lan lam moi sau "Ban da hoan tat" (lau dan)
+const SETTLE = [2500, 6000, 10000, 15000]
 const STALE_FIX = ['tải lại Studio', 'xoá bộ nhớ đệm của Studio (giữ đăng nhập)', 'mở trang Tính năng của kênh để YouTube cập nhật quyền']
 const LABELS = {
   // trang tong quan kenh: nut tai len (that: ytcp-quick-actions ytcp-icon-button#upload-icon aria-label "Tải video lên")
@@ -303,13 +305,25 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
     throw new StepError('Không mở được hộp thoại tải video lên của YouTube Studio.', page.step)
   })
 
-  // ---- 2. chon file video ----
-  const chooseFile = () => step('file', `Chọn file ${path.basename(job.file)}`, async () => {
+  // ---- 2. chon file video: nhu nguoi that - doi Studio tai xong hop thoai, bam "Chon tep" (o chon file cua he dieu hanh
+  //         duoc tool chan lai va dien file); khong bam duoc thi dien thang vao o file an ----
+  // Chon file qua som / luc trang khong duoc ve (cua so tool thu nho): Studio chua doc xong quyen cua kenh -> hien
+  // "Ban da hoan tat - Ban da co quyen su dung tinh nang nay roi. Hay thu lam moi trang" du kenh da co quyen.
+  const chooseFile = (settle) => step('file', `Chọn file ${path.basename(job.file)}`, async () => {
     if (await page.has({ selector: SEL.title })) throw new StepError('Hộp thoại tải lên đang mở một video khác (chưa xong). Hãy đóng nó trong Studio rồi chạy lại.', page.step)
+    const rs = page.awake ? await page.awake() : ''
+    if (rs && !/, đang vẽ$/.test(rs)) log('warn', `Trang Studio đang ${rs.replace(/^trang /, '')}: YouTube có thể chưa nhận file đúng. Đừng thu nhỏ cửa sổ tool khi đang đăng video.`)
+    await sleep(settle)
+    if (!(await pickerReady(page))) await poll(page, () => pickerReady(page), 10000)
     try {
-      await chooseFiles(page, { input: SEL.fileInput, button: LABELS.selectFiles }, [job.file])
-    } catch (e) {
-      throw new StepError(`Không thấy ô chọn file video trong hộp thoại tải lên (${e.message}).`, page.step)
+      await chooseFiles(page, { button: LABELS.selectFiles }, [job.file])
+    } catch (e1) {
+      if (await page.has({ selector: SEL.title })) return // da nhan file
+      try {
+        await chooseFiles(page, { input: SEL.fileInput }, [job.file])
+      } catch (e) {
+        throw new StepError(`Không thấy ô chọn file video trong hộp thoại tải lên (${e1.message}; ${e.message}).`, page.step)
+      }
     }
   })
 
@@ -350,7 +364,7 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
   try {
     // ---- 3. trang Chi tiet (lam moi Studio khi gap "Ban da hoan tat") ----
     for (let attempt = 0; ; attempt++) {
-      await chooseFile()
+      await chooseFile(SETTLE[Math.min(attempt, SETTLE.length - 1)])
       chosen = true
       const r = await waitDetails()
       if (r === 'ok') break
@@ -381,7 +395,7 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
           await page.goto(`${urls.youtube}/features`).catch(() => {})
           await sleep(5000)
         }
-        await sleep(attempt ? 3000 : 1500)
+        await sleep(attempt ? 3000 : 2000)
       })
       await openDialog(`Mở lại hộp thoại tải lên (lần ${attempt + 1}/${STALE_TRIES})`)
     }

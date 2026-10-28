@@ -99,7 +99,7 @@ module.exports = (ctx) => {
         if (!wc || wc.isDestroyed()) throw new Error('Khung trình duyệt chưa mở.')
         wc.setAudioMuted(true) // trang xem video tu phat tieng
         try {
-          return await fn(new Page(wc, { timeout: 20000, shotDir: ctx.logFile('loi-trang'), shouldStop: ctx.stopped }))
+          return await fn(new Page(wc, { timeout: 20000, shotDir: ctx.logFile('loi-trang'), shouldStop: ctx.stopped, wake: ctx.studio.wake }))
         } finally {
           if (!wc.isDestroyed()) wc.setAudioMuted(false)
         }

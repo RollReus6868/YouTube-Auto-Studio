@@ -1,3 +1,15 @@
+## YT Auto Studio 0.5.6
+
+Sửa tiếp lỗi đăng video "Bạn đã có quyền sử dụng tính năng này rồi. Hãy thử làm mới trang".
+
+### Nguyên nhân
+Ảnh và HTML tool lưu lúc lỗi cho thấy kênh **đã có** quyền đăng video dài. Nhưng tool chọn file ngay khi hộp thoại tải lên vừa hiện, và lúc đó trang Studio đang **bị ẩn, không được vẽ**. Khả năng cao là Studio chưa đọc xong quyền của kênh nên tưởng kênh chưa có quyền, rồi hiện hộp thoại này.
+
+### Đã sửa
+- Tool chọn file như người thật: chờ hộp thoại tải lên mở xong rồi bấm nút **"Chọn tệp"**. Lần đầu tool chờ 2,5 giây, mỗi lần thử lại chờ lâu hơn (6, 10, 15 giây).
+- Trước khi chọn file, tool kiểm tra trang Studio có đang được vẽ không. Nếu cửa sổ tool đang thu nhỏ, tool tự mở lại cửa sổ (không cướp bàn phím) và ghi vào nhật ký.
+- Nếu bạn thu nhỏ cửa sổ khi tool đang chạy, nhật ký sẽ nhắc. Để cửa sổ khác che lên thì vẫn được, chỉ đừng thu nhỏ.
+
 ## YT Auto Studio 0.5.5
 
 Theo dõi tool chạy ngay trong khung trình duyệt, mô tả mặc định cho mọi video, Gemini viết mô tả theo kịch bản, và sửa lỗi đăng video dài.
