@@ -1,21 +1,15 @@
-## YT Auto Studio 0.5.1
+## YT Auto Studio 0.5.2
 
-Tối ưu video chính xác hơn, thêm nút Quét toàn bộ, sửa lỗi đăng video.
+Sửa các lỗi khi tối ưu nhiều kênh liên tiếp (theo nhật ký chạy thử ngày 28/10).
 
 ### Tối ưu video
-- **Danh sách phát:** video đã có danh sách phát thì tính là xong, không mở hộp thoại, không báo vàng nữa. Kênh chưa có danh sách phát nào cũng không còn bị chờ 20 giây.
-- **Chỉ làm mục còn thiếu:** khi tối ưu, tool chỉ làm các mục màu vàng mà lần quét báo thiếu. Mục đã điền sẵn thì bỏ qua và tính là thành công.
-- **Quét chính xác hơn,** kiểm trên HTML thật của Studio tiếng Việt và tiếng Anh. Tool đọc thêm cả màn hình kết thúc. Video đang xử lý thì báo rõ ngay, không chờ hết giờ.
-- **Ghim bình luận:** kênh không ghim được thì ghi "đã thích và bình luận - chưa ghim" và tính là **Đã tối ưu**. Tool thử ghim lại một lần sau khi tải lại trang.
-- **Bình luận** trên video có phần phát lại trò chuyện trực tiếp không còn bị dừng giữa chừng.
-- **Hộp thoại "Xác minh danh tính của bạn":** tool dừng và báo bạn tự xác minh trong trang Tài khoản. Tool không bấm gì trong hộp thoại đó.
-- **Nút mới "Quét toàn bộ":** quét 2 video mới nhất của mọi kênh đang tick, xếp kết quả theo từng kênh. Có nút tối ưu các mục còn thiếu cho tất cả kênh hoặc từng kênh.
+- **Sửa lỗi "Quá 20 giây vẫn chưa thấy Chuyển đổi tài khoản":** lỗi này không do giao diện từng kênh. Nó xảy ra ở kênh ngay sau một kênh vừa thích và bình luận xong. Khi đó cửa sổ chạy ngầm bị ẩn đi, và trên Windows cửa sổ ẩn không vẽ trang nên menu của Studio không mở. Giờ cửa sổ chạy ngầm luôn mở ở dạng trong suốt (bạn không thấy, không bấm nhầm được), nên chuyển kênh không bị kẹt nữa.
+- **Sửa lỗi "Quá 20 giây vẫn chưa thấy hộp thoại Danh sách phát"** ở kênh ngay sau kênh bị lỗi chuyển kênh. Nguyên nhân giống lỗi trên và đã sửa cùng lúc.
+- **Không còn đăng bình luận trùng:** tool chờ các bình luận cũ tải xong rồi mới kiểm tra xem kênh đã bình luận chưa.
+- **Bỏ cảnh báo thừa** "Đã bấm Bình luận nhưng không thấy…" khi tải lại trang đã thấy bình luận.
 
-### Đăng video
-- **Sửa lỗi "Quá 60 giây vẫn chưa thấy trang Chi tiết":** với video dài trên 15 phút, YouTube có thể bật hộp thoại "Bạn đã hoàn tất – Hãy thử làm mới trang". Giờ tool bấm "Đã hiểu", làm mới trang rồi chọn file lại (tối đa 2 lần).
-- **Chỉ cần một thư mục:** để video và thumbnail **cùng tên** trong một thư mục, ví dụ `Tên video.mp4` + `Tên video.jpg`. Tên file là tiêu đề. Không bắt buộc tạo thư mục con hay info.txt. Video đăng xong được chuyển vào `da-dang`.
-- **Chế độ hiển thị đầy đủ như Studio:** Riêng tư / Không công khai / Công khai, "Đặt ở chế độ Công chiếu ngay", và Lên lịch theo đúng kiểu của YouTube: chọn ngày trên lịch, giờ theo bước 15 phút, nút Múi giờ, "Đặt làm video Công chiếu".
-- Chạy được với Studio tiếng Việt và tiếng Anh.
+### Lưu ý
+- Lúc 10:31 kênh **Dark Bible Stories** bị Google hỏi "Xác minh danh tính của bạn". Đây là yêu cầu thật của Google nên tool không tự làm thay. Nếu hộp thoại này còn hiện, bạn mở trang **Tài khoản** trong tool, xác minh một lần rồi chạy lại.
 
 Đang dùng bản cũ: mở tool, vào **Cập nhật**, bấm **Tải và cài**.
 
@@ -23,6 +17,6 @@ Tối ưu video chính xác hơn, thêm nút Quét toàn bộ, sửa lỗi đăn
 
 | Máy của bạn | File |
 |---|---|
-| Windows 10/11 | `YTAutoStudio-0.5.1-windows-setup.exe` |
+| Windows 10/11 | `YTAutoStudio-0.5.2-windows-setup.exe` |
 
 Bản này chỉ build cho Windows. Bản macOS sẽ build khi cần.

@@ -51,15 +51,19 @@ module.exports = (ctx) => {
     // Studio chan roi trang khi con thay doi chua luu (beforeunload): cua so an khong co ai bam "Roi trang"
     wc.on('will-prevent-unload', (e) => e.preventDefault())
     wc.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) wc.loadURL(url); return { action: 'deny' } })
-    // Cua so an (show: false) tren Windows khong ve trang -> YouTube khong tai binh luan. Khi can, hien no
-    // trong suot + bam xuyen qua (nguoi dung khong thay, khong bam nham), xong viec thi an lai.
+    // Cua so an (show: false) tren Windows khong ve trang: YouTube khong tai binh luan, menu / hop thoai
+    // Studio (Chuyen doi tai khoan, Danh sach phat) co the khong mo. Hien cua so trong suot + bam xuyen qua
+    // (nguoi dung khong thay, khong bam nham) suot doi cua so; KHONG an lai giua chung (an roi hien lai
+    // thi trang ngung ve -> buoc Studio sau do treo).
     const show = () => {
-      if (win.isDestroyed() || win.isVisible()) return () => {}
-      win.setOpacity(0)
-      win.setIgnoreMouseEvents(true)
-      win.showInactive()
-      return () => { if (!win.isDestroyed()) win.hide() }
+      if (!win.isDestroyed() && !win.isVisible()) {
+        win.setOpacity(0)
+        win.setIgnoreMouseEvents(true)
+        win.showInactive()
+      }
+      return () => {}
     }
+    show()
     const page = new Page(wc, { timeout: 20000, shotDir: ctx.logFile('loi-trang'), shouldStop: ctx.stopped, show })
     const l = { win, page, chain: Promise.resolve(), pending: 0, timer: null }
     lanes.set(acc.id, l)

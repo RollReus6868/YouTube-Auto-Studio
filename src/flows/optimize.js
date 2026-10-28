@@ -1048,6 +1048,10 @@ const headerCount = (page) => page.eval((s) => {
 async function seekMine(page, text, who, { pages = 8, log = () => {} } = {}) {
   let other = null
   let count = 0
+  // khung "Thêm bình luận..." hien truoc cac luot binh luan: tieu de bao co binh luan thi cho chung tai
+  // (khong thi tuong video chua co binh luan cua kenh -> dang trung)
+  const total0 = await headerCount(page)
+  if (total0) await page.until((s) => window.__ya.count({ selector: s.thread, within: s.comments }), [WATCH], { timeout: Math.max(page.timeout, 10000), what: 'các bình luận' }).catch(() => 0)
   for (const sort of ['top', 'newest']) {
     if (sort === 'newest') {
       // video chua co binh luan nao / khong co menu sap xep / da tai het: khong can doi
@@ -1263,6 +1267,8 @@ async function watchTasks(page, videoId, text, { urls, log = () => {}, onStep = 
       const r = await readComments()
       out.pinned = r.pinned
       out.commented = !!r.found
+      // luc dang chua thay nhung tai lai thi co binh luan cua kenh: khong con la loi
+      if (r.found) for (let i = warnings.length - 1; i >= 0; i--) if (/^Đã bấm "Bình luận" nhưng không thấy/.test(warnings[i])) warnings.splice(i, 1)
       if (!r.found) {
         await warn('comment', 'tai-lai-binh-luan', out.posted
           ? 'Đã đăng bình luận nhưng tải lại trang thì không thấy nữa (YouTube có thể giữ lại để xét duyệt / coi là spam, nhất là bình luận có đường link).'
