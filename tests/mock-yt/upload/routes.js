@@ -17,6 +17,8 @@ module.exports = [
     const data = { uc: m[1], cookieCh: cookies(req).MOCK_CH || '' }
     res.end(fs.readFileSync(path.join(__dirname, 'upload.html'), 'utf8').replace('/*DATA*/null', JSON.stringify(data)))
   }],
+  // HTML that (an danh) cua Studio: hop thoai tai len o buoc chon tep + "Ban da hoan tat" (tests/flows/upload.test.js)
+  [/^\/studio\/that-upload\/chon-tep$/, 'that-chon-tep.html'],
   [/^\/studio\/__upload\/done$/, (req, res, m, server) => {
     let body = ''
     req.on('data', (c) => { body += c })

@@ -241,6 +241,141 @@ test('xep lich dang', () => {
   assert.match(past.warning, /đã qua/)
 })
 
+test('thu muc video phang: video + thumbnail cung ten, phu de, .txt, trung ten, bo da-dang', () => {
+  const d = tmp()
+  write(path.join(d, 'Bí ẩn tập 7.mp4'), 'v'.repeat(10))
+  write(path.join(d, 'Bí ẩn tập 7.jpg'))
+  write(path.join(d, 'Bí ẩn tập 7.png')) // anh thu 2: dung .jpg, canh bao
+  write(path.join(d, 'Bí ẩn tập 7.vi.srt'))
+  write(path.join(d, 'Bí ẩn tập 7.en.srt'))
+  write(path.join(d, 'Khác tập 7.vi.srt')) // phu de cua video khac: bo
+  write(path.join(d, 'Hậu trường.MOV'))
+  write(path.join(d, 'hậu trường.WEBP'))
+  write(path.join(d, 'Hậu trường.txt'), 'Thẻ: a, b\n---\nMô tả riêng')
+  write(path.join(d, 'Không ảnh.mkv'))
+  write(path.join(d, 'Ảnh to.mp4'))
+  write(path.join(d, 'Ảnh to.jpeg'), Buffer.alloc(2 * 1024 * 1024 + 1))
+  write(path.join(d, 'ghi chú.txt')) // file le: bo
+  write(path.join(d, 'da-dang', 'Cũ.mp4')) // da dang: bo
+  write(path.join(d, 'da-dang', 'Cũ.jpg'))
+  const r = sc.scanVideos(d)
+  assert.deepEqual(r.errors, [])
+  const by = Object.fromEntries(r.videos.map((v) => [v.name, v]))
+  assert.deepEqual(Object.keys(by).sort(), ['Ảnh to', 'Bí ẩn tập 7', 'Hậu trường', 'Không ảnh'].sort())
+  const a = by['Bí ẩn tập 7']
+  assert.equal(a.layout, 'flat')
+  assert.equal(a.titleFromName, true)
+  assert.equal(a.key, path.join(d, 'Bí ẩn tập 7.mp4'))
+  assert.equal(a.thumbnail, path.join(d, 'Bí ẩn tập 7.jpg'))
+  assert.equal(a.episode, '7')
+  assert.deepEqual(a.subtitles.map((x) => x.lang).sort(), ['en', 'vi'])
+  assert.equal(a.files.length, 4) // video + anh + 2 phu de (khong lay .png thu 2)
+  assert.equal(a.doneDir, path.join(d, 'da-dang'))
+  assert.equal(a.infoFile, path.join(d, 'Bí ẩn tập 7.txt')) // chua co: Gemini se tao
+  assert.match(a.warnings.join('\n'), /2 ảnh cùng tên, tool dùng "Bí ẩn tập 7.jpg"/)
+  assert.deepEqual(a.errors, [])
+  const h = by['Hậu trường'] // khac hoa thuong van khop
+  assert.equal(path.basename(h.thumbnail), 'hậu trường.WEBP')
+  assert.equal(h.info.the, 'a, b')
+  assert.equal(h.info.mo_ta, 'Mô tả riêng')
+  assert(h.files.includes(path.join(d, 'Hậu trường.txt')))
+  assert.match(by['Không ảnh'].warnings[0], /Chưa có ảnh thumbnail cùng tên/)
+  assert.match(by['Ảnh to'].errors[0], /lớn hơn 2 MB/)
+  // trung ten (khac duoi): loi
+  write(path.join(d, 'Không ảnh.mp4'))
+  const dup = sc.scanVideos(d).videos.filter((v) => v.name === 'Không ảnh')
+  assert.equal(dup.length, 2)
+  assert(dup.some((v) => /Trùng tên/.test(v.errors.join(' '))))
+  // tieu de = ten file; .txt co "Tieu de:" thi lay dong do
+  assert.equal(md.buildVideoMeta(a, { ...md.defaultPreset(), title: '{ten_video} | Tập {so_tap}' }).title, 'Bí ẩn tập 7')
+  assert.equal(md.buildVideoMeta({ ...a, info: { tieu_de: 'Tên riêng', vars: {} } }, md.defaultPreset()).title, 'Tên riêng')
+  // thu muc trong / chua chon / khong ton tai
+  assert.deepEqual(sc.scanVideos(tmp()).videos, [])
+  assert.match(sc.scanVideos('').errors[0], /Chưa chọn thư mục video/)
+  assert.match(sc.scanVideos(path.join(d, 'khong-co')).errors[0], /Không tìm thấy/)
+})
+
+test('thu muc video: van doc thu muc con kieu cu va <goc>/videos/', () => {
+  const d = tmp()
+  write(path.join(d, 'Phẳng.mp4'))
+  write(path.join(d, 'Tập cũ', 'video.mp4'))
+  write(path.join(d, 'Tập cũ', 'thumbnail.jpg'))
+  write(path.join(d, 'Tập cũ', 'info.txt'), 'Tiêu đề: Tập cũ hay\n')
+  write(path.join(d, 'anh-linh-tinh', 'a.jpg')) // khong co video: bo qua, khong loi
+  write(path.join(d, 'videos', '2026-11-04_tap-9', 'tap9.mp4'))
+  write(path.join(d, 'posts', 'bai', 'noidung.txt'), 'x') // bai dang: bo
+  const r = sc.scanVideos(d)
+  assert.deepEqual(r.errors, [])
+  const ids = r.videos.map((v) => v.id).sort()
+  assert.deepEqual(ids, ['tep/Phẳng.mp4', 'thu-muc/Tập cũ', 'videos/2026-11-04_tap-9'].sort())
+  const old = r.videos.find((v) => v.id === 'thu-muc/Tập cũ')
+  assert.equal(old.layout, 'folder')
+  assert.equal(old.key, path.join(d, 'Tập cũ'))
+  assert.equal(old.info.tieu_de, 'Tập cũ hay')
+  assert.equal(old.doneDir, path.join(d, 'da-dang'))
+  const v9 = r.videos.find((v) => v.id === 'videos/2026-11-04_tap-9')
+  assert.equal(v9.date, '2026-11-04')
+  assert.equal(v9.layout, 'folder')
+})
+
+test('chuyen file da dang vao da-dang/ (thu muc phang)', () => {
+  const up = require('../src/uploader')
+  const d = tmp()
+  const files = ['A.mp4', 'A.jpg', 'A.vi.srt', 'A.txt'].map((f) => path.join(d, f))
+  for (const f of files) write(f)
+  write(path.join(d, 'da-dang', 'A.mp4'), 'cu') // da co file cung ten -> "A (2).mp4"
+  write(path.join(d, 'B.mp4'))
+  const r = up.moveDoneFiles(path.join(d, 'da-dang'), { video: files[0], files }, ['Đã đăng: https://youtu.be/x'])
+  assert.equal(r.moved, true)
+  assert.equal(r.video, path.join(d, 'da-dang', 'A (2).mp4'))
+  assert.deepEqual(fs.readdirSync(d).sort(), ['B.mp4', 'da-dang'])
+  assert.deepEqual(fs.readdirSync(path.join(d, 'da-dang')).sort(), ['A (2).mp4', 'A.jpg', 'A.ket-qua.txt', 'A.mp4', 'A.txt', 'A.vi.srt'].sort())
+  assert.match(fs.readFileSync(path.join(d, 'da-dang', 'A.ket-qua.txt'), 'utf8'), /youtu\.be\/x/)
+  // quet lai: chi con B
+  assert.deepEqual(sc.scanVideos(d).videos.map((v) => v.name), ['B'])
+})
+
+test('mau: che do hien thi + Cong chieu + lich ngay gio cu the', () => {
+  const n = md.normalizePreset({ id: 'x', privacy: 'bi-mat', premiere: 'yes', schedule: { mode: 'la', date: '30/10/2026', time: '9:5' } })
+  assert.equal(n.privacy, 'private')
+  assert.equal(n.premiere, false)
+  assert.equal(n.schedulePremiere, false)
+  assert.deepEqual([n.schedule.mode, n.schedule.date, n.schedule.time], ['now', '', '09:00'])
+  const ok = md.normalizePreset({ id: 'y', privacy: 'public', premiere: true, schedulePremiere: true, schedule: { mode: 'date', date: '2026-10-30', time: '9:15', intervalHours: 0 } })
+  assert.deepEqual([ok.schedule.mode, ok.schedule.date, ok.schedule.time], ['date', '2026-10-30', '09:15'])
+  const item = { name: 'Video', titleFromName: true, info: { vars: {} } }
+  // Cong khai + Cong chieu ngay
+  const m1 = md.buildVideoMeta(item, ok)
+  assert.deepEqual([m1.privacy, m1.premiere, m1.publishAt, m1.schedulePremiere], ['public', true, null, false])
+  // Cong chieu ngay chi di voi Cong khai
+  assert.equal(md.buildVideoMeta(item, { ...ok, privacy: 'unlisted' }).premiere, false)
+  // len lich + Dat lam video Cong chieu
+  const m2 = md.buildVideoMeta(item, ok, { publishAt: '2026-10-30T02:15:00.000Z' })
+  assert.deepEqual([m2.publishAt, m2.schedulePremiere], ['2026-10-30T02:15:00.000Z', true])
+  assert.equal(md.buildVideoMeta(item, { ...ok, schedulePremiere: false }, { publishAt: '2026-10-30T02:15:00.000Z' }).schedulePremiere, false)
+})
+
+test('xep lich: ngay gio cu the, video sau cach N gio', () => {
+  const now = new Date(2026, 9, 28, 12, 0)
+  const iso = (...a) => new Date(...a).toISOString()
+  const P = (schedule) => () => ({ ...md.defaultPreset(), schedule: { ...md.defaultPreset().schedule, ...schedule } })
+  const s = md.planSchedule([{}, {}, {}], P({ mode: 'date', date: '2026-10-30', time: '09:00', intervalHours: 24 }), now).map((x) => x.publishAt)
+  assert.deepEqual(s, [iso(2026, 9, 30, 9), iso(2026, 9, 31, 9), iso(2026, 10, 1, 9)])
+  // 0 gio: cung gio
+  const same = md.planSchedule([{}, {}], P({ mode: 'date', date: '2026-10-30', time: '21:15', intervalHours: 0 }), now).map((x) => x.publishAt)
+  assert.deepEqual(same, [iso(2026, 9, 30, 21, 15), iso(2026, 9, 30, 21, 15)])
+  // chua chon ngay -> dang ngay
+  assert.deepEqual(md.planSchedule([{}], P({ mode: 'date', date: '' }), now).map((x) => x.publishAt), [null])
+  // ngay da qua -> dang ngay + canh bao
+  const past = md.planSchedule([{}], P({ mode: 'date', date: '2026-10-01', time: '09:00' }), now)[0]
+  assert.equal(past.publishAt, null)
+  assert.match(past.warning, /đã qua/)
+  // "Gio dang:" trong .txt van uu tien
+  assert.deepEqual(md.planSchedule([{ info: { gio_dang: new Date(2026, 10, 5, 8) } }], P({ mode: 'date', date: '2026-10-30' }), now).map((x) => x.publishAt), [iso(2026, 10, 5, 8)])
+  // ngay trong ten thu muc (kieu cu) + gio cua lich
+  assert.deepEqual(md.planSchedule([{ date: '2026-11-04' }], P({ mode: 'date', date: '2026-10-30', time: '07:30' }), now).map((x) => x.publishAt), [iso(2026, 10, 4, 7, 30)])
+})
+
 test('luu cai dat + preset', () => {
   const dir = tmp()
   const s = new Store(dir)

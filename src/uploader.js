@@ -1,5 +1,6 @@
 // Dang mot video tu dau den cuoi bang hop thoai tai len cua YouTube Studio (src/flows/upload.js):
-// tai len + chi tiet + mau Studio cua preset + phu de + che do hien thi -> chuyen thu muc vao da-dang/.
+// tai len + chi tiet + mau Studio cua preset + phu de + che do hien thi -> chuyen vao da-dang/
+// (thu muc phang: file video + thumbnail + phu de + .txt cung ten; kieu cu: ca thu muc con).
 // Loi o buoc phu chi canh bao, khong lam hong video da tai. Khong require('electron') de kiem thu bang node.
 const fs = require('fs')
 const path = require('path')
@@ -29,13 +30,42 @@ function moveDone(root, folder, lines) {
   return { moved: true, folder: target }
 }
 
+// Thu muc phang: chuyen cac file cua video (video, thumbnail, phu de, .txt) vao doneDir, ghi "<ten>.ket-qua.txt".
+// File dang mo (Windows) thi bo qua file do; video khong chuyen duoc -> moved: false (lich su uploads.json van chan dang lai).
+function moveDoneFiles(doneDir, item, lines) {
+  fs.mkdirSync(doneDir, { recursive: true })
+  const base = path.basename(item.video, path.extname(item.video))
+  const free = (name) => {
+    const e = path.extname(name)
+    const b = name.slice(0, name.length - e.length)
+    let target = path.join(doneDir, name)
+    for (let i = 2; fs.existsSync(target); i++) target = path.join(doneDir, `${b} (${i})${e}`)
+    return target
+  }
+  let moved = true
+  let error = ''
+  let video = item.video
+  for (const f of [...new Set(item.files && item.files.length ? item.files : [item.video])]) {
+    if (!fs.existsSync(f)) continue
+    const target = free(path.basename(f))
+    try {
+      fs.renameSync(f, target)
+      if (f === item.video) video = target
+    } catch (e) {
+      if (f === item.video) { moved = false; error = e.message }
+    }
+  }
+  try { fs.writeFileSync(free(`${base}.ket-qua.txt`), lines.join('\r\n') + '\r\n') } catch (_) { /* khong quan trong */ }
+  return { moved, folder: doneDir, video, error }
+}
+
 // Viec cho hop thoai tai len, tu ket qua buildVideoMeta (src/metadata.js) + mau Studio cua preset
 function jobOf(item, uc, template = null, channelName = '') {
   const m = item.meta
   return {
     uc, file: item.video, title: m.title, description: m.description, tags: m.tags,
     playlists: m.playlist ? [m.playlist] : [], madeForKids: !!m.madeForKids, thumbnail: m.thumbnail || null,
-    subtitles: m.subtitles || [], privacy: m.privacy, publishAt: m.publishAt || null,
+    subtitles: m.subtitles || [], privacy: m.privacy, premiere: !!m.premiere, publishAt: m.publishAt || null, schedulePremiere: !!m.schedulePremiere,
     notifySubscribers: m.notifySubscribers !== false, template, channelName,
   }
 }
@@ -47,7 +77,8 @@ const FIELD_NAMES = {
   comments: 'bình luận', endScreen: 'màn hình kết thúc',
 }
 
-// page: Page da o dung kenh (ctx.withChannel). item: { folder, video, meta (co thumbnail, subtitles: [{file, lang}]) }
+// page: Page da o dung kenh (ctx.withChannel). item: { layout: flat|folder, folder, video, files, doneDir, meta (co thumbnail,
+// subtitles: [{file, lang}]) }. root: thu muc chua da-dang/ (khi item khong co doneDir).
 // preset: mau dang (mau Studio preset.optimize dat trong hop thoai; preset.optimizeAfterUpload: thich / binh luan / ghim sau).
 // Tra ve { id, url, warnings, folder, moved, schedule, missed, after } - after: mau toi uu chay sau khi dang (null = khong can)
 async function uploadOne(page, item, { urls, uc, root, preset = {}, channelName = '', log = () => {}, onStep = () => {}, onProgress = () => {}, upload = uploadVideo } = {}) {
@@ -66,12 +97,15 @@ async function uploadOne(page, item, { urls, uc, root, preset = {}, channelName 
     `Studio: https://studio.youtube.com/video/${id}/edit`,
     `Tiêu đề: ${m.title}`,
     `Đăng lúc: ${new Date().toLocaleString('vi-VN')}`,
-    r.schedule ? `Lên lịch công khai: ${new Date(r.schedule).toLocaleString('vi-VN')}` : `Chế độ: ${PRIVACY[m.privacy] || m.privacy}`,
+    r.schedule ? `Lên lịch công khai: ${new Date(r.schedule).toLocaleString('vi-VN')}${r.premiere ? ' (Công chiếu)' : ''}` : `Chế độ: ${PRIVACY[m.privacy] || m.privacy}${r.premiere ? ' (Công chiếu ngay)' : ''}`,
     ...warnings.map((w) => `Lưu ý: ${w}`),
   ]
-  const mv = root ? moveDone(root, item.folder, lines) : { moved: false, folder: item.folder }
-  if (root && !mv.moved) log('warn', `Không chuyển được thư mục vào ${DIRS.done}/ (${mv.error}). Hãy tự chuyển để lần sau không đăng lại.`)
+  const doneDir = item.doneDir || (root ? path.join(root, DIRS.done) : '')
+  let mv = { moved: false, folder: item.folder }
+  if (doneDir && item.layout === 'flat') mv = moveDoneFiles(doneDir, item, lines)
+  else if (doneDir) mv = moveDone(path.dirname(doneDir), item.folder, lines)
+  if (doneDir && !mv.moved) log('warn', `Không chuyển được ${item.layout === 'flat' ? `file "${path.basename(item.video)}"` : 'thư mục'} vào ${DIRS.done}/ (${mv.error}). Tool vẫn nhớ đã đăng; hãy tự chuyển để khỏi hiện lại.`)
   return { id, url, warnings, folder: mv.folder, moved: mv.moved, schedule: r.schedule || null, missed, after }
 }
 
-module.exports = { uploadOne, jobOf, moveDone, freeName }
+module.exports = { uploadOne, jobOf, moveDone, moveDoneFiles, freeName }

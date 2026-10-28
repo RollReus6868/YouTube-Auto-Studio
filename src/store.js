@@ -7,7 +7,8 @@ const { defaultPreset, normalizePreset } = require('./metadata')
 const { presetSeed } = require('./optimize-template')
 
 const DEFAULTS = {
-  root: '',
+  root: '', // thu muc goc (posts/ cho trang Dang bai; ban cu: ca videos/)
+  videoDir: '', // thu muc video phang cua trang Dang video (trong = dung thu muc goc)
   channel: '',
   presets: [defaultPreset()],
   defaultPreset: 'mac-dinh',

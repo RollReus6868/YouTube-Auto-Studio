@@ -18,37 +18,63 @@ const opt = require('./optimize')
 const { chooseFiles, dateText, timeText, scheduleTime } = require('./post')
 const { normalizeTemplate, keepAll, renderComment } = require('../optimize-template')
 
-const { pickRadio, pickOption, setCheckbox, openMore, isChecked, isEnabled, markSection, sec, triggerInfo, pickCalendarDay, FIELDS } = opt._t
+const { pickRadio, pickOption, setCheckbox, openMore, isChecked, isEnabled, markSection, sec, triggerInfo, FIELDS } = opt._t
 const O = opt.LABELS
 const OS = opt.SEL
 
 // Chu tren man hinh (Studio tieng Viet + tieng Anh). any: bo chon theo ma co dinh cua Studio, tim truoc chu.
-// Da kiem tren HTML that: nut tai len #upload-icon cua trang tong quan, nut Tao (ytcp-button icon video_call), va cac o cua
-// trang Chi tiet video (dung chung voi hop thoai tai len): tieu de, mo ta, tre em, thumbnail #file-loader / #select-button,
-// danh sach phat (ytcp-playlist-dialog), Hien them, cac muc nang cao.
-// Con lai (khung hop thoai, cac buoc, che do hien thi, lich, tien do, phu de, nut man hinh ket thuc trong hop thoai):
-// theo cau truc Studio quen biet + video quay, chua co HTML that: sai thi sua o day + trang gia tests/mock-yt/upload.
+// Da kiem tren HTML that:
+//  - trang tong quan: nut tai len #upload-icon, nut Tao (ytcp-button icon video_call) (tests/mock-yt/upload/that-chon-tep.html);
+//  - hop thoai tai len o buoc chon tep (that-chon-tep.html, loi-trang 28/10/2026): ytcp-uploads-dialog[workflow-step],
+//    ytcp-uploads-file-picker > ytcp-button#select-files-button "Chọn tệp" + input[type=file][name=Filedata], nut
+//    #ytcp-uploads-dialog-close-button, ytcp-video-upload-progress span.progress-label, .error-short / .error-details#error-message,
+//    nut #back-button / #next-button / #done-button ("Lưu"); hop thoai yt-trust-tiers-wizard-dialog ("Bạn đã hoàn tất" ... [Đã hiểu]
+//    = ytcp-button#close-button);
+//  - cac o cua trang Chi tiet video (dung chung voi hop thoai tai len): tieu de, mo ta, tre em, thumbnail #file-loader /
+//    #select-button, danh sach phat (ytcp-playlist-dialog), Hien them, cac muc nang cao; lich chon ngay ytcp-date-picker
+//    (form#form input, #prev-month / #next-month, [role=listitem][aria-label] > .calendar-day).
+//  - Che do hien thi: chi co ten the / id lay tu CSS that cua Studio (khong co HTML luc mo): ytcp-uploads-review >
+//    ytcp-video-visibility-select > #first-container (tp-yt-paper-radio-group, #private-radio-button, .instant-premiere-container
+//    ytcp-checkbox-lit) + #second-container (#second-container-expand-button, #schedule-container > ytcp-visibility-scheduler >
+//    ytcp-datetime-picker: #time-of-day-trigger, #time-of-day-container, #timezone-select-button; ytcp-checkbox-lit#schedule-type-checkbox).
+// Con lai (cac buoc sau Chi tiet, o nhap gio ben trong #time-of-day-container, phu de, nut man hinh ket thuc trong hop thoai,
+// hop thoai xac minh danh tinh): theo cau truc Studio quen biet + video quay: sai thi sua o day + trang gia tests/mock-yt/upload.
 const L = (text, regex, any) => (any ? { text, regex, any } : { text, regex })
 const DLG = { selector: 'ytcp-uploads-dialog', hidden: true }
 const inD = (t) => ({ ...t, within: DLG })
+const TRUST = 'yt-trust-tiers-wizard-dialog'
 const LABELS = {
   // trang tong quan kenh: nut tai len (that: ytcp-quick-actions ytcp-icon-button#upload-icon aria-label "Tải video lên")
   uploadIcon: L('Tải video lên', '^(tải video lên|upload videos?)$', 'ytcp-icon-button#upload-icon, ytcp-upload-video-button #upload-button'),
-  // nut "Tao" tren thanh tren cung (that: ytcp-button icon="yt-sys-icons:video_call" aria-label "Tạo") -> muc "Tai video len"
+  // nut "Tao" tren thanh tren cung (that: ytcp-button.ytcpAppHeaderCreateIcon icon="yt-sys-icons:video_call" aria-label "Tạo")
   create: L('Tạo', '^(tạo|create)$', 'ytcp-button#create-icon, ytcp-button[icon="yt-sys-icons:video_call"]'),
   createUpload: L('Tải video lên', '^(tải video lên|upload videos?)$', 'tp-yt-paper-item#text-item-0'),
-  selectFiles: L('Chọn tệp', '^(chọn tệp|chọn tệp để tải lên|select files)$', '#select-files-button'),
+  // that: ytcp-uploads-file-picker > ytcp-button#select-files-button > button[aria-label="Chọn tệp"]
+  selectFiles: L('Chọn tệp', '^(chọn tệp|chọn tệp để tải lên|select files)$', 'ytcp-uploads-file-picker #select-files-button'),
+  closeDialog: L('Đóng', '^(đóng|close)$', 'ytcp-button#ytcp-uploads-dialog-close-button'),
+  // hop thoai "Ban da hoan tat - Ban da co quyen su dung tinh nang nay roi. Hay thu lam moi trang." [Da hieu] (that)
+  trustClose: L('Đã hiểu', '^(đã hiểu|got it|ok)$', `${TRUST} ytcp-button#close-button`),
+  // dong y khi hop thoai "Ban da hoan tat" can lam moi trang (Viet / Anh)
+  trustStale: '(bạn đã hoàn tất|đã có quyền sử dụng tính năng này|làm mới trang|you.re all set|already have access to this feature|refresh the page)',
+  // Google bat xac minh danh tinh: tool khong bao gio tu lam
+  verify: '(xác minh danh tính|xác minh rằng đó là bạn|xác minh đó là bạn|verify it.s you|verify your identity|confirm it.s you)',
   thumbUpload: L('Tải tệp lên', '^(tải tệp lên|upload file|upload thumbnail)$', 'ytcp-thumbnail-uploader #select-button, ytcp-thumbnail-editor #select-button'),
   next: L('Tiếp', '^(tiếp|tiếp theo|next)$', 'ytcp-button#next-button'),
   done: L('Lưu', '^(xuất bản|lưu|lên lịch|publish|save|schedule)$', 'ytcp-button#done-button'),
   kidsYes: L('Có, nội dung này dành cho trẻ em', '^(có, nội dung này dành cho trẻ em|yes, it.s made for kids)', 'tp-yt-paper-radio-button[name="VIDEO_MADE_FOR_KIDS_MFK"]'),
   kidsNo: L('Không, nội dung này không dành cho trẻ em', '^(không, nội dung này không dành cho trẻ em|no, it.s not made for kids)', 'tp-yt-paper-radio-button[name="VIDEO_MADE_FOR_KIDS_NOT_MFK"]'),
-  public: L('Công khai', '^(công khai|public)$', 'tp-yt-paper-radio-button[name="PUBLIC"]'),
-  unlisted: L('Không công khai', '^(không công khai|unlisted)$', 'tp-yt-paper-radio-button[name="UNLISTED"]'),
-  private: L('Riêng tư', '^(riêng tư|private)$', 'tp-yt-paper-radio-button[name="PRIVATE"]'),
+  // buoc Che do hien thi: "Luu hoac xuat ban" (#first-container) - Rieng tu / Khong cong khai / Cong khai
+  //   [ ] Dat o che do Cong chieu ngay (duoi Cong khai); "Len lich" (#second-container, mo bang nut mui ten):
+  //   "Dat lich chuyen sang che do cong khai" [ngay] [gio] [Mui gio] [ ] Dat lam video Cong chieu
+  public: L('Công khai', '^(công khai|public)$', 'ytcp-video-visibility-select tp-yt-paper-radio-button[name="PUBLIC"], tp-yt-paper-radio-button[name="PUBLIC"]'),
+  unlisted: L('Không công khai', '^(không công khai|unlisted)$', 'ytcp-video-visibility-select tp-yt-paper-radio-button[name="UNLISTED"], tp-yt-paper-radio-button[name="UNLISTED"]'),
+  private: L('Riêng tư', '^(riêng tư|private)$', '#private-radio-button, tp-yt-paper-radio-button[name="PRIVATE"]'),
+  instantPremiere: L('Đặt ở chế độ Công chiếu ngay', '^(đặt ở chế độ công chiếu ngay|set as instant premiere)$', '.instant-premiere-container ytcp-checkbox-lit #checkbox, ytcp-checkbox-lit#enable-premiere-checkbox #checkbox'),
   scheduleOpen: L('Lên lịch', '^(lên lịch|schedule)$', '#second-container-expand-button'),
   scheduleRadio: { selector: '#schedule-radio-button, tp-yt-paper-radio-button[name="SCHEDULE"]' }, // khong tim theo chu: "Lên lịch" con la nhan nut mo
   dateTrigger: L('Ngày', '^(ngày|date)$', '#datepicker-trigger ytcp-dropdown-trigger, ytcp-dropdown-trigger#datepicker-trigger, #datepicker-trigger'),
+  schedulePremiere: L('Đặt làm video Công chiếu', '^(đặt làm video công chiếu|set as premiere)$', 'ytcp-checkbox-lit#schedule-type-checkbox #checkbox, #schedule-type-checkbox #checkbox'),
+  timezone: L('Múi giờ', '^(múi giờ|time ?zone)$', '#timezone-select-button'),
   notify: L('Xuất bản lên trang Kênh đăng ký và thông báo đến người đăng ký', '^(xuất bản lên trang kênh đăng ký và thông báo đến người đăng ký|publish to subscriptions feed and notify subscribers)$', 'ytcp-checkbox-lit#notify-subscribers #checkbox'),
   // buoc "Cac thanh phan cua video": Phu de [Them], Man hinh ket thuc [Nhap tu video][Them], The, Bai kiem tra
   subsAdd: L('Thêm phụ đề', '^(thêm phụ đề|add subtitles)$', 'ytcp-uploads-video-elements #subtitles-button'),
@@ -69,7 +95,19 @@ const LABELS = {
 }
 const SEL = {
   picker: 'ytcp-uploads-file-picker',
-  fileInput: 'ytcp-uploads-file-picker input[type=file], input[type=file][name=Filedata]',
+  // that: <input type="file" name="Filedata" multiple aria-hidden="true"> ngay sau #select-files-button
+  fileInput: 'ytcp-uploads-file-picker input[type=file][name=Filedata], ytcp-uploads-file-picker input[type=file], input[type=file][name=Filedata]',
+  // hop thoai phu che hop thoai tai len: "Ban da hoan tat" (that) va cac hop thoai xac minh (doan)
+  // (bo chinh hop thoai tai len: xem blocker())
+  blockers: `${TRUST} tp-yt-paper-dialog, tp-yt-paper-dialog[role=dialog], [role=alertdialog]`,
+  trust: TRUST,
+  dateInput: 'ytcp-date-picker #textbox input, ytcp-date-picker input',
+  calMonth: 'ytcp-date-picker [role=listitem][aria-label]',
+  calPrev: 'ytcp-date-picker #prev-month',
+  calNext: 'ytcp-date-picker #next-month',
+  listbox: '[role=listbox], tp-yt-paper-listbox',
+  option: '[role=option], tp-yt-paper-item',
+  scheduler: 'ytcp-visibility-scheduler, #schedule-container',
   title: '#title-textarea #textbox',
   desc: '#description-textarea #textbox',
   thumbInput: 'ytcp-uploads-dialog ytcp-thumbnail-uploader input#file-loader, ytcp-uploads-dialog ytcp-thumbnails-compact-editor-uploader input[type=file]',
@@ -94,7 +132,7 @@ const SEL = {
 }
 
 const norm = (s) => String(s || '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()
-const UP_ERROR = /(giới hạn tải lên|upload limit|tải lên không thành công|upload failed|không thể tải lên|couldn.t upload|can.t upload|lỗi khi tải lên|upload error|tệp không hợp lệ|invalid file|định dạng tệp không hợp lệ|đã hủy tải lên|upload canceled|upload cancelled)/
+const UP_ERROR = /(giới hạn tải lên|upload limit|rất tiếc, đã xảy ra lỗi|oops, something went wrong|tải lên không thành công|upload failed|không thể tải lên|couldn.t upload|can.t upload|lỗi khi tải lên|upload error|tệp không hợp lệ|invalid file|định dạng tệp không hợp lệ|đã hủy tải lên|upload canceled|upload cancelled)/
 const UP_DONE = /(tải lên hoàn tất|đã tải lên xong|upload complete|đang xử lý|processing|đã xử lý|processed|kiểm tra|checks? complete|checking|no issues found)/
 const UP_RUNNING = /(đang tải lên|đã tải được|uploading|uploaded \d|đang chờ tải lên|waiting to upload)/
 
@@ -155,6 +193,33 @@ const stepName = (page) => page.eval(() => {
 // Hop thoai tai len co dang mo (o chon file hoac trang Chi tiet)?
 const pickerReady = (page) => page.eval((s) => !!(window.__ya.count({ selector: s.fileInput, hidden: true }) || window.__ya.count({ selector: '#select-files-button' }) || window.__ya.count({ selector: s.title })), SEL).catch(() => false)
 
+// Hop thoai phu dang che hop thoai tai len: { kind: 'stale' | 'verify' | 'trust', text } | null
+//   stale: "Ban da hoan tat - Ban da co quyen su dung tinh nang nay roi. Hay thu lam moi trang." (that, yt-trust-tiers-wizard-dialog)
+//   verify: Google / YouTube doi xac minh danh tinh; trust: hop thoai tinh nang khac (vd can xac minh de tai video dai)
+// Chay trong trang (page.until / page.eval).
+function findBlocker(s, reStale, reVerify) {
+  const ya = window.__ya
+  const stale = new RegExp(reStale, 'i')
+  const verify = new RegExp(reVerify, 'i')
+  for (const d of ya.find({ selector: s.blockers }, true)) {
+    if (d.closest('ytcp-uploads-dialog')) continue
+    const text = String(d.innerText || '').replace(/\s+/g, ' ').trim()
+    if (!text) continue
+    const t = ya.norm(text)
+    const inTrust = !!d.closest(s.trust)
+    if (verify.test(t)) return { kind: 'verify', text }
+    if (inTrust) return { kind: stale.test(t) ? 'stale' : 'trust', text }
+  }
+  if (/accounts\.google\.com\/.*(challenge|speedbump)/.test(location.href)) return { kind: 'verify', text: location.href }
+  return null
+}
+const blocker = (page) => page.eval(findBlocker, SEL, LABELS.trustStale, LABELS.verify).catch(() => null)
+// Ham chay trong trang co dung findBlocker: page.eval chen ma nguon ham (`(${fn})(...)`), nen gop ca findBlocker vao
+// (khong dung eval trong trang: Studio co CSP / Trusted Types)
+const withBlocker = (fn) => ({ toString: () => `(...a) => { ${findBlocker}; return (${fn})(...a) }` })
+
+const VERIFY_MSG = 'YouTube yêu cầu xác minh danh tính ("Xác minh danh tính của bạn" / "Verify it\'s you") trước khi cho tải video này lên (video dài hơn 15 phút chỉ tải được khi tài khoản đã xác minh). Hãy mở trang Tài khoản, vào YouTube Studio của kênh ở khung bên phải và tự làm theo hướng dẫn xác minh của Google, rồi đăng lại. Tool không tự xác minh thay bạn.'
+
 async function poll(page, fn, ms, every = 250) {
   const end = Date.now() + ms
   for (;;) {
@@ -169,9 +234,10 @@ async function poll(page, fn, ms, every = 250) {
 const DIALOG_FIELDS = ['paidPromotion', 'ai', 'tags', 'language', 'recordingDate', 'location', 'license', 'embeddable', 'notify', 'remix', 'category', 'comments']
 
 // job: { uc, file, title, description, tags, playlists (ten / ID PL... cua preset), madeForKids, thumbnail,
-//        subtitles: [{file, lang}], privacy: public|unlisted|private, publishAt (ISO|null), notifySubscribers,
+//        subtitles: [{file, lang}], privacy: public|unlisted|private, premiere (Cong khai: "Dat o che do Cong chieu ngay"),
+//        publishAt (ISO|null: "Len lich"), schedulePremiere ("Dat lam video Cong chieu" khi len lich), notifySubscribers,
 //        template (mau toi uu cua preset, src/optimize-template.js: cac muc chi co trong Studio), channelName }
-// Tra ve { id, url, warnings, missed, applied, schedule }
+// Tra ve { id, url, warnings, missed, applied, schedule, visibility: private|unlisted|public|schedule, premiere }
 //   missed: muc cua mau (playlists, paidPromotion, ai, tags, ..., endScreen) + 'notify' chua dat duoc trong hop thoai
 //   applied: muc cua mau da dung toi trong hop thoai (dat moi hoac da dung san)
 async function uploadVideo(page, job, o = {}) {
@@ -209,7 +275,7 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
   const t = job.template ? normalizeTemplate(job.template) : keepAll()
 
   // ---- 1. mo hop thoai tai len: trang tong quan kenh -> nut tai len / Tao -> Tai video len; khong duoc thi ?d=ud ----
-  await step('open', 'Mở hộp thoại tải video lên', async () => {
+  const openDialog = (name) => step('open', name, async () => {
     const clickOpen = async (wait) => {
       // nut tai len canh "Trang tong quan cua kenh"; trang tai cham: thay nut Tao truoc thi cho them chut nua
       let seenCreate = 0
@@ -235,7 +301,7 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
   })
 
   // ---- 2. chon file video ----
-  await step('file', `Chọn file ${path.basename(job.file)}`, async () => {
+  const chooseFile = () => step('file', `Chọn file ${path.basename(job.file)}`, async () => {
     if (await page.has({ selector: SEL.title })) throw new StepError('Hộp thoại tải lên đang mở một video khác (chưa xong). Hãy đóng nó trong Studio rồi chạy lại.', page.step)
     try {
       await chooseFiles(page, { input: SEL.fileInput, button: LABELS.selectFiles }, [job.file])
@@ -244,7 +310,26 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
     }
   })
 
-  // tu day video da nam trong Studio (ban nhap): loi bat buoc thi bao them de nguoi dung kiem tra truoc khi dang lai
+  // ---- 3. cho trang Chi tiet; hop thoai "Ban da hoan tat ... Hay thu lam moi trang" -> Da hieu, tai lai Studio, chon lai file
+  //         (toi da 2 lan); Google doi xac minh danh tinh -> dung, nguoi dung tu xac minh ----
+  const waitDetails = () => step('details', 'Chờ trang Chi tiết', () => page.until(withBlocker((s, re, reStale, reVerify) => {
+    const ya = window.__ya
+    const r = new RegExp(re, 'i')
+    const b = findBlocker(s, reStale, reVerify)
+    if (b) return `${b.kind}:${b.text}`
+    for (const el of ya.find({ selector: s.error }, true)) {
+      const t = String(el.innerText || '').replace(/\s+/g, ' ').trim()
+      if (t && r.test(ya.norm(t))) return 'err:' + t
+    }
+    const pr = ya.find({ selector: s.progress }, true)[0]
+    if (pr && r.test(ya.norm(pr.innerText))) return 'err:' + String(pr.innerText).trim()
+    return ya.count({ selector: s.title }) ? 'ok' : ''
+  }), [SEL, UP_ERROR.source, LABELS.trustStale, LABELS.verify], { timeout: Math.max(page.timeout, 60000), what: 'trang Chi tiết của video vừa chọn (Studio chưa nhận file)' }))
+  const noDraft = (e) => { e.noDraft = true; return e }
+
+  await openDialog('Mở hộp thoại tải video lên')
+  // sau khi chon file video da nam trong Studio (ban nhap): loi bat buoc thi bao them de nguoi dung kiem tra truoc khi dang lai
+  let chosen = false
   let stopProgress = false
   let lastPct = -1
   let progressText = ''
@@ -260,20 +345,32 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
   })()
   let reached = false // da thay tai len 100%
   try {
-    // ---- 3. trang Chi tiet ----
-    await step('details', 'Chờ trang Chi tiết', async () => {
-      const r = await page.until((s, re) => {
-        const r = new RegExp(re, 'i')
-        for (const el of window.__ya.find({ selector: s.error }, true)) {
-          const t = String(el.innerText || '').replace(/\s+/g, ' ').trim()
-          if (t && r.test(window.__ya.norm(t))) return 'err:' + t
-        }
-        const pr = window.__ya.find({ selector: s.progress }, true)[0]
-        if (pr && r.test(window.__ya.norm(pr.innerText))) return 'err:' + String(pr.innerText).trim()
-        return window.__ya.count({ selector: s.title }) ? 'ok' : ''
-      }, [SEL, UP_ERROR.source], { timeout: Math.max(page.timeout, 60000), what: 'trang Chi tiết của video vừa chọn (Studio chưa nhận file)' })
-      if (r.startsWith('err:')) throw new StepError(`YouTube báo: ${r.slice(4)}`, page.step)
-    })
+    // ---- 3. trang Chi tiet (lam moi Studio khi gap "Ban da hoan tat") ----
+    for (let attempt = 0; ; attempt++) {
+      await chooseFile()
+      chosen = true
+      const r = await waitDetails()
+      if (r === 'ok') break
+      const [kind] = r.split(':', 1)
+      const text = r.slice(kind.length + 1)
+      if (kind === 'err') throw new StepError(`YouTube báo: ${text}`, page.step)
+      if (kind === 'verify' || kind === 'trust') {
+        await shot('xac-minh')
+        throw noDraft(new StepError(`${VERIFY_MSG}${kind === 'trust' ? ` (Studio hiện: "${text.slice(0, 200)}")` : ''}`, page.step))
+      }
+      // stale: Studio da nhan file nhung trang cu chua biet tai khoan da co quyen (video dai hon 15 phut)
+      await shot('ban-da-hoan-tat')
+      if (attempt >= 2) throw noDraft(new StepError('YouTube vẫn báo "Bạn đã có quyền sử dụng tính năng này rồi. Hãy thử làm mới trang" sau 2 lần làm mới Studio. Hãy mở YouTube Studio của kênh ở trang Tài khoản, làm mới trang (F5) và thử tải video lên bằng tay một lần, rồi chạy lại.', page.step))
+      log('warn', `Studio báo "${text.slice(0, 120)}": bấm "Đã hiểu", làm mới Studio rồi chọn lại file (lần ${attempt + 1}/2).`)
+      await step('file', 'Đóng hộp thoại "Bạn đã hoàn tất"', async () => {
+        const close = { ...LABELS.trustClose, any: undefined, selector: 'ytcp-button, button', within: { selector: SEL.trust, hidden: true } }
+        if (await page.has({ selector: LABELS.trustClose.any })) await page.click({ selector: LABELS.trustClose.any })
+        else if (await page.has(close)) await page.click(close)
+        else await page.press('Escape')
+        await poll(page, async () => !(await blocker(page)), 5000)
+      })
+      await openDialog(`Làm mới Studio và mở lại hộp thoại tải lên (lần ${attempt + 1}/2)`)
+    }
 
     // tieu de: Studio dien san ten tep (hoi tre) -> chon het roi thay
     await step('details', 'Tiêu đề', async () => {
@@ -417,13 +514,32 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
     }
 
     // ---- 5. che do hien thi / len lich ----
+    // o Cong chieu: muon bat ma khong co o -> chi canh bao (khong bam Esc: co the dong hop thoai tai len); co o -> dat theo job
+    const premiereBox = async (label, want, key) => {
+      const box = inD(label)
+      const has = await poll(page, () => page.has(box), want ? 4000 : 300)
+      if (!has) {
+        if (want) warn(`Chưa đặt được "${label.text}": không thấy ô này (kênh có thể chưa dùng được tính năng Công chiếu).`)
+        return false
+      }
+      const ok = await soft(key, label.text, () => setCheckbox(page, box, want), `Chưa ${want ? 'đặt' : 'bỏ'} được "${label.text}"`)
+      return want && ok
+    }
+    let premiere = false
     if (at) {
       await step('schedule', `Lên lịch ${at.toLocaleString('vi-VN')}`, () => setSchedule(page, at))
+      // "Dat lam video Cong chieu" trong khung Len lich
+      premiere = await premiereBox(LABELS.schedulePremiere, !!job.schedulePremiere, 'schedule')
+      // doc lai ngay gio dang hien truoc khi bam Len lich: sai thi bao loi, khong luu
+      await step('schedule', 'Kiểm tra ngày giờ lên lịch', () => checkSchedule(page, at))
     } else {
       const lab = { public: LABELS.public, unlisted: LABELS.unlisted, private: LABELS.private }[job.privacy] || LABELS.private
       await step('visibility', `Chế độ hiển thị: ${lab.text}`, async () => {
         try { await pickRadio(page, inD(lab)) } catch (e) { throw new StepError(`Không chọn được chế độ hiển thị "${lab.text}": ${e.message}`, page.step) }
       })
+      // "Dat o che do Cong chieu ngay" (chi co duoi Cong khai)
+      if (job.premiere && job.privacy !== 'public') warn(`Bỏ qua "${LABELS.instantPremiere.text}": chỉ dùng được với chế độ Công khai.`)
+      else if (job.privacy === 'public') premiere = await premiereBox(LABELS.instantPremiere, !!job.premiere, 'visibility')
     }
 
     // ---- 6. cho tai len 100% (Studio cho bam Luu som, nhung dong hop thoai khi dang tai thi kho theo doi) ----
@@ -498,11 +614,12 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
         report(100)
       })
     }
-    return { id, url: `https://youtu.be/${id}`, warnings, missed: [...missed], applied: [...applied], schedule: at ? at.toISOString() : null }
+    const visibility = at ? 'schedule' : ({ public: 'public', unlisted: 'unlisted' }[job.privacy] || 'private')
+    return { id, url: `https://youtu.be/${id}`, warnings, missed: [...missed], applied: [...applied], schedule: at ? at.toISOString() : null, visibility, premiere }
   } catch (e) {
     if (!(e instanceof StepError)) throw e
     await shot((e.step || 'loi').replace(/[^\p{L}\w]+/gu, '-').slice(0, 40))
-    if (!/trước khi đăng lại/.test(e.message)) e.message += ' (Video có thể đã nằm trong Studio dạng bản nháp: xem trang Nội dung trước khi đăng lại.)'
+    if (chosen && !e.noDraft && !/trước khi đăng lại/.test(e.message)) e.message += ' (Video có thể đã nằm trong Studio dạng bản nháp: xem trang Nội dung trước khi đăng lại.)'
     throw e
   } finally {
     stopProgress = true
@@ -577,57 +694,142 @@ async function closeExtraDialogs(page) {
   }
 }
 
-// ---- len lich: mo "Len lich" -> ngay (o nhap trong lich) -> gio (o nhap) ----
+// ---- len lich: "Len lich" (#second-container, nut mui ten) -> "Dat lich chuyen sang che do cong khai":
+//      ngay (o ngay "30 thg 10, 2026" | "Oct 30, 2026" -> lich ytcp-date-picker) + gio (o gio "09:00" | "9:00 AM", danh sach moc 15 phut).
+//      Gio theo mui gio dang dat trong Studio (nut "Mui gio": tool khong doi). ----
+const reEsc = (x) => String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+// Cac dong chu co so cua o ngay (gia tri dang chon)
+async function dateLines(page) {
+  const info = await triggerInfo(page, inD(LABELS.dateTrigger)).catch(() => null)
+  return info ? info.lines.filter((l) => /\d/.test(l)) : []
+}
+// O ngay dang hien dung ngay `at` (so theo dung kieu chu dang hien)
+const dateIs = async (page, at) => (await dateLines(page)).some((l) => norm(l) === norm(dateText(at, l)))
+const timeValue = async (page) => {
+  const tIn = inD({ selector: SEL.timeInput })
+  if (await page.has(tIn)) return String((await page.value(tIn)) || '').trim()
+  const info = await triggerInfo(page, inD({ selector: SEL.timeTrigger })).catch(() => null)
+  return info ? (info.lines.find((l) => /\d/.test(l)) || '') : ''
+}
+const normT = (s) => norm(s).replace(/^0(\d:)/, '$1') // "09:00" = "9:00"
+const timeIs = async (page, at) => { const v = await timeValue(page); return !!v && normT(v) === normT(timeText(at, v)) }
+
 async function setSchedule(page, at) {
   const radio = inD(LABELS.scheduleRadio)
-  if (!(await page.has(inD(LABELS.dateTrigger)))) {
+  const trig = inD(LABELS.dateTrigger)
+  if (!(await page.has(trig))) {
     if (await page.has(inD(LABELS.scheduleOpen))) await page.click(inD(LABELS.scheduleOpen))
     else if (await page.has(radio)) await page.click(radio)
     else throw new StepError('Không thấy mục "Lên lịch".', page.step)
   }
-  await page.waitFor(inD(LABELS.dateTrigger), { timeout: 8000 })
+  await page.waitFor(trig, { timeout: 8000 })
   if ((await page.has(radio)) && !(await isChecked(page, radio, OS.radio))) await page.click(radio)
+  await setScheduleDate(page, at)
+  await setScheduleTime(page, at)
+}
 
-  // ngay: dinh dang theo chu dang hien tren o ngay ("28 thg 10, 2026" | "Oct 28, 2026" | "28/10/2026")
-  const trig = inD(LABELS.dateTrigger)
-  const sample = ((await triggerInfo(page, trig)) || { lines: [] }).lines.find((l) => /\d/.test(l)) || ''
-  const want = dateText(at, sample)
-  const shown = (timeout) => poll(page, async () => {
-    const info = await triggerInfo(page, trig)
-    return info && info.lines.some((l) => norm(l) === norm(want))
-  }, timeout)
-  if (!(await shown(300))) {
-    await page.click(trig)
-    const input = { selector: 'ytcp-date-picker #textbox input, ytcp-date-picker input' }
-    await page.waitFor(input)
-    await page.type(input, want)
-    await page.press('Enter')
-    let ok = await shown(1500)
-    if (!ok) {
-      await page.eval((s) => { const f = window.__ya.one({ selector: s + ' form', hidden: true }); if (f && f.requestSubmit) f.requestSubmit() }, OS.datePicker)
-      ok = await shown(2000)
-    }
-    if (!ok && (await pickCalendarDay(page, at))) ok = await shown(3000)
-    if (!ok) throw new StepError(`Không đặt được ngày lên lịch ${want}.`, page.step)
+// Ngay: bam o ngay -> go vao o nhap o dau lich theo kieu dang hien -> Enter; khong nhan thi bam o ngay trong lich
+async function setScheduleDate(page, at) {
+  if (await dateIs(page, at)) return
+  const sample = (await dateLines(page))[0] || ''
+  const want = dateText(at, sample || 'thg')
+  const input = { selector: SEL.dateInput }
+  const open = async () => {
+    if (await page.has(input)) return
+    await page.click(inD(LABELS.dateTrigger))
+    await page.waitFor(input, { timeout: 8000 })
   }
+  await open()
+  const cur = String((await page.value(input)) || '')
+  await page.type(input, dateText(at, /\d/.test(cur) ? cur : sample || 'thg'))
+  await page.press('Enter')
+  let ok = await poll(page, () => dateIs(page, at), 1500)
+  if (!ok && (await page.has(input))) {
+    await page.eval((s) => { const f = window.__ya.one({ selector: s + ' form', hidden: true }); if (f && f.requestSubmit) f.requestSubmit() }, 'ytcp-date-picker')
+    ok = await poll(page, () => dateIs(page, at), 2000)
+  }
+  if (!ok) {
+    await open()
+    if (await pickScheduleDay(page, at)) ok = await poll(page, () => dateIs(page, at), 3000)
+  }
+  if (!ok) {
+    if (await page.has(input)) await page.press('Escape')
+    throw new StepError(`Không đặt được ngày lên lịch ${want} (ô ngày đang là "${(await dateLines(page))[0] || ''}").`, page.step)
+  }
+}
 
-  // gio: o nhap ("19:00" | "7:00 PM"); khong co o nhap thi chon trong danh sach
+// Lich cua Studio: cac thang [role=listitem][aria-label="thg 10 2026" | "Oct 2026"] > .calendar-day (ngay da qua bi khoa);
+// lui / toi bang #prev-month / #next-month toi khi thay thang can tim. true neu da bam dung ngay.
+async function pickScheduleDay(page, date) {
+  const ym = date.getFullYear() * 12 + date.getMonth()
+  for (let i = 0; i < 36; i++) {
+    const r = await page.eval((s, ym, day) => {
+      const ya = window.__ya
+      const EN = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+      const parse = (l) => {
+        l = ya.norm(l)
+        const e = /^([a-z]{3})[a-z]*\.?\s+(\d{4})$/.exec(l)
+        if (e && EN.includes(e[1])) return +e[2] * 12 + EN.indexOf(e[1])
+        const m = /(\d{1,2})\D+(\d{4})/.exec(l) // "thg 10 2026", "tháng 10 năm 2026"
+        return m ? +m[2] * 12 + (+m[1] - 1) : null
+      }
+      const seen = []
+      for (const m of ya.find({ selector: s.calMonth, hidden: true }, true)) {
+        const v = parse(m.getAttribute('aria-label') || '')
+        if (v === null) continue
+        seen.push(v)
+        if (v !== ym) continue
+        m.scrollIntoView({ block: 'center' })
+        const d = [...m.querySelectorAll('.calendar-day')].find((x) => !x.classList.contains('invisible') && ya.norm(x.textContent) === String(day))
+        if (!d) return { err: 'không thấy ngày' }
+        if (d.classList.contains('disabled') || d.hasAttribute('disabled') || d.getAttribute('aria-disabled') === 'true') return { err: 'ngày bị khóa' }
+        for (const x of document.querySelectorAll('[data-ya-day]')) x.removeAttribute('data-ya-day')
+        d.setAttribute('data-ya-day', '1')
+        return { ok: true }
+      }
+      // lich that con giu 1 thang gia "Jan 1900": bo qua
+      const real = seen.filter((v) => v > 1970 * 12)
+      return { dir: real.length ? (Math.min(...real) > ym ? 'prev' : 'next') : '' }
+    }, SEL, ym, date.getDate())
+    if (r.ok) { await page.click({ selector: '[data-ya-day="1"]' }); return true }
+    if (r.err || !r.dir) return false
+    await page.click({ selector: r.dir === 'prev' ? SEL.calPrev : SEL.calNext })
+  }
+  return false
+}
+
+// Gio: go vao o gio roi bam dung moc trong danh sach (hoac Enter); khong nhan thi mo danh sach va bam
+async function setScheduleTime(page, at) {
   const tIn = inD({ selector: SEL.timeInput })
+  const tTrig = inD({ selector: SEL.timeTrigger })
   if (await page.has(tIn)) {
-    const cur = String((await page.value(tIn)) || '')
-    const wantT = timeText(at, cur)
-    if (norm(cur) !== norm(wantT)) {
-      await page.type(tIn, wantT)
-      await page.press('Enter')
-      await sleep(300)
-      const v = String((await page.value(tIn)) || '')
-      if (norm(v) !== norm(wantT)) throw new StepError(`Không đặt được giờ lên lịch ${wantT} (ô giờ đang là "${v}").`, page.step)
+    if (await timeIs(page, at)) return
+    const want = timeText(at, await timeValue(page))
+    const choice = { regex: `^0?${reEsc(normT(want))}$`, selector: SEL.option, within: { selector: SEL.listbox } }
+    await page.type(tIn, want)
+    if (await poll(page, () => page.has(choice), 1000)) await page.click(choice)
+    else await page.press('Enter')
+    let ok = await poll(page, () => timeIs(page, at), 2000)
+    if (!ok) {
+      await page.click(tIn)
+      if (await poll(page, () => page.has(choice), 2500)) { await page.click(choice); ok = await poll(page, () => timeIs(page, at), 2000) }
     }
-  } else if (await page.has(inD({ selector: SEL.timeTrigger }))) {
-    const info = await triggerInfo(page, inD({ selector: SEL.timeTrigger }))
-    const wantT = timeText(at, (info && info.lines.find((l) => /\d/.test(l))) || '')
-    if (!(info && info.lines.some((l) => norm(l) === norm(wantT)))) await pickOption(page, inD({ selector: SEL.timeTrigger }), [wantT])
+    if (!ok) throw new StepError(`Không đặt được giờ lên lịch ${want} (ô giờ đang là "${await timeValue(page)}").`, page.step)
+  } else if (await page.has(tTrig)) {
+    const want = timeText(at, await timeValue(page))
+    if (!(await timeIs(page, at))) await pickOption(page, tTrig, [want])
   } else throw new StepError('Không thấy ô giờ lên lịch.', page.step)
 }
 
-module.exports = { LABELS, SEL, uploadVideo, uploadPhase, ID_RE, DIALOG_FIELDS, _t: { setSchedule, addSubtitles, readId, openEndScreen, touches } }
+// Doc lai o ngay + o gio sau khi dat xong (truoc khi bam Len lich)
+async function checkSchedule(page, at) {
+  const d = (await dateLines(page))[0] || ''
+  const tm = await timeValue(page)
+  if (!(await dateIs(page, at)) || !(await timeIs(page, at))) {
+    throw new StepError(`Ngày giờ lên lịch đang hiện "${d} ${tm}", không phải ${dateText(at, d || 'thg')} ${timeText(at, tm)}.`, page.step)
+  }
+  return { date: d, time: tm }
+}
+
+module.exports = { LABELS, SEL, uploadVideo, uploadPhase, ID_RE, DIALOG_FIELDS, _t: { setSchedule, checkSchedule, pickScheduleDay, findBlocker, addSubtitles, readId, openEndScreen, touches } }

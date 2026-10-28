@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><title>Trang tổng quan của kênh - YouTube Studio</title>
+<style>body{font-family:Roboto,Arial,sans-serif;font-size:14px} tp-yt-paper-dialog,ytcp-uploads-file-picker,ytcp-dialog{display:block} img,video{width:24px;height:24px}</style></head>
+<body>
+<!-- Doan HTML THAT tu Studio tieng Viet cua nguoi dung (loi-trang 2026-10-28T01-00-20 "dang-video-Chờ-trang-Chi-tiết"):
+     hop thoai "Tai video len" van o buoc chon tep (workflow-step="SELECT_FILES") du Studio da nhan file (video#local-video-player
+     co src blob:), bi hop thoai yt-trust-tiers-wizard-dialog "Bạn đã hoàn tất" / "Hãy thử làm mới trang." / [Đã hiểu] che
+     (video 48 phut: tai video dai hon 15 phut la tinh nang cua tai khoan da xac minh, trang Studio chua cap nhat).
+     Kem nut "Tạo" (thanh tren cung) va nut tai len #upload-icon cua trang tong quan kenh. Bai kiem: tests/flows/upload.test.js.
+     Da bo script/style/svg va chu "style-scope ..." trong class; an danh: ma kenh -> UCxxx..., blob -> 000..., bo anh. -->
+<ytcp-button class="ytcpAppHeaderCreateIcon" tabindex="-1" type="outline" button-style="default" icon-alignment="start" icon="yt-sys-icons:video_call" aria-disabled="false"><dom-if></dom-if><div><ytcp-button-shape><button class="ytcpButtonShapeImplHost ytcpButtonShapeImpl--outline ytcpButtonShapeImpl--mono ytcpButtonShapeImpl--size-m ytcpButtonShapeImpl--icon-leading ytcpButtonShapeImpl--enable-backdrop-filter-experiment" title="" aria-label="Tạo" aria-disabled="false" tabindex="0"><div aria-hidden="true" class="ytcpButtonShapeImpl__icon"><span class="ytIconWrapperHost"><span class="yt-icon-shape ytSpecIconShapeHost"><div></div></span></span></div><div class="ytcpButtonShapeImpl__button-text-content">Tạo</div><yt-touch-feedback-shape aria-hidden="true" class="ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse"><div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div></yt-touch-feedback-shape></button></ytcp-button-shape></div></ytcp-button>
+<ytcp-quick-actions id="dashboard-actions"><dom-if></dom-if><a test-id="upload-icon-url" class="item" tabindex="-1"><ytcp-icon-button id="upload-icon" track-click="" tabindex="0" unified="" aria-disabled="false" aria-label="Tải video lên" role="button"><yt-icon class="remove-defaults"><span class="yt-icon-shape ytSpecIconShapeHost"><div></div></span></yt-icon><ytcp-tooltip offset="6" suppress-aria-announcement="true"></ytcp-tooltip><dom-if restamp=""></dom-if><tp-yt-paper-ripple class="circle"><div id="background"></div>
+<div id="waves"></div>
+</tp-yt-paper-ripple></ytcp-icon-button></a><dom-if></dom-if><a class="item" tabindex="-1" href="/channel/UCxxxxxxxxxxxxxxxxxxxxxx/livestreaming"><ytcp-icon-button id="live-icon" track-click="" tabindex="0" unified="" aria-disabled="false" aria-label="Phát trực tiếp" role="button"><yt-icon class="remove-defaults"><span class="yt-icon-shape ytSpecIconShapeHost"><div></div></span></yt-icon><ytcp-tooltip offset="6" suppress-aria-announcement="true"></ytcp-tooltip><dom-if restamp=""></dom-if></ytcp-icon-button></a><dom-if></dom-if><dom-if></dom-if><a class="item" tabindex="-1" target="_blank" href="https://www.youtube.com/channel/UCxxxxxxxxxxxxxxxxxxxxxx/posts?show_create_dialog=1"><ytcp-icon-button id="live-icon" track-click="" tabindex="0" unified="" aria-disabled="false" aria-label="Tạo bài đăng" role="button"><yt-icon class="remove-defaults"><span class="yt-icon-shape ytSpecIconShapeHost"><div></div></span></yt-icon><ytcp-tooltip offset="6" suppress-aria-announcement="true"></ytcp-tooltip><dom-if restamp=""></dom-if></ytcp-icon-button></a><dom-if></dom-if><dom-if></dom-if><dom-repeat restamp=""></dom-repeat></ytcp-quick-actions>
+<ytcp-uploads-dialog unified="" workflow-step="SELECT_FILES"><tp-yt-paper-dialog id="dialog" no-cancel-on-outside-click="" restore-focus-on-close="" style-target="host" role="dialog" tabindex="-1" with-backdrop="">
+  <div class="dialog-content">
+    <div class="header">
+      <div class="title-row">
+        <ytcp-animatable class="metadata-fade-in-section">
+          <div id="title">Tải video lên</div>
+        </ytcp-animatable>
+        <ytcp-tooltip for="title" truncation=""></ytcp-tooltip>
+        <div class="close-button-area">
+          <ytcp-animatable class="metadata-fade-in-section">
+            <ytcp-badge class="draft-badge" hidden="" state="default" unified=""><div class="container"><dom-if restamp=""></dom-if><div class="label">Đang lưu...</div><dom-if restamp=""></dom-if></div></ytcp-badge>
+          </ytcp-animatable>
+          <ytcp-send-feedback-button bucket="ReStudioUploads">
+            <ytcp-button icon="icons:feedback" type="text" tabindex="-1" button-style="default" icon-alignment="start" aria-disabled="false"><dom-if></dom-if><div><ytcp-button-shape><button class="ytcpButtonShapeImplHost ytcpButtonShapeImpl--text ytcpButtonShapeImpl--mono ytcpButtonShapeImpl--size-m ytcpButtonShapeImpl--icon-button ytcpButtonShapeImpl--enable-backdrop-filter-experiment" title="" aria-label="Gửi ý kiến phản hồi" aria-disabled="false" tabindex="0"><div aria-hidden="true" class="ytcpButtonShapeImpl__icon"><span class="ytIconWrapperHost"><span class="yt-icon-shape ytSpecIconShapeHost"><div></div></span></span></div><yt-touch-feedback-shape aria-hidden="true" class="ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse"><div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div></yt-touch-feedback-shape></button></ytcp-button-shape></div></ytcp-button>
+          </ytcp-send-feedback-button>
+          <ytcp-button id="ytcp-uploads-dialog-close-button" icon="close" type="text" tabindex="-1" button-style="default" icon-alignment="start" aria-disabled="false"><dom-if></dom-if><div><ytcp-button-shape><button class="ytcpButtonShapeImplHost ytcpButtonShapeImpl--text ytcpButtonShapeImpl--mono ytcpButtonShapeImpl--size-m ytcpButtonShapeImpl--icon-button ytcpButtonShapeImpl--enable-backdrop-filter-experiment" title="" aria-label="Đóng" aria-disabled="false" tabindex="0"><div aria-hidden="true" class="ytcpButtonShapeImpl__icon"><span class="ytIconWrapperHost"><span class="yt-icon-shape ytSpecIconShapeHost"><div></div></span></span></div><yt-touch-feedback-shape aria-hidden="true" class="ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse"><div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div></yt-touch-feedback-shape></button></ytcp-button-shape></div></ytcp-button>
+        </div>
+      </div>
+      <ytcp-animatable class="metadata-fade-in-section stepper-animatable">
+        <dom-if restamp=""></dom-if>
+        <dom-if restamp=""></dom-if>
+        <dom-if restamp=""></dom-if>
+      </ytcp-animatable>
+    </div>
+    <tp-yt-paper-progress indeterminate="" role="progressbar" value="0" aria-valuemin="0" aria-valuemax="100" aria-disabled="false" hidden=""><div id="progressContainer">
+  <div id="secondaryProgress" hidden=""></div>
+  <div id="primaryProgress" class="indeterminate"></div>
+</div>
+</tp-yt-paper-progress>
+    <div class="dialog-scrim"></div>
+      <ytcp-uploads-file-picker id="ytcp-uploads-dialog-file-picker" unified=""><div id="content">
+  <ytcp-uploads-file-picker-animation id="animation" state="idle"><div id="circle"><div id="arrow-group"><div id="arrow"><div id="arrow-tip"></div><div id="smoke"></div><div id="arrow-line"></div></div><div id="arrow-underline"></div></div><div id="speed-line"><img alt="" src=""></div><div id="burst"><div id="stroke"></div></div></div></ytcp-uploads-file-picker-animation>
+  <p class="label">Kéo và thả tệp video để tải lên</p>
+  <div class="error-area">
+    <yt-icon class="warning-icon" compact="" icon="yt-studio-system-icons:warning"><span class="yt-icon-shape ytSpecIconShapeHost"><div></div></span></yt-icon>
+    <div class="error-details" id="error-message"></div>
+    <yt-formatted-string class="error-details" is-empty=""><yt-attributed-string></yt-attributed-string></yt-formatted-string>
+  </div>
+  <ytcp-button id="select-files-button" type="filled" tabindex="-1" button-style="default" icon-alignment="start" aria-disabled="false"><dom-if></dom-if><div><ytcp-button-shape><button class="ytcpButtonShapeImplHost ytcpButtonShapeImpl--filled ytcpButtonShapeImpl--mono ytcpButtonShapeImpl--size-m ytcpButtonShapeImpl--enable-backdrop-filter-experiment" title="" aria-label="Chọn tệp" aria-disabled="false" tabindex="0"><div class="ytcpButtonShapeImpl__button-text-content">Chọn tệp</div><yt-touch-feedback-shape aria-hidden="true" class="ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponseInverse"><div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div></yt-touch-feedback-shape></button></ytcp-button-shape></div></ytcp-button><input type="file" name="Filedata" multiple="" aria-hidden="true" tabindex="-1">
+  <p class="disclaimer" id="disclaimer-html">Khi gửi video lên YouTube, bạn xác nhận rằng bạn đồng ý với
+        <a class="link-placeholder" href="https://www.youtube.com/t/terms" target="_blank">Điều khoản dịch vụ</a>
+        và
+        <a class="link-placeholder" href="https://www.youtube.com/yt/about/policies/" target="_blank">Nguyên tắc cộng đồng</a> của YouTube.</p>
+  <p class="disclaimer">
+    <ps-dom-if restamp=""></ps-dom-if>
+    <span>Vui lòng đảm bảo video của bạn không vi phạm quyền riêng tư hoặc bản quyền của người khác.</span>
+    <a target="_blank" href="https://www.youtube.com/yt/copyright">Tìm hiểu thêm</a>
+  </p>
+</div>
+</ytcp-uploads-file-picker>
+    <dom-if restamp=""></dom-if>
+    <ytcp-animatable id="scrollable-content" class="metadata-fade-in-section">
+      <dom-if restamp=""></dom-if>
+    </ytcp-animatable>
+    <ytcp-error-section feature="UPLOADS" hidden=""><div class="hcenter-child">
+  <div id="error-block">
+    <div id="error-image">
+      <img alt="" src="">
+    </div>
+    <p id="error-message">Rất tiếc, đã xảy ra lỗi.</p>
+    <ytcp-button id="error-retry-button" hidden="" tabindex="-1" type="tonal" button-style="default" icon-alignment="start" aria-disabled="false"><dom-if></dom-if><div><ytcp-button-shape><button class="ytcpButtonShapeImplHost ytcpButtonShapeImpl--tonal ytcpButtonShapeImpl--mono ytcpButtonShapeImpl--size-m ytcpButtonShapeImpl--enable-backdrop-filter-experiment" title="" aria-label="Thử lại" aria-disabled="false" tabindex="0"><div class="ytcpButtonShapeImpl__button-text-content">Thử lại</div><yt-touch-feedback-shape aria-hidden="true" class="ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse"><div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div></yt-touch-feedback-shape></button></ytcp-button-shape></div></ytcp-button>
+  </div>
+</div>
+</ytcp-error-section>
+    <ytcp-animatable class="button-area metadata-fade-in-section">
+      <div class="inner-button-area">
+        <div class="left-button-area">
+          <ytcp-video-upload-progress unified="" checks-summary-status-v2="UPLOAD_CHECKS_DATA_SUMMARY_STATUS_COMPLETED" has-icon-to-display=""><dom-if restamp=""></dom-if><span class="progress-label"></span><dom-if restamp=""></dom-if><dom-if restamp=""></dom-if></ytcp-video-upload-progress>
+          <ytcp-ve class="error-area" role="none">
+            <yt-icon class="error-icon" icon="yt-sys-icons:warning"><span class="yt-icon-shape ytSpecIconShapeHost"><div></div></span></yt-icon>
+            <div class="error-short"> </div>
+            <div class="error-details" id="error-message"></div>
+            <yt-formatted-string class="error-details" is-empty=""><yt-attributed-string></yt-attributed-string></yt-formatted-string>
+            <dom-if restamp=""></dom-if>
+            <dom-if restamp=""></dom-if>
+            <dom-if restamp=""></dom-if>
+          </ytcp-ve>
+        </div>
+        <div class="right-button-area">
+          <ytcp-button id="back-button" type="tonal" tabindex="-1" button-style="default" icon-alignment="start" hidden="" aria-disabled="false"><dom-if></dom-if><div><ytcp-button-shape><button class="ytcpButtonShapeImplHost ytcpButtonShapeImpl--tonal ytcpButtonShapeImpl--mono ytcpButtonShapeImpl--size-m ytcpButtonShapeImpl--enable-backdrop-filter-experiment" title="" aria-label="Quay lại" aria-disabled="false" tabindex="0"><div class="ytcpButtonShapeImpl__button-text-content">Quay lại</div><yt-touch-feedback-shape aria-hidden="true" class="ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse"><div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div></yt-touch-feedback-shape></button></ytcp-button-shape></div></ytcp-button>
+          <ytcp-button id="next-button" type="filled" tabindex="-1" button-style="default" icon-alignment="start" hidden="" aria-disabled="false"><dom-if></dom-if><div><ytcp-button-shape><button class="ytcpButtonShapeImplHost ytcpButtonShapeImpl--filled ytcpButtonShapeImpl--mono ytcpButtonShapeImpl--size-m ytcpButtonShapeImpl--enable-backdrop-filter-experiment" title="" aria-label="Tiếp" aria-disabled="false" tabindex="0"><div class="ytcpButtonShapeImpl__button-text-content">Tiếp</div><yt-touch-feedback-shape aria-hidden="true" class="ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponseInverse"><div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div></yt-touch-feedback-shape></button></ytcp-button-shape></div></ytcp-button>
+          <ytcp-button id="done-button" track-click="" type="filled" disabled="" tabindex="-1" button-style="default" icon-alignment="start" hidden="" aria-disabled="true" aria-describedby="goog_0"><dom-if></dom-if><div><ytcp-button-shape><button class="ytcpButtonShapeImplHost ytcpButtonShapeImpl--filled ytcpButtonShapeImpl--size-m ytcpButtonShapeImpl--disabled ytcpButtonShapeImpl--enable-backdrop-filter-experiment" title="" disabled="true" aria-label="Lưu" aria-disabled="true" tabindex="0" aria-describedby="goog_0"><div class="ytcpButtonShapeImpl__button-text-content">Lưu</div></button></ytcp-button-shape></div></ytcp-button>
+          <dom-if restamp=""></dom-if>
+          <dom-if restamp=""></dom-if>
+        </div>
+      </div>
+    </ytcp-animatable>
+  </div>
+</tp-yt-paper-dialog>
+  <ytcp-latency-measurement trigger-route-regex="channel.videos"><ps-dom-if restamp=""></ps-dom-if></ytcp-latency-measurement>
+<dom-if restamp=""></dom-if>
+<dom-if restamp=""></dom-if>
+<ytcp-uploads-file-analyzer id="file-analyzer"><video id="local-video-player" hidden="" preload="metadata" src="blob:https://studio.youtube.com/00000000-0000-0000-0000-000000000000"></video></ytcp-uploads-file-analyzer>
+<ytcp-uploads-flow-complete-handler></ytcp-uploads-flow-complete-handler>
+<div class="popup-host-behavior-backdrop"></div></ytcp-uploads-dialog><tp-yt-iron-overlay-backdrop opened="" class="opened">
+</tp-yt-iron-overlay-backdrop><yt-trust-tiers-wizard-dialog unified=""><ytcp-dialog id="dialog" aria-labelledby="title" max-width="512" min-width="512" no-header-divider="" no-shrinking="" scrollable="" unified=""><tp-yt-paper-dialog id="dialog" restore-focus-on-close="" aria-labelledby="title" style-target="host" role="dialog" tabindex="-1" with-backdrop=""><div class="header"><div class="header-content"><div slot="primary-header" class="header-shim"></div></div><tp-yt-paper-progress indeterminate="" aria-label="Đang tiến hành thao tác" role="progressbar" value="0" aria-valuemin="0" aria-valuemax="100" aria-disabled="false" hidden=""><div id="progressContainer">
+  <div id="secondaryProgress" hidden=""></div>
+  <div id="primaryProgress" class="indeterminate"></div>
+</div>
+</tp-yt-paper-progress></div><div class="content"><div class="ytcp-dialog-slot-content title" slot="content" wizard-class="simple"><h1 id="title">Bạn đã hoàn tất<wbr></h1></div><yt-trust-tiers-wizard id="wizard" class="ytcp-dialog-slot-content" slot="content" wizard-class="simple" unified=""><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ytcp-ve role="none"><div class="blocker"><p>Bạn đã có quyền sử dụng tính năng này rồi.</p><p>Hãy thử làm mới trang.</p></div></ytcp-ve><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if></yt-trust-tiers-wizard></div><div class="footer"><div class="ytcp-dialog-slot-primary-footer" slot="primary-footer"><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ytcp-button id="close-button" tabindex="-1" type="tonal" button-style="default" icon-alignment="start" aria-disabled="false"><dom-if></dom-if><div><ytcp-button-shape><button class="ytcpButtonShapeImplHost ytcpButtonShapeImpl--tonal ytcpButtonShapeImpl--mono ytcpButtonShapeImpl--size-m ytcpButtonShapeImpl--enable-backdrop-filter-experiment" title="" aria-label="Đã hiểu" aria-disabled="false" tabindex="0"><div class="ytcpButtonShapeImpl__button-text-content">Đã hiểu</div><yt-touch-feedback-shape aria-hidden="true" class="ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse"><div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div></yt-touch-feedback-shape></button></ytcp-button-shape></div></ytcp-button><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if><ps-dom-if restamp=""></ps-dom-if></div></div><dom-if restamp=""></dom-if>
+</tp-yt-paper-dialog></ytcp-dialog><div class="popup-host-behavior-backdrop"></div></yt-trust-tiers-wizard-dialog>
+</body></html>
