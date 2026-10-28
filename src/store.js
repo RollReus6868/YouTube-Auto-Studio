@@ -20,6 +20,9 @@ const DEFAULTS = {
   replyMode: 'review', // review | auto | off
   replyPerHour: 20,
   skipWords: '',
+  // phan mo ta mac dinh (vd link donate / ebook) them vao mo ta moi video; co thi thay mo ta Studio dien san khi dang
+  descDefault: '',
+  descPosition: 'above', // phan Gemini viet / mo ta rieng cua video nam: above = tren | below = duoi phan mac dinh
   uploadChannel: '', // khoa kenh (UC ID) dang video qua hop thoai tai len cua Studio (trang Dang video)
 }
 

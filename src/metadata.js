@@ -73,7 +73,18 @@ function render(template, vars) {
     .replace(/\n{3,}/g, '\n\n')
 }
 
+// Ghep mo ta cuoi cung: phan rieng cua video (Gemini viet / mo ta trong file .txt / mo ta cua mau) va phan mo ta
+// mac dinh (Cai dat: link donate, ebook...). position 'above' = phan rieng nam TREN phan mac dinh, 'below' = duoi.
+// Phan trong thi bo; hai phan cach nhau mot dong trong. Gioi han 5000 byte / dau < > do validateMeta kiem.
+const DESC_POSITIONS = ['above', 'below']
+function composeDescription(own, def, position = 'above') {
+  const a = String(own || '').trim()
+  const b = String(def || '').trim()
+  return (position === 'below' ? [b, a] : [a, b]).filter(Boolean).join('\n\n')
+}
+
 // Ket qua cuoi cung cho mot video: preset + ghi de tu info.txt.
+// extra.settings: cai dat cua app (descDefault: phan mo ta mac dinh, descPosition: above | below).
 function buildVideoMeta(item, preset, extra = {}) {
   const p = normalizePreset(preset)
   const info = item.info || {}
@@ -91,10 +102,14 @@ function buildVideoMeta(item, preset, extra = {}) {
   // thu muc phang: tieu de = ten file (tru khi file .txt rieng co "Tieu de:")
   const title = (item.titleFromName && !info.tieu_de ? String(item.name || '') : render(info.tieu_de || p.title, vars)).trim()
   vars.tieu_de = title
-  const description = render(info.mo_ta || p.description, vars).trim()
+  const settings = extra.settings || {}
+  const fixed = render(settings.descDefault || '', vars).trim()
+  const description = composeDescription(render(info.mo_ta || p.description, vars), fixed, settings.descPosition)
   const privacy = ['public', 'unlisted', 'private'].includes(info.hien_thi) ? info.hien_thi : p.privacy
   return {
     title, description, tags,
+    // co phan mo ta mac dinh: khi dang, thay mo ta Studio dien san (mo ta mac dinh cua kenh) de khong lap dong
+    descReplace: !!fixed,
     playlist: info.playlist || p.playlist,
     madeForKids: info.tre_em !== undefined ? info.tre_em : p.madeForKids,
     notifySubscribers: p.notifySubscribers,
@@ -116,7 +131,7 @@ function validateMeta(m) {
   if (/[<>]/.test(m.title)) errs.push('Tiêu đề không được chứa dấu < hoặc >.')
   if (/[<>]/.test(m.description)) errs.push('Mô tả không được chứa dấu < hoặc >.')
   const bytes = Buffer.byteLength(m.description, 'utf8')
-  if (bytes > LIMITS.descriptionBytes) errs.push(`Mô tả dài ${bytes} byte, YouTube chỉ cho tối đa ${LIMITS.descriptionBytes}.`)
+  if (bytes > LIMITS.descriptionBytes) errs.push(`Mô tả dài ${bytes} byte${m.descReplace ? ' (tính cả phần mô tả mặc định trong Cài đặt)' : ''}, YouTube chỉ cho tối đa ${LIMITS.descriptionBytes}.`)
   // YouTube tinh dau phay giua cac the, va the co dau cach duoc tinh them 2 dau ngoac kep
   const tagLen = m.tags.reduce((n, t) => n + [...t].length + (/\s/.test(t) ? 2 : 0), 0) + Math.max(0, m.tags.length - 1)
   if (tagLen > LIMITS.tags) errs.push(`Thẻ dài ${tagLen} ký tự, YouTube chỉ cho tối đa ${LIMITS.tags}.`)
@@ -176,4 +191,4 @@ function planSchedule(items, presetFor, now = new Date()) {
   })
 }
 
-module.exports = { CATEGORIES, LIMITS, SCHEDULE_MODES, defaultPreset, normalizePreset, splitTags, render, buildVideoMeta, validateMeta, planSchedule }
+module.exports = { CATEGORIES, LIMITS, SCHEDULE_MODES, DESC_POSITIONS, composeDescription, defaultPreset, normalizePreset, splitTags, render, buildVideoMeta, validateMeta, planSchedule }

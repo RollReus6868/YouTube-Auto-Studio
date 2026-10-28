@@ -158,6 +158,18 @@ module.exports = [
     assert.deepEqual(r.missed, [])
   }],
 
+  ['co phan mo ta mac dinh (Cai dat): thay mo ta Studio dien san bang mo ta da ghep, khong lap dong', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { nocheckwarn: true })
+    const full = `${DESC}\n\nỦng hộ kênh: https://example.org/ung-ho\nSách điện tử: https://example.org/sach`
+    const r = await run(ctx, JOB(f, { thumbnail: null, description: full, replaceDescription: true })).p
+    const [u] = await uploads(ctx.mock)
+    assert.equal(u.description, full, 'thay het mo ta Studio dien san')
+    assert(!u.description.includes('Donate to Us'), 'khong con mo ta mac dinh cua kenh')
+    assert.deepEqual(r.warnings, [], ctx.logs.join('\n'))
+    assert(ctx.logs.some((l) => /Đã thay mô tả Studio điền sẵn/.test(l)), ctx.logs.join('\n'))
+  }],
+
   ['phu de, danh sach phat moi (tu tao), rieng tu, tat thong bao, mau: ngon ngu, danh muc, giay phep, nhung, binh luan', async (ctx) => {
     const f = files(ctx.tmp)
     await flags(ctx, {})

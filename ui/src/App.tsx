@@ -1,7 +1,7 @@
 import {
-  AlertTriangle, ArrowUpCircle, BookOpen, CalendarClock, Clapperboard, Copy, Download, Eraser, ExternalLink, FileVideo, FolderOpen, FolderPlus, Globe, Home,
-  ImageIcon, LayoutTemplate, Palette, Plus, RefreshCw, Save, ScrollText, Settings, Sparkles,
-  Square, Subtitles, Trash2, Upload,
+  AlertTriangle, ArrowUpCircle, BookOpen, CalendarClock, Clapperboard, Copy, Download, Eraser, ExternalLink, FileText, FileVideo, FolderOpen, FolderPlus, Globe, Home,
+  ImageIcon, LayoutTemplate, Palette, Paperclip, Plus, RefreshCw, Save, ScrollText, Settings, Sparkles,
+  Square, Subtitles, Trash2, Upload, X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { call, demoState, emptyState, isDemo, newPreset, type Job, type Preset, type Settings as SettingsT, type State, type VideoItem } from './api'
@@ -151,6 +151,7 @@ function VideoCard({ v, job, open, onToggle, busy, connected, send }: {
             {v.video && <Chip icon={FileVideo}>{v.video}</Chip>}
             {v.thumb && <Chip icon={ImageIcon}>{v.thumb}</Chip>}
             {v.subtitles.length > 0 && <Chip icon={Subtitles}>{v.subtitles.map((s) => s.lang).join(', ')}</Chip>}
+            {v.script && <Chip icon={FileText} tone="active">Kịch bản: {v.script.file}</Chip>}
           </div>
         </div>
       </button>
@@ -164,8 +165,28 @@ function VideoCard({ v, job, open, onToggle, busy, connected, send }: {
       {open && (
         <div className="space-y-3 border-t border-border/50 p-3 text-sm">
           <div>
-            <p className="mb-1 text-xs font-bold text-muted-foreground">Mô tả</p>
+            <p className="mb-1 text-xs font-bold text-muted-foreground">Mô tả sẽ đăng</p>
             <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted/40 p-2.5 font-sans text-[13px]">{v.meta.description || '(trống)'}</pre>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {v.meta.descReplace
+                ? 'Đã gồm phần mô tả mặc định (Cài đặt). Khi đăng, tool thay mô tả Studio điền sẵn bằng đúng nội dung này.'
+                : 'Khi đăng, tool giữ mô tả mặc định của kênh mà Studio điền sẵn rồi thêm nội dung này xuống dưới.'}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-2 text-xs">
+            <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            {v.script ? (
+              <>
+                <span className="min-w-0 flex-1 break-words"><b>Kịch bản cho Gemini:</b> {v.script.file}{v.script.auto ? ' (tự nhận, cùng tên video)' : ''}</span>
+                <Button variant="subtle" className="h-7 px-2 text-xs" onClick={() => send('script_attach', v.id)}><Paperclip /> Đổi</Button>
+                <Button variant="subtle" className="h-7 px-2 text-xs" onClick={() => send('script_remove', v.id)}><X /> Bỏ kịch bản</Button>
+              </>
+            ) : (
+              <>
+                <span className="min-w-0 flex-1 text-muted-foreground">Chưa có kịch bản. Đính kèm để Gemini viết mô tả đúng nội dung video (.txt, .md, .docx, .srt).</span>
+                <Button variant="outline" className="h-7 px-2 text-xs" onClick={() => send('script_attach', v.id)}><Paperclip /> Đính kèm kịch bản</Button>
+              </>
+            )}
           </div>
           <div className="flex flex-wrap gap-1">
             {v.meta.tags.length ? v.meta.tags.map((t) => <Chip key={t}>{t}</Chip>) : <span className="text-xs text-muted-foreground">Không có thẻ</span>}
@@ -179,7 +200,7 @@ function VideoCard({ v, job, open, onToggle, busy, connected, send }: {
             <p key={m} className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />{m}</p>
           ))}
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className="h-8 px-3 text-xs" disabled={busy || !v.folder || !v.video} onClick={() => send('describe', v.id)}><Sparkles /> Gemini viết mô tả</Button>
+            <Button variant="outline" className="h-8 px-3 text-xs" disabled={busy || !v.folder || !v.video} onClick={() => send('describe', v.id)}><Sparkles /> Gemini viết mô tả{v.script ? ' theo kịch bản' : ''}</Button>
             <Button variant="outline" className="h-8 px-3 text-xs" disabled={busy || bad || !connected || job?.status === 'done'} onClick={() => send('upload', [v.id])}><Upload /> Đăng video này</Button>
             <Button variant="subtle" className="h-8 px-3 text-xs" onClick={() => send('open_path', v.folder)} disabled={!v.folder}><FolderOpen /> Mở thư mục</Button>
           </div>
@@ -195,6 +216,7 @@ function DraftDialog({ state, send }: Backend) {
   useEffect(() => setText(d?.text ?? ''), [d?.text])
   const v = state.scan.videos.find((x) => x.id === d?.id)
   const file = v?.layout === 'flat' && v.infoFile ? v.infoFile : 'info.txt'
+  const fixed = (state.settings?.descDefault ?? '').trim()
   return (
     <Dialog
       open={!!d}
@@ -208,11 +230,13 @@ function DraftDialog({ state, send }: Backend) {
         </>
       }
     >
+      {d?.script && <p className="mb-2"><Pill tone="active" className="max-w-full">Theo kịch bản: {d.script}</Pill></p>}
       {d?.loading ? <p className="animate-pulse">Gemini đang viết…</p>
         : d?.error ? <p className="text-red-600 dark:text-red-400">{d.error}</p>
         : <>
             <TextArea rows={10} value={text} onChange={(e) => setText(e.target.value)} aria-label="Mô tả Gemini viết" className="text-foreground" />
             <p className="text-[11px]">Sửa lại nếu cần. Bấm lưu sẽ thay phần mô tả (sau dòng ---) trong {file}{file === 'info.txt' ? ' của video này' : ' (chưa có thì tạo mới), đặt cạnh file video'}.</p>
+            {fixed && <p className="text-[11px]">Khi đăng, mô tả này nằm {state.settings?.descPosition === 'below' ? 'dưới' : 'trên'} phần mô tả mặc định trong Cài đặt.</p>}
           </>}
     </Dialog>
   )
@@ -227,6 +251,7 @@ function FlatHelp() {
   Bí ẩn rừng sâu tập 1.jpg     ← thumbnail cùng tên (.jpg .jpeg .png .webp)
   Bí ẩn rừng sâu tập 1.vi.srt  ← phụ đề (tùy chọn)
   Bí ẩn rừng sâu tập 1.txt     ← mô tả riêng (tùy chọn, Gemini lưu vào đây)
+  Bí ẩn rừng sâu tập 1.kich-ban.docx ← kịch bản (tùy chọn, Gemini viết mô tả theo đây)
   da-dang/                     ← tool chuyển file đã đăng vào đây`}</pre>
       <p className="mt-2 text-xs text-muted-foreground">Mô tả, thẻ, danh sách phát, chế độ hiển thị và lịch lấy từ trang Mẫu mặc định. Thư mục con kiểu cũ (mỗi video một thư mục có info.txt) vẫn đọc được.</p>
     </Card>
@@ -520,10 +545,11 @@ function LogsPage({ state, send }: Backend) {
 }
 
 /* ================= Cai dat ================= */
-type Draft = Pick<SettingsT, 'channel' | 'runInPane' | 'geminiModel' | 'geminiThinking' | 'replyStyle' | 'replyMode' | 'replyPerHour' | 'skipWords'>
+type Draft = Pick<SettingsT, 'channel' | 'runInPane' | 'geminiModel' | 'geminiThinking' | 'replyStyle' | 'replyMode' | 'replyPerHour' | 'skipWords'> & { descDefault: string; descPosition: 'above' | 'below' }
 const pickDraft = (s: SettingsT | null): Draft => ({
   channel: s?.channel ?? '', runInPane: s?.runInPane ?? true, geminiModel: s?.geminiModel ?? 'gemini-3.8-flash', geminiThinking: s?.geminiThinking ?? 'low', replyStyle: s?.replyStyle ?? '',
   replyMode: s?.replyMode ?? 'review', replyPerHour: s?.replyPerHour ?? 20, skipWords: s?.skipWords ?? '',
+  descDefault: s?.descDefault ?? '', descPosition: s?.descPosition === 'below' ? 'below' : 'above',
 })
 
 function SettingsPage({ state, send }: Backend) {
@@ -558,6 +584,33 @@ function SettingsPage({ state, send }: Backend) {
                 <Field label="Tên kênh" hint="Dùng cho biến {ten_kenh} trong mẫu mô tả.">
                   <TextInput value={d.channel} onChange={(e) => set({ channel: e.target.value })} placeholder="Kênh của tôi" />
                 </Field>
+              </div>
+            </Card>
+            <Card title="Mô tả video" hint="thêm vào mọi video đăng ở trang Đăng video">
+              <div className="space-y-3">
+                <Field
+                  label="Phần mô tả mặc định"
+                  hint={<>
+                    Các dòng cố định (link ủng hộ, sách điện tử…) có trong mô tả của mọi video. Dùng được biến như {'{ten_video}'}, {'{tieu_de}'}, {'{ten_kenh}'}.
+                    {' '}Có phần này thì khi đăng tool thay mô tả mặc định Studio điền sẵn (không lặp dòng); để trống thì giữ mô tả Studio điền sẵn như cũ.
+                    {' '}<span className={cn(bytes(d.descDefault) > 5000 && 'text-red-500')}>{bytes(d.descDefault)}/5000 byte</span>
+                    {/[<>]/.test(d.descDefault) && <span className="text-red-500"> · YouTube không cho dấu &lt; hoặc &gt; trong mô tả</span>}
+                  </>}
+                >
+                  <TextArea rows={4} value={d.descDefault} onChange={(e) => set({ descDefault: e.target.value })} placeholder={'Ủng hộ kênh: https://…\nSách điện tử: https://…'} />
+                </Field>
+                <div className="space-y-1.5">
+                  <p className="text-xs font-bold text-muted-foreground">Phần Gemini viết / mô tả riêng của video nằm</p>
+                  <Choice
+                    name="Vị trí phần mô tả riêng của video"
+                    value={d.descPosition}
+                    onChange={(descPosition) => set({ descPosition })}
+                    options={[
+                      { value: 'above', label: 'Trên phần mặc định', hint: 'Mô tả riêng của video trước, các dòng cố định ở cuối.' },
+                      { value: 'below', label: 'Dưới phần mặc định', hint: 'Các dòng cố định ở đầu, mô tả riêng của video sau.' },
+                    ]}
+                  />
+                </div>
               </div>
             </Card>
             <Card title="Gemini API" hint={<Sparkles className="inline h-3.5 w-3.5" />}>

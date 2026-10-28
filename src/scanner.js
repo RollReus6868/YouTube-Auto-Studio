@@ -4,6 +4,7 @@
 //   <goc>/da-dang/                       thu muc da xong duoc chuyen vao day
 const fs = require('fs')
 const path = require('path')
+const { SCRIPT_AUTO_EXT } = require('./docx')
 
 const VIDEO_EXT = ['.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v', '.wmv', '.flv', '.mpeg', '.mpg', '.3gp']
 const IMAGE_EXT = ['.jpg', '.jpeg', '.png']
@@ -117,6 +118,10 @@ function scanVideo(root, dir) {
     item.subtitles.push({ file: path.join(folder, f), lang })
   }
 
+  // kich ban (cho Gemini viet mo ta): file .txt/.md/.docx co "kich ban" / "script" trong ten
+  const script = files.filter((f) => SCRIPT_AUTO_EXT.includes(ext(f)) && SCRIPT_WORD.test(plain(baseOf(f)))).sort()[0]
+  if (script) item.script = path.join(folder, script)
+
   const infoFile = files.find((f) => /^(info|thong[-_ ]?tin|mo[-_ ]?ta)\.txt$/i.test(f))
   if (infoFile) {
     const { info, warnings } = parseInfo(fs.readFileSync(path.join(folder, infoFile), 'utf8'))
@@ -135,6 +140,18 @@ const THUMB_EXT = ['.jpg', '.jpeg', '.png', '.webp']
 const SKIP_DIRS = new Set([DIRS.done, DIRS.posts])
 const baseOf = (f) => f.slice(0, f.length - path.extname(f).length)
 const same = (a, b) => a.normalize('NFC').toLowerCase() === b.normalize('NFC').toLowerCase()
+
+// "Tiếng Việt" -> "tieng viet" (bo dau, chu thuong) de so ten file
+const plain = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase()
+const SCRIPT_WORD = /kich[\s._-]*ban|(^|[^a-z])script/ // khong nham "description"
+// f co phai kich ban cua video `base` khong: cung ten dau + dau ngan cach + "kich ban" / "script" (+ chu tuy y)
+function scriptOf(f, base) {
+  if (!SCRIPT_AUTO_EXT.includes(ext(f))) return false
+  const b = baseOf(f).normalize('NFC')
+  const head = base.normalize('NFC')
+  if (b.length <= head.length || !same(b.slice(0, head.length), head)) return false
+  return /^[\s._()[\]-]+(kich[\s._-]*ban|script)/.test(plain(b.slice(head.length)))
+}
 
 function scanFlat(dir, files) {
   const out = []
@@ -162,6 +179,14 @@ function scanFlat(dir, files) {
       if (lang === null) continue
       item.subtitles.push({ file: path.join(dir, s), lang })
       item.files.push(path.join(dir, s))
+    }
+    // kich ban: "Ten video.kich-ban.txt", "Ten video - kịch bản.docx", "Ten video (script).md"...
+    // ("Ten video.txt" la file thong tin, khong phai kich ban)
+    const scripts = files.filter((x) => scriptOf(x, base)).sort((a, b) => SCRIPT_AUTO_EXT.indexOf(ext(a)) - SCRIPT_AUTO_EXT.indexOf(ext(b)) || a.localeCompare(b))
+    if (scripts.length) {
+      item.script = path.join(dir, scripts[0])
+      item.files.push(item.script)
+      if (scripts.length > 1) item.warnings.push(`Có ${scripts.length} file kịch bản cùng tên, Gemini dùng "${scripts[0]}".`)
     }
     const txt = files.find((x) => ext(x) === '.txt' && same(baseOf(x), base))
     if (txt) {
@@ -458,6 +483,7 @@ function createSkeleton(root) {
       '  Bí ẩn rừng sâu tập 1.jpg      (hoặc .jpeg / .png / .webp)',
       '  Bí ẩn rừng sâu tập 1.vi.srt   (tùy chọn: phụ đề)',
       '  Bí ẩn rừng sâu tập 1.txt      (tùy chọn: mô tả riêng, viết như info.txt bên dưới)',
+      '  Bí ẩn rừng sâu tập 1.kich-ban.docx  (tùy chọn: kịch bản, Gemini viết mô tả theo kịch bản; .txt / .md cũng được)',
       'Tiêu đề = tên file. Mô tả, thẻ, danh sách phát, chế độ hiển thị, lịch đăng: theo mẫu mặc định.',
       'Video đã đăng được chuyển vào "da-dang" (kèm file .ket-qua.txt), lần sau không đăng lại.',
       '',
@@ -492,4 +518,4 @@ function createSkeleton(root) {
   }
 }
 
-module.exports = { VIDEO_EXT, IMAGE_EXT, THUMB_EXT, DIRS, POST_TYPE_LABEL, POST_IMAGES_MAX, parseWhen, parseInfo, parseFolderName, parsePostText, videoId, imageSize, scan, scanVideo, scanVideos, scanPost, createSkeleton }
+module.exports = { scriptOf, VIDEO_EXT, IMAGE_EXT, THUMB_EXT, DIRS, POST_TYPE_LABEL, POST_IMAGES_MAX, parseWhen, parseInfo, parseFolderName, parsePostText, videoId, imageSize, scan, scanVideo, scanVideos, scanPost, createSkeleton }

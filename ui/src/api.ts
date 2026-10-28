@@ -69,6 +69,8 @@ export type Settings = {
   replyPerHour: number
   skipWords: string
   uploadChannel: string // kenh dang video (khoa kenh o trang Tai khoan)
+  descDefault?: string // phan mo ta mac dinh them vao mo ta moi video (link donate, ebook...)
+  descPosition?: 'above' | 'below' // phan Gemini viet / mo ta rieng cua video nam tren | duoi phan mac dinh
 }
 export type VideoMeta = {
   title: string
@@ -80,6 +82,7 @@ export type VideoMeta = {
   publishAt: string | null
   premiere?: boolean
   schedulePremiere?: boolean
+  descReplace?: boolean // mo ta da ghep phan mo ta mac dinh (Cai dat): thay mo ta Studio dien san khi dang
 }
 export type VideoItem = {
   id: string
@@ -95,6 +98,7 @@ export type VideoItem = {
   subtitles: { file: string; lang: string }[]
   preset: string
   meta: VideoMeta
+  script?: { file: string; auto: boolean } | null // kich ban cho Gemini viet mo ta (auto: file canh video, khong thi chon tay)
   errors: string[]
   warnings: string[]
 }
@@ -121,7 +125,7 @@ export type PostItem = {
 export type Job = { status: 'queued' | 'run' | 'done' | 'error' | 'stopped'; title?: string; step: string; progress: number; error: string; url: string; warnings?: string[] }
 export type UploadChannel = { key: string; name: string; handle: string; ucId: string; avatar: string }
 export type Comment = { id: string; videoId: string; videoTitle: string; author: string; text: string; publishedAt: string; likeCount: number; status: 'new' | 'ready' | 'sent' | 'skipped' | 'error'; kind: string; draft: string; error: string; note: string }
-export type Draft = { id: string; text: string; loading: boolean; error: string }
+export type Draft = { id: string; text: string; loading: boolean; error: string; script?: string } // script: ten file kich ban da gui cho Gemini
 export type State = {
   status: 'idle' | 'run' | 'update'
   version: string
@@ -179,10 +183,11 @@ const demoSettings: Settings = {
   defaultPreset: 'mac-dinh', geminiModel: 'gemini-3.8-flash', geminiThinking: 'low',
   replyStyle: 'Trả lời thân thiện, ngắn gọn (1–2 câu), xưng "mình", gọi khán giả là "bạn".',
   replyMode: 'review', replyPerHour: 20, skipWords: '', uploadChannel: 'UCxxxxxxxxxxxxxxxxxxxxxx',
+  descDefault: 'Ủng hộ kênh: https://example.org/ung-ho\nSách điện tử: https://example.org/sach', descPosition: 'above',
 }
 
 const meta = (title: string, publishAt: string | null, premiere = false): VideoMeta => ({
-  title, description: `${title}\n\nĐăng ngày 28/10/2026 trên Kênh Của Tôi.\n\n#phimhay #reviewphim #tómtắtphim`,
+  title, description: `${title}\n\nĐăng ngày 28/10/2026 trên Kênh Của Tôi.\n\n#phimhay #reviewphim #tómtắtphim\n\n${demoSettings.descDefault}`, descReplace: true,
   tags: ['phim hay', 'review phim', 'tóm tắt phim'], playlist: 'Tóm tắt phim', madeForKids: false,
   privacy: publishAt ? 'private' : 'public', publishAt, premiere: !publishAt && premiere, schedulePremiere: !!publishAt && premiere,
 })
@@ -196,7 +201,7 @@ export const demoState: State = {
   scan: {
     root: demoSettings.root, videoDir: demoSettings.videoDir, errors: [], at: '2026-10-26T12:00:00Z',
     videos: [
-      { id: 'v1', layout: 'flat', thumb: 'Bí ẩn rừng sâu tập 1.jpg', infoFile: 'Bí ẩn rừng sâu tập 1.txt', dir: 'Bí ẩn rừng sâu tập 1', folder: '', name: 'Bí ẩn rừng sâu tập 1', size: 734003200, video: 'Bí ẩn rừng sâu tập 1.mp4', thumbUrl: '', subtitles: [{ file: 'Bí ẩn rừng sâu tập 1.vi.srt', lang: 'vi' }], preset: 'Video dài', meta: meta('Bí ẩn rừng sâu tập 1', '2026-10-30T02:00:00.000Z', true), errors: [], warnings: [] },
+      { id: 'v1', layout: 'flat', thumb: 'Bí ẩn rừng sâu tập 1.jpg', infoFile: 'Bí ẩn rừng sâu tập 1.txt', dir: 'Bí ẩn rừng sâu tập 1', folder: '', name: 'Bí ẩn rừng sâu tập 1', size: 734003200, video: 'Bí ẩn rừng sâu tập 1.mp4', thumbUrl: '', subtitles: [{ file: 'Bí ẩn rừng sâu tập 1.vi.srt', lang: 'vi' }], preset: 'Video dài', meta: meta('Bí ẩn rừng sâu tập 1', '2026-10-30T02:00:00.000Z', true), script: { file: 'Bí ẩn rừng sâu tập 1.kich-ban.docx', auto: true }, errors: [], warnings: [] },
       { id: 'v2', layout: 'flat', thumb: '', infoFile: 'Bí ẩn rừng sâu tập 2.txt', dir: 'Bí ẩn rừng sâu tập 2', folder: '', name: 'Bí ẩn rừng sâu tập 2', size: 812003200, video: 'Bí ẩn rừng sâu tập 2.mp4', thumbUrl: '', subtitles: [], preset: 'Video dài', meta: meta('Bí ẩn rừng sâu tập 2', '2026-10-31T02:00:00.000Z', true), errors: [], warnings: ['Chưa có ảnh thumbnail cùng tên ("Bí ẩn rừng sâu tập 2.jpg", .jpeg, .png hoặc .webp): YouTube tự chọn ảnh từ video.'] },
       { id: 'v3', layout: 'flat', thumb: 'Hậu trường.png', infoFile: 'Hậu trường.txt', dir: 'Hậu trường', folder: '', name: 'Hậu trường', size: 3221225472, video: 'Hậu trường.mov', thumbUrl: '', subtitles: [], preset: 'Video dài', meta: meta('Hậu trường', null), errors: [], warnings: [] },
     ],

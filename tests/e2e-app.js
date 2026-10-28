@@ -88,6 +88,24 @@ run(9344, {}, async ({ ui, find, dataDir }) => {
   assert.equal(await ui.getByLabel('Tên kênh').inputValue(), 'Kênh Thử')
   await ui.getByRole('button', { name: 'Lưu cài đặt' }).click()
   await waitFor(async () => (await call('hello')).settings.channel === 'Kênh Thử', 'luu ten kenh')
+  // phan mo ta mac dinh (link ung ho...): nam duoi / tren mo ta rieng cua video, mo ta video cap nhat theo
+  await ui.getByLabel('Phần mô tả mặc định').fill('Ủng hộ {ten_kenh}: https://example.org/ung-ho')
+  await ui.getByRole('radiogroup', { name: 'Vị trí phần mô tả riêng của video' }).getByRole('radio', { name: /Dưới phần mặc định/ }).click()
+  await ui.getByRole('button', { name: 'Lưu cài đặt' }).click()
+  await waitFor(() => JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8')).descPosition === 'below', 'luu vi tri mo ta')
+  st = await call('hello')
+  assert.equal(st.settings.descDefault, 'Ủng hộ {ten_kenh}: https://example.org/ung-ho')
+  const tap3 = () => st.scan.videos.find((x) => x.dir.includes('tap-3')).meta
+  assert.deepEqual([tap3().description, tap3().descReplace], ['Ủng hộ Kênh Thử: https://example.org/ung-ho\n\nVideo có Lan.', true])
+  await ui.getByRole('radiogroup', { name: 'Vị trí phần mô tả riêng của video' }).getByRole('radio', { name: /Trên phần mặc định/ }).click()
+  await ui.getByRole('button', { name: 'Lưu cài đặt' }).click()
+  await waitFor(async () => { st = await call('hello'); return st.settings.descPosition === 'above' }, 'doi vi tri mo ta')
+  assert.equal(tap3().description, 'Video có Lan.\n\nỦng hộ Kênh Thử: https://example.org/ung-ho')
+  await ui.getByRole('button', { name: 'Đăng video', exact: true }).click()
+  await ui.getByRole('button', { name: /bi an tap 3/ }).click()
+  await ui.getByText('Mô tả sẽ đăng').waitFor()
+  await ui.getByText(/Video có Lan\.\s+Ủng hộ Kênh Thử/).waitFor()
+  await ui.getByRole('button', { name: 'Cài đặt', exact: true }).click()
 
   // 5) trang Cong dong: khung Studio nam dung vi tri giao dien danh cho no
   await ui.getByRole('button', { name: 'Cộng đồng', exact: true }).click()

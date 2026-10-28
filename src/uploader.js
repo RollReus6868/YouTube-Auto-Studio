@@ -63,7 +63,7 @@ function moveDoneFiles(doneDir, item, lines) {
 function jobOf(item, uc, template = null, channelName = '') {
   const m = item.meta
   return {
-    uc, file: item.video, title: m.title, description: m.description, tags: m.tags,
+    uc, file: item.video, title: m.title, description: m.description, replaceDescription: !!m.descReplace, tags: m.tags,
     playlists: m.playlist ? [m.playlist] : [], madeForKids: !!m.madeForKids, thumbnail: m.thumbnail || null,
     subtitles: m.subtitles || [], privacy: m.privacy, premiere: !!m.premiere, publishAt: m.publishAt || null, schedulePremiere: !!m.schedulePremiere,
     notifySubscribers: m.notifySubscribers !== false, template, channelName,
