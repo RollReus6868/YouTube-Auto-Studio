@@ -22,7 +22,11 @@ function defaultPreset(id = 'mac-dinh', name = 'Mặc định') {
     madeForKids: false,
     notifySubscribers: true,
     privacy: 'private', // public | unlisted | private (khi len lich: Studio de rieng tu toi gio dang)
-    schedule: { mode: 'now', times: ['19:00'], intervalHours: 24 }, // now | times | interval
+    premiere: false, // Cong khai: "Dat o che do Cong chieu ngay"
+    schedulePremiere: false, // Len lich: "Dat lam video Cong chieu"
+    // Len lich ("Dat lich chuyen sang che do cong khai"): now = khong len lich | date = ngay + gio cu the (video sau cach
+    // intervalHours) | times = khung gio co dinh moi ngay | interval = cach nhau deu N gio tu times[0]
+    schedule: { mode: 'now', times: ['19:00'], intervalHours: 24, date: '', time: '09:00' },
     optimizeAfterUpload: false, // sau khi dang: thich / binh luan / ghim (+ dat lai muc chua dat duoc) - src/features/optimize.js
     optimize: defaultTemplate(), // mau Studio: cac muc dat trong hop thoai tai len (src/optimize-template.js, src/flows/upload.js)
   }
@@ -37,6 +41,13 @@ function normalizePreset(p, seed) {
   out.tags = Array.isArray(out.tags) ? out.tags.map((t) => String(t).trim()).filter(Boolean) : splitTags(out.tags)
   out.schedule.times = (out.schedule.times || []).filter((t) => /^\d{1,2}:\d{2}$/.test(t))
   if (!out.schedule.times.length) out.schedule.times = ['19:00']
+  if (!SCHEDULE_MODES.includes(out.schedule.mode)) out.schedule.mode = 'now'
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(out.schedule.date || '')) out.schedule.date = ''
+  if (!/^\d{1,2}:\d{2}$/.test(out.schedule.time || '')) out.schedule.time = '09:00'
+  out.schedule.time = out.schedule.time.padStart(5, '0')
+  if (!['public', 'unlisted', 'private'].includes(out.privacy)) out.privacy = 'private'
+  out.premiere = out.premiere === true
+  out.schedulePremiere = out.schedulePremiere === true
   out.optimizeAfterUpload = out.optimizeAfterUpload === true
   out.optimize = normalizeTemplate(p && p.optimize && typeof p.optimize === 'object' ? p.optimize : seed)
   // preset cu (dang qua API): danh muc / ngon ngu / giay phep / nhung / AI chuyen sang mau Studio roi bo
@@ -47,6 +58,7 @@ function normalizePreset(p, seed) {
   return out
 }
 
+const SCHEDULE_MODES = ['now', 'date', 'times', 'interval']
 const splitTags = (s) => String(s || '').split(/[,\n]/).map((t) => t.trim()).filter(Boolean)
 
 const pad = (n) => String(n).padStart(2, '0')
@@ -76,7 +88,8 @@ function buildVideoMeta(item, preset, extra = {}) {
     hashtag: tags.slice(0, 3).map((t) => `#${t.replace(/\s+/g, '')}`).join(' '),
     playlist: info.playlist || p.playlist,
   }
-  const title = render(info.tieu_de || p.title, vars).trim()
+  // thu muc phang: tieu de = ten file (tru khi file .txt rieng co "Tieu de:")
+  const title = (item.titleFromName && !info.tieu_de ? String(item.name || '') : render(info.tieu_de || p.title, vars)).trim()
   vars.tieu_de = title
   const description = render(info.mo_ta || p.description, vars).trim()
   const privacy = ['public', 'unlisted', 'private'].includes(info.hien_thi) ? info.hien_thi : p.privacy
@@ -87,7 +100,9 @@ function buildVideoMeta(item, preset, extra = {}) {
     notifySubscribers: p.notifySubscribers,
     // len lich (publishAt): hop thoai tai len chon "Len lich", Studio de rieng tu toi gio dang roi tu cong khai
     privacy,
+    premiere: privacy === 'public' && p.premiere,
     publishAt,
+    schedulePremiere: !!publishAt && p.schedulePremiere,
     thumbnail: item.thumbnail || null,
     subtitles: item.subtitles || [],
   }
@@ -121,6 +136,7 @@ function at(day, hhmm) {
 function planSchedule(items, presetFor, now = new Date()) {
   const used = new Set()
   let cursor = null // moc cuoi cung da xep (cho kieu interval / times)
+  const dateCursor = {} // kieu date: moc cuoi cung theo tung lich
   return items.map((item) => {
     const s = normalizePreset(presetFor(item)).schedule
     let when = null
@@ -128,7 +144,15 @@ function planSchedule(items, presetFor, now = new Date()) {
       when = item.info.gio_dang
     } else if (item.date && s.mode !== 'now') {
       const day = new Date(`${item.date}T00:00:00`)
-      when = item.time ? at(day, item.time) : s.times.map((t) => at(day, t)).find((d) => !used.has(+d)) || at(day, s.times[0])
+      const times = s.mode === 'date' ? [s.time] : s.times
+      when = item.time ? at(day, item.time) : times.map((t) => at(day, t)).find((d) => !used.has(+d)) || at(day, times[0])
+    } else if (s.mode === 'date') {
+      // ngay + gio cu the cho video dau; cac video sau cung mau cach nhau intervalHours (0 = cung gio)
+      const k = `${s.date} ${s.time} ${s.intervalHours}`
+      const start = s.date ? at(new Date(`${s.date}T00:00:00`), s.time) : null
+      const step = Math.max(0, Number(s.intervalHours) || 0) * 3600e3
+      when = start && dateCursor[k] ? new Date(+dateCursor[k] + step) : start
+      if (when) dateCursor[k] = when
     } else if (s.mode === 'times') {
       const times = [...s.times].sort()
       const from = cursor && cursor > now ? cursor : now
@@ -152,4 +176,4 @@ function planSchedule(items, presetFor, now = new Date()) {
   })
 }
 
-module.exports = { CATEGORIES, LIMITS, defaultPreset, normalizePreset, splitTags, render, buildVideoMeta, validateMeta, planSchedule }
+module.exports = { CATEGORIES, LIMITS, SCHEDULE_MODES, defaultPreset, normalizePreset, splitTags, render, buildVideoMeta, validateMeta, planSchedule }

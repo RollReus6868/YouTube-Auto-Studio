@@ -24,14 +24,29 @@ Các bản sau tự cập nhật: mở tool, vào **Cập nhật**, bấm **Tả
 
 ## Thư mục đầu vào
 
+### Video (trang Đăng video)
+
+Chọn **một thư mục** ở trang Đăng video. Mỗi video là một file, ảnh thumbnail **cùng tên** nằm cạnh. Không cần thư mục con, không cần info.txt:
+
+```
+Video cần đăng/
+  Bí ẩn rừng sâu tập 1.mp4       video; tiêu đề = tên file
+  Bí ẩn rừng sâu tập 1.jpg       thumbnail cùng tên (.jpg .jpeg .png .webp), dưới 2 MB
+  Bí ẩn rừng sâu tập 1.vi.srt    tùy chọn: phụ đề (.srt / .vi.srt / .en.srt ...)
+  Bí ẩn rừng sâu tập 1.txt       tùy chọn: mô tả riêng (nút "Gemini viết mô tả" lưu vào đây)
+  Hậu trường.mov
+  Hậu trường.png
+  da-dang/                       tool chuyển video + ảnh + file kèm theo vào đây sau khi đăng (kèm "<tên>.ket-qua.txt")
+```
+
+Mô tả, thẻ, danh sách phát, chế độ hiển thị và lịch đăng lấy từ **Mẫu mặc định**. Chế độ hiển thị giống bước cuối của hộp thoại tải lên trong Studio: **Lưu hoặc xuất bản** (Riêng tư / Không công khai / Công khai, có thể **Đặt ở chế độ Công chiếu ngay**) hoặc **Lên lịch** (ngày, giờ theo mốc 15 phút, **Đặt làm video Công chiếu**; nhiều video thì cách nhau N giờ hoặc theo khung giờ mỗi ngày). File `.txt` cùng tên viết như info.txt (`Tiêu đề:`, `Thẻ:`, `Giờ đăng:`, `Hiển thị:`, rồi `---` và mô tả) để ghi đè riêng cho video đó.
+
+Kiểu cũ vẫn đọc được: thư mục con chứa file video (kèm `thumbnail.jpg`, `info.txt`), hoặc `videos/2026-10-28_ten-video/` trong thư mục gốc.
+
+### Thư mục gốc (trang Đăng bài)
+
 ```
 YouTube-DangBai/
-  videos/
-    2026-10-28_ten-video/        tên bắt đầu bằng ngày để tool tự xếp lịch (có thể thêm giờ: 2026-10-28_19h00_ten)
-      video.mp4                  bắt buộc
-      thumbnail.jpg              tùy chọn, dưới 2 MB
-      info.txt                   tùy chọn, ghi đè mẫu mặc định
-      phude.vi.srt               tùy chọn
   posts/
     2026-10-29_19h00_bai-anh/    có giờ trong tên = lên lịch; chỉ có ngày = đăng ngay
       noidung.txt
@@ -40,8 +55,10 @@ YouTube-DangBai/
     2026-10-30_tham-do-anh/      noidung.txt + binhchon.txt + 1.jpg 2.jpg -> thăm dò ảnh
     2026-10-31_do-vui/           noidung.txt + cauhoi.txt            -> đố vui
     2026-11-01_gioi-thieu/       noidung.txt có dòng "Video: <URL>"  -> chia sẻ video
-  da-dang/                       việc đã xong được chuyển vào đây
+  da-dang/                       bài đã đăng được chuyển vào đây
 ```
+
+Chưa chọn thư mục video riêng thì trang Đăng video dùng thư mục gốc.
 
 ### Bài đăng (tab Bài đăng của kênh)
 
@@ -80,6 +97,7 @@ Biến dùng trong mẫu: `{ten_video}` `{tieu_de}` `{so_tap}` `{ngay}` `{ten_ke
 1. Trang **Tài khoản**: thêm tài khoản Google, đăng nhập trong khung Studio, tick các kênh tool được dùng.
 2. Trang **Đăng video**: chọn kênh ở ô **Kênh đăng video**. Tool mở hộp thoại tải lên của Studio, điền tiêu đề, mô tả (nối sau mô tả mặc định của kênh), hình thu nhỏ, danh sách phát, các mục trong **Hiện thêm** theo **Mẫu Studio** của mẫu mặc định, màn hình kết thúc, chế độ hiển thị hoặc lịch đăng, rồi chờ tải lên xong.
 3. Kênh chưa xác minh số điện thoại thì không đặt được hình thu nhỏ: xác minh tại [youtube.com/verify](https://youtube.com/verify). YouTube giới hạn số video tải lên mỗi ngày; chạm giới hạn thì tool dừng hàng đợi.
+4. Video dài hơn 15 phút: nếu Studio hiện **"Bạn đã hoàn tất… Hãy thử làm mới trang"**, tool bấm **Đã hiểu**, làm mới Studio và chọn lại file (tối đa 2 lần). Nếu Google đòi **xác minh danh tính**, tool dừng và báo; bạn tự xác minh trong khung Studio ở trang **Tài khoản** rồi đăng lại. Tool không tự xác minh.
 
 Gemini API key lấy ở [Google AI Studio](https://aistudio.google.com/apikey), dán vào **Cài đặt → Gemini API**.
 

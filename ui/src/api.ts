@@ -37,7 +37,8 @@ export const defaultOptimizeTemplate = (): OptimizeTemplate => ({
   recordingDate: 'today', remix: 'none', endScreen: 'latest', category: 'keep', language: '', comments: 'keep',
   license: 'keep', embeddable: 'keep', like: true, description: '', comment: '{tieu_de}', pin: true,
 })
-export type Schedule = { mode: 'now' | 'times' | 'interval'; times: string[]; intervalHours: number }
+// now: dang theo "Luu hoac xuat ban"; date: ngay + gio cu the (video sau + intervalHours); times: khung gio moi ngay; interval: cach deu N gio
+export type Schedule = { mode: 'now' | 'date' | 'times' | 'interval'; times: string[]; intervalHours: number; date?: string; time?: string }
 export type Preset = {
   id: string
   name: string
@@ -48,12 +49,15 @@ export type Preset = {
   madeForKids: boolean
   notifySubscribers: boolean
   privacy: 'public' | 'unlisted' | 'private'
+  premiere?: boolean // "Dat o che do Cong chieu ngay" (chi voi Cong khai)
   schedule: Schedule
+  schedulePremiere?: boolean // "Dat lam video Cong chieu" (khi Len lich)
   optimizeAfterUpload?: boolean // sau khi dang: thich / binh luan / ghim (va dat lai muc hop thoai tai len chua dat duoc)
   optimize?: OptimizeTemplate // cac muc dat trong hop thoai tai len cua Studio (ban cu chua co -> mau goc)
 }
 export type Settings = {
   root: string
+  videoDir?: string // thu muc video phang cua trang Dang video (trong = thu muc goc)
   channel: string
   presets: Preset[]
   defaultPreset: string
@@ -72,9 +76,14 @@ export type VideoMeta = {
   madeForKids: boolean
   privacy: Preset['privacy']
   publishAt: string | null
+  premiere?: boolean
+  schedulePremiere?: boolean
 }
 export type VideoItem = {
   id: string
+  layout?: 'flat' | 'folder' // flat: "Ten video.mp4" + "Ten video.jpg" trong thu muc video; folder: thu muc con kieu cu
+  thumb?: string // ten file thumbnail
+  infoFile?: string // flat: "Ten video.txt" (mo ta Gemini luu vao day)
   dir: string
   folder: string
   name: string
@@ -117,7 +126,7 @@ export type State = {
   update: Update
   settings: Settings | null
   secrets: { gemini: boolean; geminiEncrypted: boolean }
-  scan: { root: string; videos: VideoItem[]; posts: PostItem[]; errors: string[]; at: string }
+  scan: { root: string; videoDir?: string; videos: VideoItem[]; posts: PostItem[]; errors: string[]; at: string }
   studio: { channelId: string; channelName?: string; url: string; visible: boolean }
   upload: { channelKey: string; channels: UploadChannel[] } // kenh dang video = cac kenh da tick o trang Tai khoan
   jobs: Record<string, Job>
@@ -150,16 +159,18 @@ export const newPreset = (id: string, name: string): Preset => ({
   title: '{ten_video}',
   description: '{ten_video}\n\n{hashtag}',
   tags: [], playlist: '',
-  madeForKids: false, notifySubscribers: true, privacy: 'private',
-  schedule: { mode: 'now', times: ['19:00'], intervalHours: 24 },
+  madeForKids: false, notifySubscribers: true, privacy: 'private', premiere: false, schedulePremiere: false,
+  schedule: { mode: 'now', times: ['19:00'], intervalHours: 24, date: '', time: '09:00' },
   optimizeAfterUpload: false,
   optimize: defaultOptimizeTemplate(),
 })
 
+// ngay sau hom nay n ngay (YYYY-MM-DD): lich cua mau demo luon o tuong lai
+const dayAfter = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const demoSettings: Settings = {
-  root: 'D:\\YouTube-DangBai', channel: 'Kênh Của Tôi',
+  root: 'D:\\YouTube-DangBai', videoDir: 'D:\\Video-Can-Dang', channel: 'Kênh Của Tôi',
   presets: [
-    { ...newPreset('mac-dinh', 'Video dài'), title: '{ten_video} | Tập {so_tap}', description: '{tieu_de}\n\nĐăng ngày {ngay} trên {ten_kenh}.\n\n{hashtag}', tags: ['phim hay', 'review phim', 'tóm tắt phim'], privacy: 'public', schedule: { mode: 'times', times: ['19:00'], intervalHours: 24 }, optimizeAfterUpload: true },
+    { ...newPreset('mac-dinh', 'Video dài'), title: '{ten_video} | Tập {so_tap}', description: '{tieu_de}\n\nĐăng ngày {ngay} trên {ten_kenh}.\n\n{hashtag}', tags: ['phim hay', 'review phim', 'tóm tắt phim'], privacy: 'public', schedule: { mode: 'date', times: ['19:00'], intervalHours: 24, date: dayAfter(2), time: '09:00' }, schedulePremiere: true, optimizeAfterUpload: true },
     { ...newPreset('shorts', 'Shorts'), title: '{ten_video} #shorts', tags: ['shorts'], privacy: 'public' },
   ],
   defaultPreset: 'mac-dinh', geminiModel: 'gemini-2.5-flash',
@@ -167,10 +178,10 @@ const demoSettings: Settings = {
   replyMode: 'review', replyPerHour: 20, skipWords: '', uploadChannel: 'UCxxxxxxxxxxxxxxxxxxxxxx',
 }
 
-const meta = (title: string, publishAt: string | null): VideoMeta => ({
+const meta = (title: string, publishAt: string | null, premiere = false): VideoMeta => ({
   title, description: `${title}\n\nĐăng ngày 28/10/2026 trên Kênh Của Tôi.\n\n#phimhay #reviewphim #tómtắtphim`,
   tags: ['phim hay', 'review phim', 'tóm tắt phim'], playlist: 'Tóm tắt phim', madeForKids: false,
-  privacy: publishAt ? 'private' : 'public', publishAt,
+  privacy: publishAt ? 'private' : 'public', publishAt, premiere: !publishAt && premiere, schedulePremiere: !!publishAt && premiere,
 })
 
 // Chi dung khi xem thu giao dien trong trinh duyet (them ?demo vao dia chi).
@@ -180,11 +191,11 @@ export const demoState: State = {
   settings: demoSettings,
   secrets: { gemini: true, geminiEncrypted: true },
   scan: {
-    root: demoSettings.root, errors: [], at: '2026-10-26T12:00:00Z',
+    root: demoSettings.root, videoDir: demoSettings.videoDir, errors: [], at: '2026-10-26T12:00:00Z',
     videos: [
-      { id: 'v1', dir: '2026-10-28_bi-an-rung-sau-tap-1', folder: '', name: 'Bí ẩn rừng sâu tập 1', size: 734003200, video: 'video.mp4', thumbUrl: '', subtitles: [{ file: 'phude.vi.srt', lang: 'vi' }], preset: 'Video dài', meta: meta('Bí ẩn rừng sâu tập 1 | Tập 1', '2026-10-28T12:00:00.000Z'), errors: [], warnings: [] },
-      { id: 'v2', dir: '2026-10-29_bi-an-rung-sau-tap-2', folder: '', name: 'Bí ẩn rừng sâu tập 2', size: 812003200, video: 'tap2.mp4', thumbUrl: '', subtitles: [], preset: 'Video dài', meta: meta('Bí ẩn rừng sâu tập 2 | Tập 2', '2026-10-29T12:00:00.000Z'), errors: [], warnings: ['Có 2 file video, tool dùng "tap2.mp4".'] },
-      { id: 'v3', dir: '2026-10-30_video-thieu-file', folder: '', name: 'video thieu file', size: 0, video: '', thumbUrl: '', subtitles: [], preset: 'Video dài', meta: meta('video thieu file | Tập {so_tap}', null), errors: ['Không có file video trong thư mục.'], warnings: [] },
+      { id: 'v1', layout: 'flat', thumb: 'Bí ẩn rừng sâu tập 1.jpg', infoFile: 'Bí ẩn rừng sâu tập 1.txt', dir: 'Bí ẩn rừng sâu tập 1', folder: '', name: 'Bí ẩn rừng sâu tập 1', size: 734003200, video: 'Bí ẩn rừng sâu tập 1.mp4', thumbUrl: '', subtitles: [{ file: 'Bí ẩn rừng sâu tập 1.vi.srt', lang: 'vi' }], preset: 'Video dài', meta: meta('Bí ẩn rừng sâu tập 1', '2026-10-30T02:00:00.000Z', true), errors: [], warnings: [] },
+      { id: 'v2', layout: 'flat', thumb: '', infoFile: 'Bí ẩn rừng sâu tập 2.txt', dir: 'Bí ẩn rừng sâu tập 2', folder: '', name: 'Bí ẩn rừng sâu tập 2', size: 812003200, video: 'Bí ẩn rừng sâu tập 2.mp4', thumbUrl: '', subtitles: [], preset: 'Video dài', meta: meta('Bí ẩn rừng sâu tập 2', '2026-10-31T02:00:00.000Z', true), errors: [], warnings: ['Chưa có ảnh thumbnail cùng tên ("Bí ẩn rừng sâu tập 2.jpg", .jpeg, .png hoặc .webp): YouTube tự chọn ảnh từ video.'] },
+      { id: 'v3', layout: 'flat', thumb: 'Hậu trường.png', infoFile: 'Hậu trường.txt', dir: 'Hậu trường', folder: '', name: 'Hậu trường', size: 3221225472, video: 'Hậu trường.mov', thumbUrl: '', subtitles: [], preset: 'Video dài', meta: meta('Hậu trường', null), errors: ['Ảnh thumbnail "Hậu trường.png" lớn hơn 2 MB, YouTube sẽ từ chối.'], warnings: [] },
     ],
     posts: [
       { id: 'p1', dir: '2026-10-29_bai-hoi-y-kien', folder: '', name: 'bai hoi y kien', date: '2026-10-29', time: null, text: 'Các bạn muốn xem tập tiếp theo về chủ đề gì? Bình luận cho mình biết nhé!', images: [], errors: [], warnings: [] },
@@ -224,7 +235,7 @@ export const demoState: State = {
 export const emptyState: State = {
   status: 'idle', version: '', update: noUpdate, settings: null,
   secrets: { gemini: false, geminiEncrypted: false },
-  scan: { root: '', videos: [], posts: [], errors: [], at: '' },
+  scan: { root: '', videoDir: '', videos: [], posts: [], errors: [], at: '' },
   studio: { channelId: '', url: '', visible: false }, upload: { channelKey: '', channels: [] }, jobs: {}, draft: null,
   comments: { items: [], busy: false, at: '', sentLastHour: 0 },
   categories: CATEGORIES, logs: [], f: {},

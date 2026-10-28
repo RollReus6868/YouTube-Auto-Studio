@@ -14,7 +14,8 @@ async function launchApp(port, extraEnv = {}, dataDir = fs.mkdtempSync(path.join
   const args = [`--remote-debugging-port=${port}`].concat(process.platform === 'linux' ? ['--no-sandbox'] : [])
   const exe = process.env.YA_APP ? path.resolve(process.env.YA_APP) : require('electron')
   const proc = spawn(exe, (process.env.YA_APP ? [] : [ROOT]).concat(args), {
-    env: { ...process.env, YA_STUDIO_URL: MOCK_URL, YA_DATA_DIR: dataDir, ...extraEnv }, stdio: 'inherit',
+    // LC_ALL: Linux khong co locale UTF-8 thi Chromium khong chon duoc file co dau qua DOM.setFileInputFiles
+    env: { ...process.env, ...(/utf-?8/i.test(process.env.LC_ALL || process.env.LC_CTYPE || process.env.LANG || '') ? {} : { LC_ALL: 'C.UTF-8' }), YA_STUDIO_URL: MOCK_URL, YA_DATA_DIR: dataDir, ...extraEnv }, stdio: 'inherit',
   })
   const exited = new Promise((r) => proc.on('exit', r))
   let browser

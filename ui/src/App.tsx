@@ -1,5 +1,5 @@
 import {
-  AlertTriangle, ArrowUpCircle, BookOpen, CalendarClock, Copy, Download, Eraser, ExternalLink, FileVideo, FolderOpen, FolderPlus, Globe, Home,
+  AlertTriangle, ArrowUpCircle, BookOpen, CalendarClock, Clapperboard, Copy, Download, Eraser, ExternalLink, FileVideo, FolderOpen, FolderPlus, Globe, Home,
   ImageIcon, LayoutTemplate, Palette, Plus, RefreshCw, Save, ScrollText, Settings, Sparkles,
   Square, Subtitles, Trash2, Upload,
 } from 'lucide-react'
@@ -14,6 +14,7 @@ import { GuidePage } from './GuidePage'
 import { FEATURE_PAGES } from './pages'
 import { StudioPicker, type AccountsState } from './pages/AccountsPage'
 import { PresetOptimizeCard, defaultOptimizeTemplate } from './pages/OptimizeTemplateEditor'
+import { VisibilityCard } from './VisibilityCard'
 
 const PRIVACY: Record<Preset['privacy'], string> = { public: 'Công khai', unlisted: 'Không công khai', private: 'Riêng tư' }
 const MODELS: [string, string][] = [['gemini-2.5-flash', 'Gemini 2.5 Flash (nhanh, rẻ)'], ['gemini-2.5-pro', 'Gemini 2.5 Pro (kỹ hơn)'], ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash-Lite (rẻ nhất)']]
@@ -69,23 +70,33 @@ function UpdateBadge({ state, go }: { state: State; go: () => void }) {
   )
 }
 
-function FolderBar({ state, send }: Backend) {
+// video: thu muc video cua trang Dang video (chua chon rieng thi dung thu muc goc); khong: thu muc goc (bai dang)
+function FolderBar({ state, send, video }: Backend & { video?: boolean }) {
   const root = state.scan.root || state.settings?.root || ''
+  const own = state.settings?.videoDir || ''
+  const dir = video ? own || state.scan.videoDir || root : root
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl bg-muted/30 p-2 pl-3">
       <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
-      <span className={cn('min-w-0 flex-1 basis-40 truncate text-sm', root ? 'font-semibold' : 'text-muted-foreground')} title={root}>
-        {root || 'Chưa chọn thư mục gốc'}
+      <span className="shrink-0 text-xs font-bold text-muted-foreground">{video ? 'Thư mục video' : 'Thư mục gốc'}</span>
+      <span className={cn('min-w-0 flex-1 basis-40 truncate text-sm', dir ? 'font-semibold' : 'text-muted-foreground')} title={dir}>
+        {dir || (video ? 'Chưa chọn thư mục chứa video' : 'Chưa chọn thư mục gốc')}
+        {video && dir && !own && <span className="font-normal text-muted-foreground"> (thư mục gốc)</span>}
       </span>
-      <Button variant="outline" className="h-8 px-3" onClick={() => send('choose_root')}>
-        <FolderOpen /> {root ? 'Đổi' : 'Chọn thư mục'}
+      <Button variant="outline" className="h-8 px-3" onClick={() => send(video ? 'choose_video_dir' : 'choose_root')}>
+        <FolderOpen /> {dir ? 'Đổi' : 'Chọn thư mục'}
       </Button>
-      <Button variant="outline" className="h-8 px-3" disabled={!root} onClick={() => send('scan')}>
+      <Button variant="outline" className="h-8 px-3" disabled={!dir} onClick={() => send('scan')}>
         <RefreshCw /> Quét lại
       </Button>
     </div>
   )
 }
+
+// "Riêng tư → Công khai lúc ..." / "Công khai · Công chiếu ngay"
+const visText = (m: VideoItem['meta']) => m.publishAt
+  ? `Riêng tư → ${m.schedulePremiere ? 'Công chiếu' : 'Công khai'} lúc ${fmtWhen(m.publishAt)}`
+  : `${PRIVACY[m.privacy]}${m.premiere ? ' · Công chiếu ngay' : ''}`
 
 /* ================= Dang video ================= */
 // cac buoc cua src/flows/upload.js (hop thoai tai len cua Studio)
@@ -134,7 +145,9 @@ function VideoCard({ v, job, open, onToggle, busy, connected, send }: {
           <div className="flex flex-wrap gap-1">
             <Chip icon={LayoutTemplate} tone="active">{v.preset}</Chip>
             {v.meta.publishAt ? <Chip icon={CalendarClock}>{fmtWhen(v.meta.publishAt)}</Chip> : <Chip>{PRIVACY[v.meta.privacy]} ngay</Chip>}
+            {(v.meta.premiere || (v.meta.publishAt && v.meta.schedulePremiere)) && <Chip icon={Clapperboard}>Công chiếu</Chip>}
             {v.video && <Chip icon={FileVideo}>{v.video}</Chip>}
+            {v.thumb && <Chip icon={ImageIcon}>{v.thumb}</Chip>}
             {v.subtitles.length > 0 && <Chip icon={Subtitles}>{v.subtitles.map((s) => s.lang).join(', ')}</Chip>}
           </div>
         </div>
@@ -158,7 +171,7 @@ function VideoCard({ v, job, open, onToggle, busy, connected, send }: {
           <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
             <dt className="text-muted-foreground">Playlist</dt><dd className="truncate font-semibold">{v.meta.playlist || '—'}</dd>
             <dt className="text-muted-foreground">Dành cho trẻ em</dt><dd className="font-semibold">{v.meta.madeForKids ? 'Có' : 'Không'}</dd>
-            <dt className="text-muted-foreground">Hiển thị</dt><dd className="font-semibold">{v.meta.publishAt ? `Riêng tư → Công khai lúc ${fmtWhen(v.meta.publishAt)}` : PRIVACY[v.meta.privacy]}</dd>
+            <dt className="text-muted-foreground">Hiển thị</dt><dd className="font-semibold">{visText(v.meta)}</dd>
           </dl>
           {[...v.errors.slice(1), ...v.warnings.slice(v.errors.length ? 0 : 1), ...(job?.warnings ?? [])].map((m) => (
             <p key={m} className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />{m}</p>
@@ -179,6 +192,7 @@ function DraftDialog({ state, send }: Backend) {
   const [text, setText] = useState('')
   useEffect(() => setText(d?.text ?? ''), [d?.text])
   const v = state.scan.videos.find((x) => x.id === d?.id)
+  const file = v?.layout === 'flat' && v.infoFile ? v.infoFile : 'info.txt'
   return (
     <Dialog
       open={!!d}
@@ -188,7 +202,7 @@ function DraftDialog({ state, send }: Backend) {
         <>
           <Button variant="outline" onClick={() => send('draft_close')}>Đóng</Button>
           <Button variant="outline" disabled={d?.loading} onClick={() => d && send('describe', d.id)}><RefreshCw /> Viết lại</Button>
-          <Button disabled={!d || d.loading || !text.trim()} onClick={() => d && send('save_description', { id: d.id, text })}><Save /> Lưu vào info.txt</Button>
+          <Button disabled={!d || d.loading || !text.trim()} onClick={() => d && send('save_description', { id: d.id, text })}><Save /> Lưu vào {file}</Button>
         </>
       }
     >
@@ -196,9 +210,24 @@ function DraftDialog({ state, send }: Backend) {
         : d?.error ? <p className="text-red-600 dark:text-red-400">{d.error}</p>
         : <>
             <TextArea rows={10} value={text} onChange={(e) => setText(e.target.value)} aria-label="Mô tả Gemini viết" className="text-foreground" />
-            <p className="text-[11px]">Sửa lại nếu cần. Bấm lưu sẽ thay phần mô tả (sau dòng ---) trong info.txt của video này.</p>
+            <p className="text-[11px]">Sửa lại nếu cần. Bấm lưu sẽ thay phần mô tả (sau dòng ---) trong {file}{file === 'info.txt' ? ' của video này' : ' (chưa có thì tạo mới), đặt cạnh file video'}.</p>
           </>}
     </Dialog>
+  )
+}
+
+// Cach xep file trong thu muc video (kieu phang, mac dinh)
+function FlatHelp() {
+  return (
+    <Card title="Cách xếp file" hint="một thư mục, không cần thư mục con">
+      <pre className="overflow-x-auto rounded-lg bg-muted/40 p-2.5 font-mono text-[12px] leading-relaxed">{`Video cần đăng/
+  Bí ẩn rừng sâu tập 1.mp4     ← video (tiêu đề = tên file)
+  Bí ẩn rừng sâu tập 1.jpg     ← thumbnail cùng tên (.jpg .jpeg .png .webp)
+  Bí ẩn rừng sâu tập 1.vi.srt  ← phụ đề (tùy chọn)
+  Bí ẩn rừng sâu tập 1.txt     ← mô tả riêng (tùy chọn, Gemini lưu vào đây)
+  da-dang/                     ← tool chuyển file đã đăng vào đây`}</pre>
+      <p className="mt-2 text-xs text-muted-foreground">Mô tả, thẻ, danh sách phát, chế độ hiển thị và lịch lấy từ trang Mẫu mặc định. Thư mục con kiểu cũ (mỗi video một thư mục có info.txt) vẫn đọc được.</p>
+    </Card>
   )
 }
 
@@ -214,7 +243,7 @@ function VideosPage({ state, send, go }: Backend & { go: (p: string) => void }) 
       <PageHeader
         icon={Upload}
         title="Đăng video"
-        description="Mỗi thư mục con trong videos/ là một video. Tool đăng bằng hộp thoại tải lên của YouTube Studio, điền tiêu đề, mô tả, thẻ và lịch theo mẫu mặc định."
+        description="Chọn một thư mục chứa video và ảnh thumbnail cùng tên. Tiêu đề là tên file; mô tả, thẻ, chế độ hiển thị và lịch lấy theo mẫu mặc định. Tool đăng bằng hộp thoại tải lên của YouTube Studio."
         actions={<>
           <UpdateBadge state={state} go={() => go('update')} />
           {up.channels.length ? (
@@ -230,17 +259,16 @@ function VideosPage({ state, send, go }: Backend & { go: (p: string) => void }) 
         </>}
       />
       <div className="shrink-0 space-y-3 px-4 pb-3">
-        <FolderBar state={state} send={send} />
+        <FolderBar state={state} send={send} video />
         {state.scan.errors.map((e) => (
           <div key={e} className="flex flex-wrap items-center gap-2 rounded-xl bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
             <AlertTriangle className="h-4 w-4 shrink-0" /> <span className="min-w-0 flex-1">{e}</span>
-            {/chưa có thư mục con/.test(e) && <Button variant="outline" className="h-8 px-3" onClick={() => send('create_skeleton')}><FolderPlus /> Tạo thư mục mẫu</Button>}
           </div>
         ))}
       </div>
       <PageBody>
         {finished.length > 0 && (
-          <Card title="Vừa đăng xong" hint="thư mục đã chuyển vào da-dang/">
+          <Card title="Vừa đăng xong" hint="file đã chuyển vào da-dang/, không đăng lại">
             <ul className="space-y-1.5">
               {finished.map(([id, j]) => (
                 <li key={id} className="flex flex-wrap items-center gap-2 text-sm">
@@ -253,10 +281,13 @@ function VideosPage({ state, send, go }: Backend & { go: (p: string) => void }) 
           </Card>
         )}
         {state.scan.videos.length === 0 ? (
-          <EmptyState icon={FileVideo} text={state.scan.root ? 'Chưa có video nào trong thư mục videos/. Mỗi video là một thư mục con chứa file video, thumbnail và info.txt (tùy chọn).' : 'Chọn thư mục gốc để tool quét video và bài viết của bạn.'} />
+          <div className="space-y-3">
+            <EmptyState icon={FileVideo} text={state.scan.videoDir || state.settings?.videoDir ? 'Chưa có video nào trong thư mục này (video đã đăng nằm trong da-dang/ và được bỏ qua).' : 'Chọn thư mục chứa video cần đăng.'} />
+            <FlatHelp />
+          </div>
         ) : (
           <>
-            <p className="text-xs text-muted-foreground">{state.scan.videos.length} video · {ready.length} sẵn sàng · bấm vào một video để xem mô tả, nhờ Gemini viết, hoặc đăng riêng</p>
+            <p className="text-xs text-muted-foreground">{state.scan.videos.length} video · {ready.length} sẵn sàng · bấm vào một video để xem mô tả, nhờ Gemini viết (tùy chọn), hoặc đăng riêng</p>
             {state.scan.videos.map((v) => (
               <VideoCard key={v.id} v={v} job={state.jobs[v.id]} open={open === v.id} onToggle={() => setOpen(open === v.id ? null : v.id)} busy={busy} connected={connected} send={send} />
             ))}
@@ -364,7 +395,7 @@ function PresetsPage({ state, send }: Backend) {
                     </Button>
                   </Field>
                 </div>
-                <Field label="Tiêu đề (bắt buộc)" hint={<span className={cn(chars(vars.tieu_de) > 100 && 'text-red-500')}>{chars(vars.tieu_de)}/100 ký tự sau khi điền</span>}>
+                <Field label="Tiêu đề (thư mục con kiểu cũ)" hint={<span><span className={cn(chars(vars.tieu_de) > 100 && 'text-red-500')}>{chars(vars.tieu_de)}/100 ký tự sau khi điền</span> · video trong thư mục video lấy tên file làm tiêu đề</span>}>
                   <TextInput value={p.title} onChange={(e) => set({ title: e.target.value })} placeholder="{ten_video}" />
                 </Field>
                 <Field label="Mô tả" hint={<span className={cn(bytes(previewDesc) > 5000 && 'text-red-500')}>{bytes(previewDesc)}/5000 byte sau khi điền</span>}>
@@ -373,7 +404,7 @@ function PresetsPage({ state, send }: Backend) {
                 <div className="flex flex-wrap items-center gap-1">
                   <span className="mr-1 text-[11px] text-muted-foreground">Biến dùng được:</span>
                   {VARS.map((v) => <code key={v} className="rounded bg-muted px-1.5 py-0.5 text-[11px]">{v}</code>)}
-                  <span className="text-[11px] text-muted-foreground">và mọi dòng “Khóa: giá trị” trong info.txt</span>
+                  <span className="text-[11px] text-muted-foreground">và mọi dòng “Khóa: giá trị” trong file .txt cùng tên video (hoặc info.txt)</span>
                 </div>
                 <Field label="Thẻ (cách nhau bằng dấu phẩy)" hint={<span className={cn(tagLen > 500 && 'text-red-500')}>{tagLen}/500 ký tự</span>}>
                   <TagInput value={tagText} onChange={(tags) => set({ tags })} />
@@ -396,45 +427,7 @@ function PresetsPage({ state, send }: Backend) {
             </Card>
           </div>
           <div className="space-y-3">
-            <Card title="Chế độ hiển thị">
-              <Choice
-                name="Chế độ hiển thị"
-                value={p.privacy}
-                onChange={(v) => set({ privacy: v })}
-                options={[
-                  { value: 'public', label: 'Công khai', hint: 'Mọi người đều xem được.' },
-                  { value: 'unlisted', label: 'Không công khai', hint: 'Ai có đường liên kết đều xem được.' },
-                  { value: 'private', label: 'Riêng tư', hint: 'Chỉ bạn xem được.' },
-                ]}
-              />
-            </Card>
-            <Card title="Lên lịch">
-              <div className="space-y-3">
-                <Choice
-                  name="Lên lịch"
-                  value={p.schedule.mode}
-                  onChange={(mode) => set({ schedule: { ...p.schedule, mode } })}
-                  options={[
-                    { value: 'now', label: 'Đăng ngay khi tải lên', hint: 'Trừ khi tên thư mục hoặc info.txt có giờ đăng.' },
-                    { value: 'times', label: 'Theo khung giờ cố định', hint: 'Mỗi video lấy khung giờ trống tiếp theo.' },
-                    { value: 'interval', label: 'Cách nhau đều N giờ' },
-                  ]}
-                />
-                {p.schedule.mode !== 'now' && (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label={p.schedule.mode === 'times' ? 'Khung giờ (vd: 07:00, 19:00)' : 'Giờ bắt đầu'}>
-                      <TimesInput value={p.schedule.times} onChange={(times) => set({ schedule: { ...p.schedule, times } })} single={p.schedule.mode === 'interval'} />
-                    </Field>
-                    {p.schedule.mode === 'interval' && (
-                      <Field label="Cách nhau (giờ)">
-                        <TextInput type="number" min={1} value={p.schedule.intervalHours} onChange={(e) => set({ schedule: { ...p.schedule, intervalHours: Math.max(1, Number(e.target.value) || 1) } })} />
-                      </Field>
-                    )}
-                  </div>
-                )}
-                {p.schedule.mode !== 'now' && <p className="text-[11px] text-muted-foreground">Tool chọn “Lên lịch” trong hộp thoại tải lên (ngày + giờ), đến giờ YouTube tự chuyển sang Công khai.</p>}
-              </div>
-            </Card>
+            <VisibilityCard p={p} set={set} />
             <Card title="Tùy chọn khác">
               <ToggleRow title="Thông báo cho người đăng ký" hint="Mục “Xuất bản lên nguồn cấp dữ liệu Kênh đăng ký và thông báo cho người đăng ký” trong Hiện thêm." checked={p.notifySubscribers} onChange={(v) => set({ notifySubscribers: v })} />
             </Card>
@@ -471,17 +464,6 @@ function TagInput({ value, onChange }: { value: string; onChange: (tags: string[
   const [text, setText] = useState(value)
   useEffect(() => setText(value), [value])
   return <TextInput value={text} onChange={(e) => setText(e.target.value)} onBlur={() => onChange(text.split(/[,\n]/).map((t) => t.trim()).filter(Boolean))} placeholder="phim hay, review phim" />
-}
-
-function TimesInput({ value, onChange, single }: { value: string[]; onChange: (v: string[]) => void; single?: boolean }) {
-  const joined = (single ? value.slice(0, 1) : value).join(', ')
-  const [text, setText] = useState(joined)
-  useEffect(() => setText(joined), [joined])
-  const commit = () => {
-    const times = text.split(/[,\s]+/).map((t) => t.trim()).filter((t) => /^\d{1,2}:\d{2}$/.test(t)).map((t) => t.padStart(5, '0'))
-    onChange(times.length ? times : ['19:00'])
-  }
-  return <TextInput value={text} onChange={(e) => setText(e.target.value)} onBlur={commit} placeholder="19:00" />
 }
 
 /* ================= Khung YouTube Studio ================= */
@@ -552,7 +534,9 @@ function SettingsPage({ state, send }: Backend) {
           <div className="space-y-3">
             <Card title="Thư mục làm việc">
               <div className="space-y-3">
+                <FolderBar state={state} send={send} video />
                 <FolderBar state={state} send={send} />
+                <p className="text-[11px] text-muted-foreground">Thư mục video: video + thumbnail cùng tên cho trang Đăng video. Thư mục gốc: posts/ cho trang Đăng bài.</p>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" className="h-8 px-3" disabled={!state.scan.root} onClick={() => send('create_skeleton')}><FolderPlus /> Tạo thư mục mẫu</Button>
                   <Button variant="outline" className="h-8 px-3" disabled={!state.scan.root} onClick={() => send('open_path', state.scan.root)}><FolderOpen /> Mở thư mục</Button>

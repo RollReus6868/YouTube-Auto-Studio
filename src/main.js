@@ -41,7 +41,7 @@ const state = {
   update: { status: 'idle', latest: '', notes: '', progress: 0, error: '', manual: kind === 'manual' },
   settings: null,
   secrets: { gemini: false, geminiEncrypted: false },
-  scan: { root: '', videos: [], posts: [], errors: [], at: '' },
+  scan: { root: '', videoDir: '', videos: [], posts: [], errors: [], at: '' }, // root: thu muc goc (bai dang); videoDir: thu muc video
   studio: { channelId: '', channelName: '', url: '', visible: false },
   upload: { channelKey: '', channels: [] }, // kenh dang video (trang Dang video) + cac kenh da tick o trang Tai khoan
   jobs: {}, // id video -> { status: queued|run|done|error|stopped, step, progress, error, url }
@@ -101,12 +101,20 @@ function addHistory(entry) {
   fs.writeFileSync(historyFile(), JSON.stringify(h.slice(-2000), null, 1))
 }
 
+// Thu muc video cua trang Dang video: da chon rieng, chua chon thi dung thu muc goc (ban cu: <goc>/videos/<thu muc>)
+const videoDir = () => store.settings.videoDir || store.settings.root || ''
+
 function runScan(quiet = false) {
-  const r = scanner.scan(store.settings.root)
+  const root = store.settings.root
+  const vdir = videoDir()
+  const v = scanner.scanVideos(vdir)
+  const posts = root ? scanner.scan(root).posts : []
+  const r = { root, videos: v.videos, posts, errors: vdir ? v.errors : [], at: v.at }
+  // lich su da dang (uploads.json): chan dang lai video chua chuyen duoc vao da-dang/ (khoa: file video | thu muc kieu cu)
   const done = new Map(readHistory().map((h) => [h.folder, h]))
-  for (const v of r.videos) {
-    const h = done.get(v.folder)
-    if (h) v.errors.unshift(`Đã đăng lên YouTube lúc ${new Date(h.at).toLocaleString('vi-VN')} (${h.url}). Chuyển thư mục này vào da-dang/ để ẩn.`)
+  for (const it of r.videos) {
+    const h = done.get(it.key)
+    if (h) it.errors.unshift(`Đã đăng lên YouTube lúc ${new Date(h.at).toLocaleString('vi-VN')} (${h.url}). Chuyển ${it.layout === 'flat' ? 'file' : 'thư mục'} này vào da-dang/ để ẩn.`)
   }
   const ready = r.videos.filter((v) => !v.errors.length)
   const plan = planSchedule(ready, (v) => store.presetFor(v))
@@ -114,15 +122,16 @@ function runScan(quiet = false) {
   const channel = store.settings.channel
   raw = new Map()
   state.scan = {
-    root: r.root, errors: r.errors, at: r.at,
+    root: r.root, videoDir: vdir, errors: r.errors, at: r.at,
     videos: r.videos.map((v) => {
       const preset = store.presetFor(v)
       const p = planOf.get(v.id) || { publishAt: null, warning: '' }
       const meta = buildVideoMeta(v, preset, { publishAt: p.publishAt, channel })
       const problems = v.errors.length ? v.errors : validateMeta(meta)
-      raw.set(v.id, { folder: v.folder, video: v.video, meta, info: v.info, name: v.name, ok: !problems.length })
+      raw.set(v.id, { layout: v.layout, key: v.key, folder: v.folder, video: v.video, files: v.files, doneDir: v.doneDir, infoFile: v.infoFile, thumbnail: v.thumbnail, meta, info: v.info, name: v.name, ok: !problems.length })
       return {
-        id: v.id, dir: v.dir, folder: v.folder, name: v.name, size: v.size || 0,
+        id: v.id, layout: v.layout, dir: v.dir, folder: v.folder, name: v.name, size: v.size || 0,
+        thumb: v.thumbnail ? path.basename(v.thumbnail) : '', infoFile: v.infoFile ? path.basename(v.infoFile) : '',
         video: v.video ? path.basename(v.video) : '', thumbUrl: fileUrl(v.thumbnail),
         subtitles: v.subtitles.map((s) => ({ file: path.basename(s.file), lang: s.lang || '' })),
         preset: preset.name, meta: { ...meta, thumbnail: undefined, subtitles: undefined },
@@ -138,7 +147,7 @@ function runScan(quiet = false) {
   }
   if (!quiet) {
     if (r.errors.length) log('warn', r.errors[0])
-    else log('info', `Đã quét: ${r.videos.length} video (${state.scan.videos.filter((v) => !v.errors.length).length} sẵn sàng), ${r.posts.length} bài cộng đồng.`)
+    else log('info', `Đã quét: ${r.videos.length} video (${state.scan.videos.filter((x) => !x.errors.length).length} sẵn sàng)${root ? `, ${r.posts.length} bài cộng đồng` : ''}.`)
   }
   push()
 }
@@ -311,11 +320,11 @@ async function runUploads(ids) {
       uploading = true
       try {
         const r = await ctx.withChannel(key, (page) => uploadOne(page, item, {
-          urls: URLS, uc: channelOf(page.url()) || ch.ucId, root: store.settings.root, preset, channelName: ch.name, log,
+          urls: URLS, uc: channelOf(page.url()) || ch.ucId, root: videoDir(), preset, channelName: ch.name, log,
           onStep: (step) => setJob(id, { step }),
           onProgress: (progress) => setJob(id, { progress }),
         }), { label: `dang-video-${item.name || id}` })
-        addHistory({ folder: item.folder, movedTo: r.folder, id: r.id, url: r.url, title: item.meta.title, channel: ch.ucId || key, at: new Date().toISOString() })
+        addHistory({ folder: item.key || item.folder, movedTo: r.folder, id: r.id, url: r.url, title: item.meta.title, channel: ch.ucId || key, at: new Date().toISOString() })
         setJob(id, { status: 'done', step: '', progress: 100, url: r.url, warnings: r.warnings })
         if (r.after && ctx.afterUpload) ctx.afterUpload({ videoId: r.id, title: item.meta.title, publishAt: r.schedule || item.meta.publishAt, tpl: r.after, presetId: preset.id || '', channelId: key })
         ok++
@@ -324,7 +333,8 @@ async function runUploads(ids) {
         setJob(id, { status: stopped ? 'stopped' : 'error', error: e.message })
         log(stopped ? 'warn' : 'error', `${item.meta.title}: ${e.message}`)
         // gioi han tai len hang ngay / mat dang nhap: cac video sau cung se loi, dung han
-        if (/giới hạn tải lên|upload limit|chưa đăng nhập|đăng nhập lại/i.test(e.message)) stopAfter = true
+        // ... hoac Google doi xac minh danh tinh (nguoi dung phai tu lam o trang Tai khoan)
+        if (/giới hạn tải lên|upload limit|chưa đăng nhập|đăng nhập lại|xác minh danh tính/i.test(e.message)) stopAfter = true
       } finally {
         uploading = false
       }
@@ -355,11 +365,12 @@ async function describe(id) {
   push()
 }
 
-// Ghi mo ta vao info.txt (giu nguyen cac dong khoa phia tren, thay phan sau "---")
+// Ghi mo ta vao "<ten video>.txt" (thu muc phang) hoac info.txt (thu muc con kieu cu): giu cac dong khoa, thay phan sau "---"
 function saveDescription({ id, text }) {
   const item = raw.get(id)
   if (!item || !text) return
-  const file = ['info.txt', 'thong-tin.txt', 'mo-ta.txt'].map((f) => path.join(item.folder, f)).find((f) => fs.existsSync(f)) || path.join(item.folder, 'info.txt')
+  const file = item.layout === 'flat' ? item.infoFile
+    : ['info.txt', 'thong-tin.txt', 'mo-ta.txt'].map((f) => path.join(item.folder, f)).find((f) => fs.existsSync(f)) || path.join(item.folder, 'info.txt')
   let head = ''
   if (fs.existsSync(file)) {
     const lines = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '').split(/\r?\n/)
@@ -368,7 +379,7 @@ function saveDescription({ id, text }) {
   }
   fs.writeFileSync(file, `${head ? `${head}\r\n` : ''}---\r\n${text.trim().replace(/\r?\n/g, '\r\n')}\r\n`)
   state.draft = null
-  log('ok', `Đã lưu mô tả vào ${path.relative(store.settings.root, file)}.`)
+  log('ok', `Đã lưu mô tả vào ${path.relative(videoDir(), file) || path.basename(file)}.`)
   runScan(true)
 }
 
@@ -381,6 +392,18 @@ async function chooseRoot() {
   const r = await dialog.showOpenDialog(win, { title: 'Chọn thư mục gốc chứa video và bài viết', properties: ['openDirectory', 'createDirectory'] })
   if (r.canceled || !r.filePaths[0]) return
   setRoot(r.filePaths[0])
+}
+
+async function chooseVideoDir() {
+  const r = await dialog.showOpenDialog(win, { title: 'Chọn thư mục chứa video và ảnh thumbnail (cùng tên)', properties: ['openDirectory', 'createDirectory'] })
+  if (r.canceled || !r.filePaths[0]) return
+  setVideoDir(r.filePaths[0])
+}
+function setVideoDir(dir) {
+  store.save({ videoDir: dir })
+  refreshSettings()
+  log('ok', `Thư mục video: ${dir}`)
+  runScan()
 }
 
 function setRoot(root) {
@@ -410,6 +433,8 @@ const commands = {
   scan: () => runScan(),
   choose_root: () => chooseRoot(),
   set_root: (p) => p && setRoot(String(p)),
+  choose_video_dir: () => chooseVideoDir(),
+  set_video_dir: (p) => p && setVideoDir(String(p)),
   create_skeleton: () => {
     if (!store.settings.root) return log('warn', 'Hãy chọn thư mục gốc trước.')
     try { scanner.createSkeleton(store.settings.root); log('ok', 'Đã tạo các thư mục videos, posts, da-dang và file HUONG-DAN.txt.'); runScan(true) } catch (e) { log('error', e.message) }
@@ -511,7 +536,7 @@ if (!app.requestSingleInstanceLock()) {
     for (const fn of started) fn()
     syncUploadChannels()
     setInterval(syncUploadChannels, 3000).unref()
-    if (store.settings.root) runScan(true)
+    if (videoDir() || store.settings.root) runScan(true)
     setInterval(refreshStudio, 2000)
     if (!process.env.YA_NO_UPDATE_CHECK) updateCheck()
   }).catch(fatal)

@@ -128,6 +128,90 @@ function scanVideo(root, dir) {
   return item
 }
 
+// ---- thu muc video "phang" (mac dinh tu 0.5.1) -------------------------------------------
+// Nguoi dung chon MOT thu muc: moi video la mot file, anh thumbnail cung ten ("Ten video.mp4" + "Ten video.jpg|jpeg|png|webp").
+// Tieu de = ten file (bo duoi). Tuy chon: "Ten video.vi.srt" / "Ten video.srt" (phu de), "Ten video.txt" (dang info.txt:
+// mo ta Gemini viet, the...). Video da dang chuyen vao <thu muc>/da-dang/.
+// Van doc kieu cu (re): thu muc con co file video = mot video (scanVideo); thu muc "videos/" ben trong = thu muc goc kieu cu.
+const THUMB_EXT = ['.jpg', '.jpeg', '.png', '.webp']
+const SKIP_DIRS = new Set([DIRS.done, DIRS.posts])
+const baseOf = (f) => f.slice(0, f.length - path.extname(f).length)
+const same = (a, b) => a.normalize('NFC').toLowerCase() === b.normalize('NFC').toLowerCase()
+
+function scanFlat(dir, files) {
+  const out = []
+  const seen = new Map()
+  for (const f of files.filter((x) => VIDEO_EXT.includes(ext(x)))) {
+    const base = baseOf(f)
+    const video = path.join(dir, f)
+    const item = {
+      kind: 'video', layout: 'flat', id: `tep/${f}`, dir: base, folder: dir, key: video, name: base, titleFromName: true,
+      date: null, time: null, episode: (/(?:tap|tập|ep)[\s_-]*(\d+)/i.exec(base) || [])[1] || '',
+      video, size: fs.statSync(video).size, thumbnail: null, subtitles: [], info: { vars: {} }, infoFile: path.join(dir, `${base}.txt`), files: [video], errors: [], warnings: [],
+    }
+    const twin = [...seen.keys()].find((b) => same(b, base))
+    if (twin) item.errors.push(`Trùng tên với "${seen.get(twin)}": mỗi video cần một tên riêng (đổi tên một file).`)
+    else seen.set(base, f)
+    const thumbs = files.filter((x) => THUMB_EXT.includes(ext(x)) && same(baseOf(x), base)).sort((a, b) => THUMB_EXT.indexOf(ext(a)) - THUMB_EXT.indexOf(ext(b)))
+    if (thumbs.length) {
+      item.thumbnail = path.join(dir, thumbs[0])
+      item.files.push(item.thumbnail)
+      if (fs.statSync(item.thumbnail).size > THUMB_MAX) item.errors.push(`Ảnh thumbnail "${thumbs[0]}" lớn hơn 2 MB, YouTube sẽ từ chối.`)
+      if (thumbs.length > 1) item.warnings.push(`Có ${thumbs.length} ảnh cùng tên, tool dùng "${thumbs[0]}".`)
+    } else item.warnings.push(`Chưa có ảnh thumbnail cùng tên ("${base}.jpg", .jpeg, .png hoặc .webp): YouTube tự chọn ảnh từ video.`)
+    for (const s of files.filter((x) => SUB_EXT.includes(ext(x)))) {
+      const b = baseOf(s)
+      const lang = same(b, base) ? '' : same(b.slice(0, base.length), base) && /^\.[a-z]{2,3}(-[A-Za-z]{2,4})?$/.test(b.slice(base.length)) ? b.slice(base.length + 1) : null
+      if (lang === null) continue
+      item.subtitles.push({ file: path.join(dir, s), lang })
+      item.files.push(path.join(dir, s))
+    }
+    const txt = files.find((x) => ext(x) === '.txt' && same(baseOf(x), base))
+    if (txt) {
+      item.infoFile = path.join(dir, txt)
+      item.files.push(item.infoFile)
+      const { info, warnings } = parseInfo(fs.readFileSync(item.infoFile, 'utf8'))
+      item.info = info
+      item.warnings.push(...warnings.map((w) => w.replace(/^info\.txt/, txt)))
+    }
+    out.push(item)
+  }
+  return out
+}
+
+// Tra ve { dir, videos, errors }. Moi video co doneDir (noi chuyen vao sau khi dang).
+function scanVideos(dir) {
+  const out = { dir, videos: [], errors: [], at: new Date().toISOString() }
+  if (!dir) { out.errors.push('Chưa chọn thư mục video.'); return out }
+  if (!fs.existsSync(dir)) { out.errors.push(`Không tìm thấy thư mục: ${dir}`); return out }
+  const doneDir = path.join(dir, DIRS.done)
+  const add = (it) => { it.doneDir = doneDir; out.videos.push(it) }
+  const walk = (d, prefix, depth) => {
+    let files
+    try { files = listFiles(d) } catch (e) { out.errors.push(`${d}: ${e.message}`); return }
+    for (const it of scanFlat(d, files)) { if (prefix) it.id = `${prefix}/${it.id}`; add(it) }
+    for (const sub of listDirs(d)) {
+      if (SKIP_DIRS.has(sub.toLowerCase())) continue
+      // thu muc goc kieu cu: <goc>/videos/<thu muc video>/...
+      if (depth === 0 && sub.toLowerCase() === DIRS.videos) { walk(path.join(d, sub), DIRS.videos, 1); continue }
+      const folder = path.join(d, sub)
+      let has = false
+      try { has = listFiles(folder).some((f) => VIDEO_EXT.includes(ext(f))) } catch (_) { /* bo */ }
+      // thu muc khac (anh, nhap...) trong thu muc video: bo qua; trong videos/ kieu cu: van bao "khong co file video"
+      if (!has && !prefix) continue
+      try {
+        const it = scanVideo(d, sub)
+        it.layout = 'folder'
+        it.key = it.folder
+        it.id = prefix ? `${prefix}/${sub}` : `thu-muc/${sub}`
+        add(it)
+      } catch (e) { out.errors.push(`${sub}: ${e.message}`) }
+    }
+  }
+  walk(dir, '', 0)
+  return out
+}
+
 // ---- bai dang (posts) ------------------------------------------------------------------
 // Loai bai: text | image | poll | image_poll | quiz | video (mot bai chi gan duoc mot loai)
 const POST_TYPES = {
@@ -371,13 +455,16 @@ function createSkeleton(root) {
   const readme = path.join(root, 'HUONG-DAN.txt')
   if (!fs.existsSync(readme)) {
     fs.writeFileSync(readme, [
-      'Mỗi video là một thư mục con trong "videos", ví dụ: videos/2026-10-28_ten-video/',
-      '  video.mp4      (bắt buộc)',
-      '  thumbnail.jpg  (tùy chọn, 1280x720, dưới 2 MB)',
-      '  info.txt       (tùy chọn, bỏ trống thì dùng mẫu mặc định)',
-      '  phude.vi.srt   (tùy chọn)',
+      'Video: chọn thư mục video ở trang Đăng video (hoặc bỏ video vào thư mục "videos" này).',
+      'Mỗi video là một file, ảnh thumbnail CÙNG TÊN nằm cạnh, ví dụ:',
+      '  Bí ẩn rừng sâu tập 1.mp4',
+      '  Bí ẩn rừng sâu tập 1.jpg      (hoặc .jpeg / .png / .webp, dưới 2 MB)',
+      '  Bí ẩn rừng sâu tập 1.vi.srt   (tùy chọn: phụ đề)',
+      '  Bí ẩn rừng sâu tập 1.txt      (tùy chọn: mô tả riêng, viết như info.txt bên dưới)',
+      'Tiêu đề = tên file. Mô tả, thẻ, danh sách phát, chế độ hiển thị, lịch đăng: theo mẫu mặc định.',
+      'Video đã đăng được chuyển vào "da-dang" (kèm file .ket-qua.txt), lần sau không đăng lại.',
       '',
-      'Ví dụ info.txt:',
+      'Ví dụ file .txt riêng của video (hoặc info.txt trong thư mục con kiểu cũ):',
       '  Tiêu đề: Tên video {so_tap}',
       '  Thẻ: thẻ 1, thẻ 2',
       '  Giờ đăng: 2026-10-28 19:00',
@@ -408,4 +495,4 @@ function createSkeleton(root) {
   }
 }
 
-module.exports = { VIDEO_EXT, IMAGE_EXT, DIRS, POST_TYPE_LABEL, POST_IMAGES_MAX, parseWhen, parseInfo, parseFolderName, parsePostText, videoId, imageSize, scan, scanVideo, scanPost, createSkeleton }
+module.exports = { VIDEO_EXT, IMAGE_EXT, THUMB_EXT, DIRS, POST_TYPE_LABEL, POST_IMAGES_MAX, parseWhen, parseInfo, parseFolderName, parsePostText, videoId, imageSize, scan, scanVideo, scanVideos, scanPost, createSkeleton }

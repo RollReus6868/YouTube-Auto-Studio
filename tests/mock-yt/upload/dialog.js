@@ -6,14 +6,21 @@
 // -> Che do hien thi (Rieng tu / Khong cong khai / Cong khai, Len lich) -> Luu -> "Chung toi van dang kiem tra noi dung
 // cua ban" [Quay lai][Van xuat ban] -> hop thoai dong khi video con dang tai (tien do o goc trang) -> chia se.
 // Cac o trong trang Chi tiet chep tu trang Chi tiet video that (html/yt-3..5, tests/mock-yt/optimize/chi-tiet-video.html);
-// khung hop thoai, cac buoc, che do hien thi, lich, tien do, phu de: chua co HTML that (doan theo Studio).
+// buoc chon tep + hop thoai "Ban da hoan tat" (yt-trust-tiers-wizard-dialog) chep tu HTML that (that-chon-tep.html);
+// lich chon ngay (ytcp-date-picker > form + #prev-month/#next-month + ytcp-scrollable-calendar) chep tu loi-trang that;
+// buoc Che do hien thi: ten the / id theo CSS that cua Studio + anh chup cua nguoi dung ("Luu hoac xuat ban", "Len lich":
+// o ngay "30 thg 10, 2026" mo lich T2..CN, o gio "09:00" + danh sach moc 15 phut, nut "Mui gio", "Dat lam video Cong chieu");
+// cac buoc khac, tien do, phu de: chua co HTML that (doan theo Studio).
 // Dung o: /studio/channel/UC.../videos/upload?d=ud (upload.html) va trang tong quan kenh (accounts/dashboard.html: nut
 // tai len #upload-icon, nut Tao). Can /__file/optimize/data.js (OPT). window.__UP = { uc, cookieCh } do trang chu dat.
 // Bien the (localStorage 'up-<ten>' = true): en (Studio tieng Anh), slow (tai len cham), noid (khong co duong lien ket
 // trong hop thoai), limit (gioi han tai len hang ngay), failmid (loi giua chung), nothumb (kenh chua xac minh), nosubs
 // (khong co muc phu de), monet (them buoc Kiem tien), checkswait (buoc Kiem tra khoa nut Tiep 2,5 giay), noshare (khong
 // hien hop thoai chia se), nocheckwarn (kiem tra xong ngay: khong hoi "Van xuat ban"), hidelabel (khong co chu tien do
-// trong hop thoai; sau khi dong chi con o tien do goc trang), morepl (kenh co them 2 danh sach phat).
+// trong hop thoai; sau khi dong chi con o tien do goc trang), morepl (kenh co them 2 danh sach phat),
+// trust (= N: N lan dau chon file hien "Ban da hoan tat ... Hay thu lam moi trang", hop thoai tai len dung o buoc chon tep;
+// dem giam trong localStorage), verify (Google doi "Xac minh danh tinh cua ban"), notypedate (o nhap ngay trong lich khong nhan
+// chu go: phai bam lich), timepick (o gio khong nhan chu go: phai chon trong danh sach), nopremiere (kenh khong co Cong chieu).
 (() => {
   const F = (k) => OPT.load('up-' + k, false)
   const EN = F('en')
@@ -38,7 +45,7 @@
   ytcp-uploads-dialog button, ytcp-playlist-dialog button, ytve-modal-host button, ytcp-prechecks-warning-dialog button, ytcp-video-share-dialog button, ytcp-playlist-creation-dialog button { background: #3e3e3e; color: #fff; border: 0; border-radius: 18px; padding: 8px 14px; font-weight: 500; cursor: pointer }
   ytcp-uploads-dialog button[disabled] { opacity: .4 }
   ytcp-uploads-dialog > tp-yt-paper-dialog { position: fixed; z-index: 20; left: 40px; top: 20px; width: 980px; height: 660px; display: flex; flex-direction: column; background: #282828; color: #fff; border: 1px solid #555; border-radius: 12px; font: 13px Roboto, Arial, sans-serif }
-  #up-title-row { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #3e3e3e } #dialog-title { flex: 1; font-size: 20px; margin: 0 } #save-status { color: #aaa }
+  #up-title-row { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #3e3e3e } #up-title-row #title { flex: 1; font-size: 20px; margin: 0 } ytcp-uploads-dialog .dialog-content { display: flex; flex-direction: column; flex: 1; min-height: 0 } ytcp-uploads-file-analyzer { display: none } #save-status { color: #aaa }
   #up-body { flex: 1; overflow: auto; padding: 0 20px }
   ytcp-uploads-file-picker { text-align: center; padding-top: 120px }
   .error-short { color: #ff6b6b; margin: 12px }
@@ -63,14 +70,29 @@
   ytcp-playlist-dialog ul { flex: 1; list-style: none; padding: 0; margin: 0 } ytcp-playlist-dialog li.pl-row { display: flex; align-items: center; gap: 6px } ytcp-playlist-dialog li.pl-row label { display: flex; align-items: center; gap: 6px; flex: 1; cursor: pointer } ytcp-badge { background: #444; font-size: 11px; padding: 2px 6px }
   .action-buttons { display: flex; justify-content: space-between; position: relative }
   ytcp-playlist-creation-dialog > tp-yt-paper-dialog { position: fixed; z-index: 50; left: 300px; top: 180px; width: 320px; display: block; background: #1f1f1f; color: #fff; border: 1px solid #555; border-radius: 8px; padding: 12px }
-  ytcp-date-picker tp-yt-paper-dialog { position: fixed; z-index: 40; left: 300px; top: 300px; width: 280px; display: block; background: #1f1f1f; color: #fff; border: 1px solid #555; padding: 12px }
+  ytcp-date-picker tp-yt-paper-dialog { position: fixed; z-index: 40; left: 300px; top: 200px; width: 280px; display: block; background: #1f1f1f; color: #fff; border: 1px solid #555; padding: 12px }
   ytve-modal-host tp-yt-paper-dialog { position: fixed; z-index: 40; left: 120px; top: 60px; width: 640px; height: 460px; display: block; background: #1f1f1f; color: #fff; border: 1px solid #555; border-radius: 8px; padding: 16px }
   #video-editor-modal-host-header { display: flex; gap: 12px; align-items: center } #video-editor-modal-host-title { flex: 1; font-size: 18px; font-weight: 600 }
   .templates { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px } .template { display: block; border: 1px solid #555; border-radius: 6px; padding: 30px 8px 8px; cursor: pointer }
   ytcp-video-share-dialog tp-yt-paper-dialog, ytcp-prechecks-warning-dialog tp-yt-paper-dialog { position: fixed; z-index: 45; left: 300px; top: 200px; width: 440px; display: block; background: #1f1f1f; color: #fff; border: 1px solid #555; border-radius: 8px; padding: 16px }
   ytcp-uploads-dialog .el-row { display: flex; align-items: center; justify-content: space-between; border: 1px solid #3e3e3e; border-radius: 8px; padding: 12px; margin: 10px 0 }
   #time-of-day-container input { background: transparent; color: #fff; border: 1px solid #555; padding: 6px; width: 90px }
-  ytcp-multi-progress-monitor { position: fixed; right: 16px; bottom: 16px; background: #333; color: #fff; padding: 10px 14px; border-radius: 8px; z-index: 15 }`
+  ytcp-multi-progress-monitor { position: fixed; right: 16px; bottom: 16px; background: #333; color: #fff; padding: 10px 14px; border-radius: 8px; z-index: 15 }
+  yt-trust-tiers-wizard-dialog, ytcp-dialog, yt-trust-tiers-wizard, ytcp-video-visibility-select, ytcp-datetime-picker, ytcp-scrollable-calendar, tp-yt-iron-list, ytcp-form-input-container { display: block }
+  yt-trust-tiers-wizard-dialog tp-yt-paper-dialog { position: fixed; z-index: 45; left: 380px; top: 260px; width: 480px; display: block; background: #282828; color: #fff; border-radius: 16px; padding: 20px }
+  yt-trust-tiers-wizard-dialog h1 { font-size: 20px; margin: 0 0 16px } yt-trust-tiers-wizard-dialog .footer { display: flex; justify-content: flex-end; gap: 8px }
+  ytcp-video-visibility-select #first-container, ytcp-video-visibility-select #second-container { display: block; border: 1px solid #555; border-radius: 12px; padding: 12px 16px; margin: 10px 0 }
+  ytcp-video-visibility-select[first-container-style=selected] #first-container, ytcp-video-visibility-select[second-container-style=selected] #second-container { border-color: #aaa }
+  tp-yt-paper-radio-button { flex-wrap: wrap } tp-yt-paper-radio-button .visibility-description { flex-basis: 100%; margin-left: 22px }
+  .instant-premiere-container { margin-left: 22px; display: flex; align-items: center; gap: 6px } .sched-head { display: flex; justify-content: space-between; align-items: center }
+  .date-timezone-container { display: flex; gap: 12px; align-items: center; margin: 8px 0 }
+  ytcp-datetime-picker ytcp-dropdown-trigger { width: 180px } #time-of-day-container { width: 110px }
+  #time-of-day-menu { position: absolute; z-index: 60; left: 0; top: 100% } #time-of-day-menu tp-yt-paper-dialog { display: block; background: #1f1f1f; border: 1px solid #555; width: 120px; max-height: 200px; overflow: auto }
+  ytcp-date-picker #control-area { display: flex; align-items: center; gap: 8px } ytcp-date-picker #form { flex: 1 } ytcp-date-picker ytcp-icon-button { cursor: pointer; padding: 0 6px; font-size: 18px }
+  ytcp-date-picker #textbox input { background: transparent; color: #fff; border: 0; border-bottom: 1px solid #aaa; width: 140px }
+  .calendar-header, .calendar-week { display: grid; grid-template-columns: repeat(7, 34px); text-align: center } .calendar-header-day { color: #aaa; font-size: 11px; padding: 4px 0 }
+  tp-yt-iron-list#calendar-main { max-height: 230px; overflow: auto } .calendar-month-label { text-transform: uppercase; font-weight: 600; padding: 6px 4px }
+  .calendar-day { padding: 5px 0; cursor: pointer; border-radius: 50% } .calendar-day.disabled { color: #666; cursor: default } .calendar-day.selected { background: #eee; color: #000 } .calendar-day.today { outline: 1px solid #aaa }`
   document.head.appendChild(css)
 
   const LANGS = EN ? ['None', 'Vietnamese', 'English', 'English (United States)', 'English (United Kingdom)', 'Japanese', 'French'] : ['Không có', 'Tiếng Việt', 'Tiếng Anh', 'Tiếng Anh (Hoa Kỳ)', 'Tiếng Anh (Vương quốc Anh)', 'Tiếng Nhật', 'Tiếng Pháp']
@@ -123,7 +145,7 @@
     file: '', size: 0, title: '', desc: CHANNEL_DESC, thumb: '', playlists: [], kids: '', paid: '', ai: '', tags: [CHANNEL_TAG],
     language: LANGS[3], titleLanguage: LANGS[3], recDate: '', location: '', license: LICS[0], embed: true, notify: true,
     remix: REMIX[0], category: CATS[3], comments: COMMENTS[0], showLikes: true, endscreen: '', subs: [], vis: '', date: fmtDate(new Date()),
-    time: T('09:00', '9:00 AM'), id: '', pct: 0, uploaded: false, checked: false, failed: '', step: 0, earlyDone: false, anyway: false, published: false,
+    time: T('09:00', '9:00 AM'), premiere: false, schedulePremiere: false, id: '', pct: 0, uploaded: false, checked: false, failed: '', step: 0, earlyDone: false, anyway: false, published: false,
   })
   const STEPS = () => [['details', T('Chi tiết', 'Details')]].concat(F('monet') ? [['monetization', T('Kiếm tiền', 'Monetization')]] : [], [['video-elements', T('Các thành phần của video', 'Video elements')], ['checks', T('Kiểm tra ban đầu', 'Checks')], ['review', T('Chế độ hiển thị', 'Visibility')]])
 
@@ -154,28 +176,69 @@
     if (dlg) return
     W = fresh()
     log({ type: 'upload-open' })
+    // buoc chon tep: chep cau truc HTML that (that-chon-tep.html)
     dlg = document.createElement('ytcp-uploads-dialog')
-    dlg.innerHTML = `<tp-yt-paper-dialog id="dialog" role="dialog" aria-label="${T('Tải video lên', 'Upload videos')}">
-      <div id="up-title-row"><h1 id="dialog-title">${T('Tải video lên', 'Upload videos')}</h1><span id="save-status"></span><ytcp-icon-button id="close-button" role="button" aria-label="${T('Đóng', 'Close')}">✕</ytcp-icon-button></div>
-      <div id="up-body"><ytcp-uploads-file-picker><div id="content"><p class="label">${T('Kéo và thả tệp video để tải lên', 'Drag and drop video files to upload')}</p>
-        <p class="description">${T('Các video của bạn sẽ ở chế độ riêng tư cho đến khi bạn xuất bản.', 'Your videos will be private until you publish them.')}</p>
-        <div class="error-area"></div>${OPT.button('select-files-button', T('Chọn tệp', 'Select files'))}<input type="file" name="Filedata" hidden accept="video/*"></div></ytcp-uploads-file-picker></div>
-      </tp-yt-paper-dialog>`
+    dlg.setAttribute('unified', '')
+    dlg.setAttribute('workflow-step', 'SELECT_FILES')
+    dlg.innerHTML = `<tp-yt-paper-dialog id="dialog" no-cancel-on-outside-click="" role="dialog" tabindex="-1" with-backdrop="">
+      <div class="dialog-content"><div class="header"><div id="up-title-row" class="title-row"><div id="title">${T('Tải video lên', 'Upload videos')}</div><span id="save-status"></span>
+        <div class="close-button-area">${OPT.button('ytcp-uploads-dialog-close-button', T('Đóng', 'Close'))}</div></div></div>
+      <div id="up-body"><ytcp-uploads-file-picker id="ytcp-uploads-dialog-file-picker" unified=""><div id="content"><ytcp-uploads-file-picker-animation id="animation" state="idle"></ytcp-uploads-file-picker-animation>
+        <p class="label">${T('Kéo và thả tệp video để tải lên', 'Drag and drop video files to upload')}</p>
+        <div class="error-area"><div class="error-details" id="error-message"></div></div>${OPT.button('select-files-button', T('Chọn tệp', 'Select files'))}<input type="file" name="Filedata" multiple="" aria-hidden="true" tabindex="-1" hidden>
+        <p class="disclaimer" id="disclaimer-html">${T('Khi gửi video lên YouTube, bạn xác nhận rằng bạn đồng ý với Điều khoản dịch vụ và Nguyên tắc cộng đồng của YouTube.', "By submitting your videos to YouTube, you acknowledge that you agree to YouTube's Terms of Service and Community Guidelines.")}</p></div></ytcp-uploads-file-picker></div>
+      </div></tp-yt-paper-dialog>
+      <ytcp-uploads-file-analyzer id="file-analyzer"><video id="local-video-player" hidden="" preload="metadata"></video></ytcp-uploads-file-analyzer>`
     document.body.appendChild(dlg)
-    $('#close-button', dlg).onclick = () => { log({ type: 'upload-closed' }); dlg.remove(); dlg = null }
+    $('#ytcp-uploads-dialog-close-button', dlg).onclick = () => { log({ type: 'upload-closed' }); dlg.remove(); dlg = null }
     const input = $('input[name=Filedata]', dlg)
     $('#select-files-button', dlg).onclick = () => input.click()
     input.addEventListener('change', () => {
       const f = input.files[0]
       if (!f) return
       W.file = f.name; W.size = f.size
+      $('#local-video-player', dlg).setAttribute('src', 'blob:' + location.origin + '/' + Math.random().toString(16).slice(2))
       if (F('limit')) {
         $('.error-area', dlg).innerHTML = `<div class="error-short">${T('Đã đạt đến giới hạn tải lên hằng ngày', 'Daily upload limit reached')}</div>`
         log({ type: 'upload-limit', file: f.name })
         return
       }
+      // video dai hon 15 phut, trang Studio cu: "Ban da hoan tat" che hop thoai, hop thoai van o buoc chon tep
+      const trust = Number(OPT.load('up-trust', 0)) || 0
+      if (trust > 0) {
+        localStorage.setItem('up-trust', JSON.stringify(trust - 1))
+        log({ type: 'trust-shown', file: f.name, left: trust - 1 })
+        return setTimeout(trustDialog, 400)
+      }
+      if (F('verify')) { log({ type: 'verify-shown', file: f.name }); return setTimeout(verifyDialog, 400) }
       setTimeout(details, 500)
     })
+  }
+
+  // hop thoai "Ban da hoan tat" (chep HTML that: yt-trust-tiers-wizard-dialog > ytcp-dialog > tp-yt-paper-dialog ... [Da hieu])
+  function trustDialog() {
+    const bg = document.createElement('tp-yt-iron-overlay-backdrop'); bg.className = 'opened up-backdrop'; bg.setAttribute('opened', '')
+    const w = document.createElement('yt-trust-tiers-wizard-dialog')
+    w.setAttribute('unified', '')
+    w.innerHTML = `<ytcp-dialog id="dialog" aria-labelledby="title" max-width="512" min-width="512" unified=""><tp-yt-paper-dialog id="dialog" aria-labelledby="title" role="dialog" tabindex="-1" with-backdrop="">
+      <div class="header"><div class="header-content"><div slot="primary-header" class="header-shim"></div></div></div>
+      <div class="content"><div class="ytcp-dialog-slot-content title" slot="content" wizard-class="simple"><h1 id="title">${T('Bạn đã hoàn tất', "You're all set")}</h1></div>
+        <yt-trust-tiers-wizard id="wizard" class="ytcp-dialog-slot-content" slot="content" wizard-class="simple" unified=""><ytcp-ve role="none"><div class="blocker">
+          <p>${T('Bạn đã có quyền sử dụng tính năng này rồi.', 'You already have access to this feature.')}</p><p>${T('Hãy thử làm mới trang.', 'Try refreshing the page.')}</p></div></ytcp-ve></yt-trust-tiers-wizard></div>
+      <div class="footer"><div class="ytcp-dialog-slot-primary-footer" slot="primary-footer">${OPT.button('close-button', T('Đã hiểu', 'Got it'))}</div></div>
+      </tp-yt-paper-dialog></ytcp-dialog>`
+    document.body.append(bg, w)
+    $('#close-button', w).onclick = () => { log({ type: 'trust-closed' }); w.remove(); bg.remove() }
+  }
+
+  // Google doi xac minh danh tinh (doan: chua co HTML that). Tool khong duoc bam gi o day.
+  function verifyDialog() {
+    const w = document.createElement('yt-trust-tiers-wizard-dialog')
+    w.innerHTML = `<ytcp-dialog id="dialog"><tp-yt-paper-dialog id="dialog" role="dialog"><div class="content"><h1 id="title">${T('Xác minh danh tính của bạn', "Verify it's you")}</h1>
+      <yt-trust-tiers-wizard id="wizard"><p>${T('Để dùng tính năng này, hãy xác minh danh tính bằng video, giấy tờ tùy thân hoặc số điện thoại.', 'To use this feature, verify your identity with a video, a valid ID or your phone number.')}</p></yt-trust-tiers-wizard></div>
+      <div class="footer">${OPT.button('cancel-button', T('Hủy', 'Cancel'))} ${OPT.button('next-button', T('Tiếp', 'Next'))}</div></tp-yt-paper-dialog></ytcp-dialog>`
+    document.body.appendChild(w)
+    for (const b of w.querySelectorAll('ytcp-button')) b.onclick = () => log({ type: 'verify-clicked', id: b.id })
   }
 
   function details() {
@@ -183,7 +246,9 @@
       ? `<ytcp-thumbnail-uploader><ytcp-thumbnail-editor><button id="select-button" aria-label="${T('Tải tệp lên', 'Upload file')}" disabled aria-disabled="true"><span id="select-text">${T('Tải tệp lên', 'Upload file')}</span></button></ytcp-thumbnail-editor><div class="description">${T('Để tải hình thu nhỏ tùy chỉnh lên, bạn cần xác minh tài khoản.', 'To upload custom thumbnails, verify your account.')}</div></ytcp-thumbnail-uploader>`
       : `<ytcp-thumbnail-uploader><ytcp-thumbnail-editor><button id="select-button" aria-label="${T('Tải tệp lên', 'Upload file')}"><span id="select-text">${T('Tải tệp lên', 'Upload file')}</span></button> <button>${T('Chọn trong video', 'Auto-generated')}</button> <button>${T('Thử nghiệm A/B', 'Test & compare')}</button><div id="preview"></div></ytcp-thumbnail-editor><input id="file-loader" hidden type="file" accept="image/jpeg,image/png"></ytcp-thumbnail-uploader>`
     const kids = `<tp-yt-paper-radio-group role="radiogroup" id="kids">${OPT.radio('VIDEO_MADE_FOR_KIDS_MFK', T('Có, nội dung này dành cho trẻ em', "Yes, it's made for kids"))}${OPT.radio('VIDEO_MADE_FOR_KIDS_NOT_MFK', T('Không, nội dung này không dành cho trẻ em', "No, it's not made for kids"))}</tp-yt-paper-radio-group>`
-    const priv = (name, vi, en) => OPT.radio(name, T(vi, en))
+    // radio che do hien thi: ten + dong mo ta ben duoi (nhu anh chup Studio)
+    const priv = (name, vi, en, dvi, den, id) => OPT.radio(name, T(vi, en)).replace('<tp-yt-paper-radio-button ', `<tp-yt-paper-radio-button ${id ? `id="${id}" ` : ''}`)
+      .replace('</tp-yt-paper-radio-button>', `<div class="visibility-description description">${esc(T(dvi, den))}</div></tp-yt-paper-radio-button>`)
     const row = (title, desc, buttons) => `<div class="el-row"><div><div class="section-label">${title}</div><div class="description">${desc}</div></div><div>${buttons}</div></div>`
     $('#up-body', dlg).innerHTML = `
       <ytcp-stepper id="stepper">${STEPS().map(([, label], i) => `<button id="step-badge-${i}" class="step" ${i === 0 ? 'active state="active"' : 'state="pending"'}>${esc(label)}</button>`).join('')}</ytcp-stepper>
@@ -213,22 +278,31 @@
         ${row(T('Thẻ', 'Cards'), T('Quảng bá nội dung có liên quan trong video', 'Promote related content during your video'), OPT.button('cards-button', T('Thêm', 'Add')))}
         ${row(T('Bài kiểm tra', 'Quiz'), T('Thêm câu hỏi kiểm tra cho người xem', 'Add a quiz for viewers'), OPT.button('quiz-button', T('Thêm', 'Add')))}</ytcp-uploads-video-elements>
       <ytcp-uploads-checks hidden><h2>${T('Kiểm tra ban đầu', 'Checks')}</h2><p id="checks-text"></p></ytcp-uploads-checks>
-      <ytcp-uploads-review hidden><h2>${T('Chế độ hiển thị', 'Visibility')}</h2>
-        <div id="first-container" class="el-row" style="display:block"><div class="section-label">${T('Lưu hoặc xuất bản', 'Save or publish')}</div>
-          <tp-yt-paper-radio-group id="privacy-radios" role="radiogroup">${priv('PRIVATE', 'Riêng tư', 'Private')}${priv('UNLISTED', 'Không công khai', 'Unlisted')}${priv('PUBLIC', 'Công khai', 'Public')}</tp-yt-paper-radio-group>
-          <div id="instant-premiere" style="margin-left:24px">${OPT.checkbox('enable-premiere-checkbox', T('Đặt ở chế độ Công chiếu ngay', 'Set as instant Premiere'), false)}</div></div>
-        <div id="second-container" class="el-row" style="display:block"><ytcp-icon-button id="second-container-expand-button" role="button" aria-label="${T('Lên lịch', 'Schedule')}">⌄</ytcp-icon-button> <span class="section-label">${T('Lên lịch', 'Schedule')}</span>
-          <div class="description">${T('Đặt lịch chuyển sang chế độ công khai', 'Select a date to make your video public')}</div>
-          <ytcp-visibility-scheduler id="scheduler" hidden><div style="display:flex;gap:12px;align-items:center">
-            <ytcp-text-dropdown-trigger id="datepicker-trigger">${OPT.trigger('', W.date)}</ytcp-text-dropdown-trigger>
-            <div id="time-of-day-container"><tp-yt-paper-input id="textbox" aria-label="${T('Giờ', 'Time')}"><input value="${esc(W.time)}" autocomplete="off"></tp-yt-paper-input></div>
-            <span class="description">${T('Múi giờ', 'Time zone')}: GMT+07:00</span></div>
-            ${OPT.checkbox('schedule-premiere', T('Đặt làm video Công chiếu', 'Set as Premiere'), false)}</ytcp-visibility-scheduler></div></ytcp-uploads-review>`
+      <ytcp-uploads-review hidden><h1>${T('Chế độ hiển thị', 'Visibility')}</h1><div class="description">${T('Chọn thời điểm xuất bản và người có thể xem video của bạn', 'Choose when to publish and who can see your video')}</div>
+        <div id="visibility-container"><ytcp-video-visibility-select first-container-style="default" second-container-style="default">
+        <div id="first-container" class="el-row"><div id="visibility-title" class="section-label">${T('Lưu hoặc xuất bản', 'Save or publish')}</div>
+          <div class="visibility-description description">${T('Đặt video của bạn ở chế độ công khai, không công khai hoặc riêng tư', 'Make your video public, unlisted, or private')}</div>
+          <tp-yt-paper-radio-group id="privacy-radios" class="container-radios" role="radiogroup">${priv('PRIVATE', 'Riêng tư', 'Private', 'Chỉ bạn và những người bạn chọn mới xem được video của bạn', 'Only you and people you choose can watch your video', 'private-radio-button')}${priv('UNLISTED', 'Không công khai', 'Unlisted', 'Bất kỳ ai có đường liên kết đến video đều có thể xem video', 'Anyone with the video link can watch your video')}${priv('PUBLIC', 'Công khai', 'Public', 'Mọi người đều xem được video của bạn', 'Everyone can watch your video')}</tp-yt-paper-radio-group>
+          <div class="instant-premiere-container" hidden>${OPT.checkbox('', T('Đặt ở chế độ Công chiếu ngay', 'Set as instant Premiere'), false)}<ytcp-icon-button role="button" aria-label="${T('Tìm hiểu thêm', 'Learn more')}">?</ytcp-icon-button></div></div>
+        <div id="second-container" class="el-row"><div class="sched-head"><div><div class="section-label">${T('Lên lịch', 'Schedule')}</div>
+          <div class="visibility-description description">${T('Chọn ngày để chuyển video của bạn sang chế độ công khai.', 'Select a date to make your video public.')}</div></div>
+          <ytcp-icon-button id="second-container-expand-button" role="button" aria-label="${T('Lên lịch', 'Schedule')}" aria-expanded="false">⌄</ytcp-icon-button></div>
+          <div id="schedule-container" hidden><ytcp-visibility-scheduler id="scheduler">
+            <div class="before-publishing-text section-label">${T('Đặt lịch chuyển sang chế độ công khai', 'Schedule as public')}</div>
+            <ytcp-datetime-picker><div class="date-timezone-container">
+              <ytcp-text-dropdown-trigger id="datepicker-trigger">${OPT.trigger('', W.date)}</ytcp-text-dropdown-trigger>
+              <ytcp-form-input-container id="time-of-day-container"><div id="time-of-day-trigger"><tp-yt-paper-input id="textbox" aria-label="${T('Giờ', 'Time')}"><input value="${esc(W.time)}" autocomplete="off"></tp-yt-paper-input></div></ytcp-form-input-container>
+              <span class="timezone-trigger">${OPT.button('timezone-select-button', T('Múi giờ', 'Time zone'))}<ytcp-icon-button role="button" aria-label="${T('Tìm hiểu thêm', 'Learn more')}">?</ytcp-icon-button></span></div>
+              <div class="scheduled-info-container description" id="sched-info"></div></ytcp-datetime-picker>
+            ${F('nopremiere') ? '' : OPT.checkbox('schedule-type-checkbox', T('Đặt làm video Công chiếu', 'Set as Premiere'), false)}
+            <div class="description" id="premiere-note" hidden>${T('Video sẽ hiển thị đồng hồ đếm ngược đến lúc Công chiếu.', 'Viewers will see a countdown until the Premiere.')}</div></ytcp-visibility-scheduler></div></div>
+        </ytcp-video-visibility-select></div></ytcp-uploads-review>`
     const btns = document.createElement('div')
     btns.id = 'dialog-buttons'
     btns.innerHTML = `<ytcp-video-upload-progress><span class="progress-label"></span></ytcp-video-upload-progress><span class="sp"></span>
       ${OPT.button('back-button', T('Quay lại', 'Back'))} ${OPT.button('next-button', T('Tiếp', 'Next'))} <span id="done-host" hidden>${OPT.button('done-button', T('Lưu', 'Save'), { disabled: true })}</span>`
-    $('tp-yt-paper-dialog', dlg).appendChild(btns)
+    $('.dialog-content', dlg).appendChild(btns)
+    dlg.setAttribute('workflow-step', 'DETAILS')
     $('#back-button', dlg).hidden = true
     bind()
     progress()
@@ -344,25 +418,67 @@
     }
     $('#next-button', dlg).onclick = () => { if ($('#next-button', dlg).getAttribute('aria-disabled') !== 'true' && W.step < STEPS().length - 1) showStep(W.step + 1) }
     $('#back-button', dlg).onclick = () => { if (W.step > 0) showStep(W.step - 1) }
+    // ---- Che do hien thi: Luu hoac xuat ban / Len lich ----
     const radiosEl = $('#privacy-radios', dlg)
-    radiosEl.addEventListener('click', (e) => {
-      const r = e.target.closest('tp-yt-paper-radio-button'); if (!r) return
-      for (const x of radiosEl.children) x.setAttribute('aria-checked', String(x === r))
-      W.vis = r.getAttribute('name')
-      $('#scheduler', dlg).hidden = true
-      paintDone()
-    })
-    $('#second-container-expand-button', dlg).onclick = () => {
-      const s = $('#scheduler', dlg)
-      s.hidden = !s.hidden
-      if (!s.hidden) { W.vis = 'SCHEDULE'; for (const x of radiosEl.children) x.setAttribute('aria-checked', 'false') } else if (W.vis === 'SCHEDULE') W.vis = ''
+    const sched = $('#schedule-container', dlg)
+    const vsel = $('ytcp-video-visibility-select', dlg)
+    const instant = $('.instant-premiere-container', dlg)
+    if (F('nopremiere')) instant.remove()
+    const paintVis = () => {
+      for (const x of radiosEl.children) x.setAttribute('aria-checked', String(x.getAttribute('name') === W.vis))
+      if (instant.isConnected) {
+        instant.hidden = W.vis !== 'PUBLIC'
+        $('#checkbox', instant).setAttribute('aria-checked', String(W.premiere))
+      }
+      sched.hidden = W.vis !== 'SCHEDULE'
+      $('#second-container-expand-button', dlg).setAttribute('aria-expanded', String(W.vis === 'SCHEDULE'))
+      vsel.setAttribute('first-container-style', W.vis && W.vis !== 'SCHEDULE' ? 'selected' : 'default')
+      vsel.setAttribute('second-container-style', W.vis === 'SCHEDULE' ? 'selected' : 'default')
+      $('#datepicker-trigger .dropdown-trigger-text', dlg).textContent = W.date
+      const sp = $('#schedule-type-checkbox #checkbox', dlg)
+      if (sp) sp.setAttribute('aria-checked', String(W.schedulePremiere))
+      $('#premiere-note', dlg).hidden = !W.schedulePremiere
       paintDone()
     }
-    $('#datepicker-trigger', dlg).onclick = () => datePicker(W.date, (v) => { W.date = v; $('#datepicker-trigger .dropdown-trigger-text', dlg).textContent = v })
+    radiosEl.addEventListener('click', (e) => {
+      const r = e.target.closest('tp-yt-paper-radio-button'); if (!r) return
+      W.vis = r.getAttribute('name')
+      if (W.vis !== 'PUBLIC') W.premiere = false
+      paintVis()
+    })
+    if (instant.isConnected) $('ytcp-checkbox-lit', instant).onclick = () => { W.premiere = !W.premiere; paintVis() }
+    $('#second-container-expand-button', dlg).onclick = () => {
+      if (W.vis !== 'SCHEDULE') { W.vis = 'SCHEDULE'; W.premiere = false } else W.vis = ''
+      paintVis()
+    }
+    const sp = $('#schedule-type-checkbox', dlg)
+    if (sp) sp.onclick = () => { W.schedulePremiere = !W.schedulePremiere; paintVis() }
+    $('#timezone-select-button', dlg).onclick = () => log({ type: 'timezone-clicked' })
+    // o ngay: lich (ngay da qua bi khoa)
+    $('#datepicker-trigger', dlg).onclick = () => datePicker(W.date, (v) => { W.date = v; paintVis() }, { minToday: true })
+    // o gio: go roi Enter, hoac chon trong danh sach moc 15 phut hien ra khi bam vao o
     const time = $('#time-of-day-container input', dlg)
-    const setTime = () => { const v = parseTime(time.value); if (v) { W.time = v; time.value = v } else time.value = W.time }
+    const setTime = () => { const v = !F('timepick') && parseTime(time.value); if (v) W.time = v; time.value = W.time; closeTimes() }
     time.addEventListener('keydown', (e) => { if (e.key === 'Enter') setTime() })
     time.addEventListener('change', setTime)
+    let times = null
+    const closeTimes = () => { if (times) { times.remove(); times = null } }
+    const openTimes = () => {
+      if (times) return
+      times = document.createElement('ytcp-text-menu')
+      times.id = 'time-of-day-menu'
+      const all = []
+      for (let m = 0; m < 24 * 60; m += 15) { const h = Math.floor(m / 60); const mm = p2(m % 60); all.push(EN ? `${(h % 12) || 12}:${mm} ${h < 12 ? 'AM' : 'PM'}` : `${p2(h)}:${mm}`) }
+      times.innerHTML = `<tp-yt-paper-dialog role="dialog"><tp-yt-paper-listbox id="time-of-day-listbox" role="listbox">${all.map((t) => `<tp-yt-paper-item role="option" aria-selected="${t === W.time}">${t}</tp-yt-paper-item>`).join('')}</tp-yt-paper-listbox></tp-yt-paper-dialog>`
+      times.addEventListener('mousedown', (e) => e.preventDefault()) // giu o gio dang chon
+      times.addEventListener('click', (e) => { const it = e.target.closest('tp-yt-paper-item'); if (!it) return; W.time = it.textContent; time.value = W.time; log({ type: 'time-picked', time: W.time }); closeTimes() })
+      const host = $('#time-of-day-container', dlg); host.style.position = 'relative'; host.appendChild(times)
+      const cur = times.querySelector('[aria-selected=true]'); if (cur) cur.scrollIntoView({ block: 'center' })
+    }
+    time.addEventListener('focus', () => setTimeout(openTimes, 100))
+    time.addEventListener('click', () => setTimeout(openTimes, 100))
+    time.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== time) { if (time.value !== W.time) setTime(); closeTimes() } }, 200))
+    paintVis()
     if (!F('nosubs')) $('#subtitles-button', dlg).onclick = subtitlesDialog
     $('#endscreens-button', dlg).onclick = endScreen
     $('#done-button', dlg).onclick = publish
@@ -494,18 +610,57 @@
     }
   }
 
-  // ---- chon ngay (giong o ngay quay: ytcp-date-picker > form > tp-yt-paper-input#textbox input) ----
-  function datePicker(cur, onPick) {
+  // ---- chon ngay (chep lich that: ytcp-date-picker > tp-yt-paper-dialog > #control-area (form#form > tp-yt-paper-input#textbox
+  //      input, #prev-month, #next-month) + ytcp-scrollable-calendar#calendar (hang thu: T2..CN | S M T W T F S, cac thang
+  //      div.calendar-month[role=listitem][aria-label="thg 10 2026" | "Oct 2026"] > .calendar-week > span.calendar-day)).
+  //      minToday: ngay da qua bi khoa (o Len lich). Bien the notypedate: o nhap khong nhan chu go.
+  function datePicker(cur, onPick, { minToday = false } = {}) {
     const bg = document.createElement('div'); bg.className = 'up-backdrop'
     const d = document.createElement('ytcp-date-picker')
-    d.innerHTML = `<tp-yt-paper-dialog id="dialog" role="dialog"><form id="form"><tp-yt-paper-input id="textbox" aria-label="${T('Nhập ngày', 'Enter date')}"><input autocomplete="off" value="${esc(cur)}"></tp-yt-paper-input></form></tp-yt-paper-dialog>`
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const sel = parseDate(cur) || today
+    let view = sel.getFullYear() * 12 + sel.getMonth() // thang dau tien dang hien (hien 2 thang)
+    const heads = EN ? ['S', 'M', 'T', 'W', 'T', 'F', 'S'] : ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
+    const monthLabel = (ym) => (EN ? `${MONTHS[ym % 12]} ${Math.floor(ym / 12)}` : `thg ${(ym % 12) + 1} ${Math.floor(ym / 12)}`)
+    const month = (ym) => {
+      const y = Math.floor(ym / 12), m = ym % 12
+      const first = new Date(y, m, 1)
+      const lead = EN ? first.getDay() : (first.getDay() + 6) % 7
+      const days = new Date(y, m + 1, 0).getDate()
+      const cells = Array(lead).fill(0).concat(Array.from({ length: days }, (_, i) => i + 1))
+      while (cells.length % 7) cells.push(0)
+      const weeks = []
+      for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7))
+      return `<div class="calendar-month" role="listitem" aria-label="${monthLabel(ym)}"><div class="calendar-month-label">${monthLabel(ym)}</div>` +
+        weeks.map((w) => `<div class="calendar-week">${w.map((n) => {
+          if (!n) return '<span class="calendar-day invisible"></span>'
+          const dt = new Date(y, m, n)
+          const off = minToday && dt < today
+          const on = +dt === +sel
+          return `<span class="calendar-day${off ? ' disabled' : ''}${on ? ' selected' : ''}${+dt === +today ? ' today' : ''}" data-d="${y}-${m}-${n}"${off ? ' aria-disabled="true"' : ''}>${n}</span>`
+        }).join('')}</div>`).join('') + '</div>'
+    }
+    const paint = () => { $('#items', d).innerHTML = month(view) + month(view + 1) }
+    d.innerHTML = `<tp-yt-paper-dialog id="dialog" role="dialog"><div id="control-area"><form id="form"><tp-yt-paper-input id="textbox" aria-label="${T('Nhập ngày', 'Enter date')}"><input autocomplete="off" value="${esc(cur)}"></tp-yt-paper-input></form>
+      <ytcp-icon-button id="prev-month" role="button" aria-label="${T('Tháng trước', 'Previous month')}">‹</ytcp-icon-button><ytcp-icon-button id="next-month" role="button" aria-label="${T('Tháng sau', 'Next month')}">›</ytcp-icon-button></div>
+      <ytcp-scrollable-calendar id="calendar"><div class="calendar-header">${heads.map((h) => `<span class="calendar-header-day">${h}</span>`).join('')}</div>
+      <tp-yt-iron-list id="calendar-main"><div id="items" role="list"></div></tp-yt-iron-list></ytcp-scrollable-calendar></tp-yt-paper-dialog>`
+    paint()
     const close = () => { d.remove(); bg.remove() }
+    const pick = (dt) => { if (minToday && dt < today) return false; onPick(fmtDate(dt)); close(); return true }
     d.querySelector('form').addEventListener('submit', (e) => {
       e.preventDefault()
-      const dt = parseDate(d.querySelector('input').value)
-      if (!dt) { d.querySelector('input').style.borderColor = 'red'; return }
-      onPick(fmtDate(dt))
-      close()
+      const dt = !F('notypedate') && parseDate(d.querySelector('input').value)
+      if (!dt || !pick(dt)) d.querySelector('input').style.borderColor = 'red'
+    })
+    $('#prev-month', d).onclick = () => { view--; paint() }
+    $('#next-month', d).onclick = () => { view++; paint() }
+    $('#items', d).addEventListener('click', (e) => {
+      const c = e.target.closest('.calendar-day[data-d]')
+      if (!c || c.classList.contains('disabled')) return
+      const [y, m, n] = c.dataset.d.split('-').map(Number)
+      log({ type: 'calendar-day', date: `${y}-${m + 1}-${n}` })
+      pick(new Date(y, m, n))
     })
     bg.onclick = close
     document.body.append(bg, d)
@@ -586,7 +741,7 @@
       paid: W.paid === PAID[1] ? 'no' : W.paid === PAID[0] ? 'yes' : '', ai: W.ai === T('Có', 'Yes') ? 'yes' : W.ai === T('Không', 'No') ? 'no' : '', tags: W.tags,
       language: W.language, titleLanguage: W.titleLanguage, recDate: W.recDate, location: W.location, category: W.category, license: W.license, embed: W.embed, notify: W.notify,
       remix: W.remix, comments: W.comments, showLikes: W.showLikes, endscreen: W.endscreen, subtitles: W.subs, visibility: W.vis, scheduleDate: W.vis === 'SCHEDULE' ? W.date : '',
-      scheduleTime: W.vis === 'SCHEDULE' ? W.time : '', earlyDone: W.earlyDone, anyway: W.anyway, lang: EN ? 'en' : 'vi',
+      scheduleTime: W.vis === 'SCHEDULE' ? W.time : '', premiere: W.vis === 'PUBLIC' && W.premiere, schedulePremiere: W.vis === 'SCHEDULE' && W.schedulePremiere, earlyDone: W.earlyDone, anyway: W.anyway, lang: EN ? 'en' : 'vi',
     }
     fetch('/studio/__upload/done', { method: 'POST', body: JSON.stringify(u) }).then(() => {
       dlg.remove(); dlg = null

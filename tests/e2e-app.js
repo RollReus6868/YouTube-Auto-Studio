@@ -1,5 +1,6 @@
 // Chay that app (ma nguon, hoac ban dong goi qua YA_APP) voi Studio gia lap:
-// chon thu muc -> tao thu muc mau -> quet video -> sua mau -> luu khoa -> khung Studio.
+// chon thu muc goc -> tao thu muc mau (Cai dat) -> quet video kieu cu (videos/<thu muc>) -> sua mau -> luu khoa -> khung Studio.
+// (thu muc video phang "Ten.mp4" + "Ten.jpg": tests/e2e-upload.js)
 //   node tests/e2e-app.js            (Linux khong man hinh: xvfb-run -a node tests/e2e-app.js)
 const assert = require('assert')
 const fs = require('fs')
@@ -17,7 +18,7 @@ const waitFor = async (fn, what, ms = 15000) => {
 run(9344, {}, async ({ ui, find, dataDir }) => {
   const call = (cmd, payload) => ui.evaluate(([c, p]) => window.ya.call(c, p), [cmd, payload])
   await ui.getByRole('heading', { name: 'Đăng video' }).waitFor()
-  await ui.getByText('Chọn thư mục gốc để tool quét').waitFor()
+  await ui.getByText('Chọn thư mục chứa video cần đăng.').waitFor()
 
   // Kiem tra cap nhat luc mo app: HTTPS toi GitHub chay duoc (404 = repo chua co ban phat hanh -> 'none')
   let st
@@ -25,11 +26,14 @@ run(9344, {}, async ({ ui, find, dataDir }) => {
   console.log('PHIEN BAN', st.version, '| CAP NHAT:', st.update.status, st.update.error)
   assert(['none', 'available'].includes(st.update.status) || st.update.error.startsWith('HTTP '), JSON.stringify(st.update))
 
-  // 1) thu muc goc trong -> bao thieu thu muc con -> bam "Tao thu muc mau"
+  // 1) thu muc goc trong (chua chon thu muc video rieng -> dung thu muc goc) -> Cai dat: bam "Tao thu muc mau"
   await call('set_root', root)
-  await ui.getByText(/chưa có thư mục con/).waitFor()
+  await ui.getByText(/Chưa có video nào trong thư mục này/).waitFor()
+  await ui.getByText('(thư mục gốc)').waitFor()
+  await ui.getByRole('button', { name: 'Cài đặt', exact: true }).click()
   await ui.getByRole('button', { name: 'Tạo thư mục mẫu' }).click()
   await waitFor(() => fs.existsSync(path.join(root, 'videos')) && fs.existsSync(path.join(root, 'HUONG-DAN.txt')), 'tao thu muc mau')
+  await ui.getByRole('button', { name: 'Đăng video', exact: true }).click()
 
   // 2) them video + bai viet, quet lai
   const v = path.join(root, 'videos', '2030-01-05_bi-an-tap-3')
@@ -49,7 +53,7 @@ run(9344, {}, async ({ ui, find, dataDir }) => {
 
   // 3) sua mau mac dinh, luu, file settings.json doi theo, mo ta video cap nhat
   await ui.getByRole('button', { name: 'Mẫu mặc định', exact: true }).click()
-  await ui.getByLabel('Tiêu đề (bắt buộc)').fill('{ten_video} | Tập {so_tap}')
+  await ui.getByLabel('Tiêu đề (thư mục con kiểu cũ)').fill('{ten_video} | Tập {so_tap}')
   // Mau Studio (dat trong hop thoai tai len) luu cung nut "Lưu mẫu"; muc chi co o API cu khong con
   await ui.getByRole('radiogroup', { name: 'Phối lại Shorts' }).getByRole('radio', { name: 'Chỉ âm thanh' }).click()
   await ui.getByRole('radiogroup', { name: 'Bình luận' }).getByRole('radio', { name: 'Tạm dừng' }).click()

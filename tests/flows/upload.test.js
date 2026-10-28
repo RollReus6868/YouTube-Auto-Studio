@@ -4,7 +4,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const zlib = require('zlib')
-const { uploadVideo, uploadPhase } = require('../../src/flows/upload')
+const { uploadVideo, uploadPhase, LABELS, SEL, _t } = require('../../src/flows/upload')
 const { defaultTemplate, keepAll, fmtStudioDate } = require('../../src/optimize-template')
 const { ACCOUNTS } = require('../mock-yt/accounts/routes')
 
@@ -24,7 +24,7 @@ function png(file, w, h) {
   return file
 }
 const files = (tmp) => {
-  const video = path.join(tmp, 'bi-an-tap-7.mp4')
+  const video = path.join(tmp, 'Bí ẩn tập 7.mp4')
   fs.writeFileSync(video, Buffer.alloc(256 * 1024, 1))
   const srt = path.join(tmp, 'phude.vi.srt')
   fs.writeFileSync(srt, '1\n00:00:01,000 --> 00:00:02,000\nXin chào\n')
@@ -87,7 +87,7 @@ module.exports = [
     assert.equal(r.id, u.id)
     assert.equal(r.url, `https://youtu.be/${u.id}`)
     assert.deepEqual([u.uc, u.cookieCh], [uc, uc])
-    assert.deepEqual([u.file, u.size], ['bi-an-tap-7.mp4', 256 * 1024])
+    assert.deepEqual([u.file, u.size], ['Bí ẩn tập 7.mp4', 256 * 1024])
     assert.equal(u.title, TITLE, 'thay ten tep Studio tu dien bang tieu de')
     assert.equal(u.description, `${CHANNEL_DESC}\n\n${DESC}`, 'giu mo ta co san cua kenh, xuong 2 dong roi them mo ta')
     assert.equal(u.thumbnail, 'thumbnail.png')
@@ -194,6 +194,127 @@ module.exports = [
     assert(fin && fin.published, 'chi tra ve sau khi video tai len xong (hop thoai da dong)')
   }],
 
+  ['HTML that (loi-trang 28/10): bo chon buoc chon tep, nut tai len / Tao, hop thoai "Ban da hoan tat" -> stale, nut Da hieu', async (ctx) => {
+    await ctx.page.goto(`${ctx.urls.studio}/that-upload/chon-tep`)
+    const p = ctx.page
+    assert(await p.has(LABELS.uploadIcon), 'nut tai len #upload-icon')
+    assert(await p.has(LABELS.create), 'nut Tao')
+    assert.equal(await p.eval(() => document.querySelector('ytcp-uploads-dialog').getAttribute('workflow-step')), 'SELECT_FILES')
+    assert.equal(await p.count({ selector: SEL.fileInput, hidden: true }), 1, 'o chon file input[name=Filedata]')
+    assert.equal(await p.eval((t) => { const el = window.__ya.one(t); return el && el.closest('ytcp-button').id }, LABELS.selectFiles), 'select-files-button')
+    assert.equal(await p.text(LABELS.selectFiles), 'Chọn tệp')
+    assert.equal(await p.count({ selector: LABELS.closeDialog.any }), 1, 'nut Dong hop thoai')
+    // buoc chon tep: chua co Tiep / Luu, chua co tien do, khong co loi (ytcp-error-section an)
+    for (const k of ['next', 'done']) {
+      assert.equal(await p.count({ selector: LABELS[k].any }), 0, `${k} dang an`)
+      assert.equal(await p.count({ selector: LABELS[k].any, hidden: true }), 1, `${k} co trong hop thoai`)
+    }
+    assert.equal(await p.text({ selector: SEL.progress, hidden: true }), '')
+    assert.equal(await p.count({ selector: SEL.title }), 0, 'chua toi trang Chi tiet')
+    const b = await p.eval(_t.findBlocker, SEL, LABELS.trustStale, LABELS.verify)
+    assert.equal(b.kind, 'stale')
+    assert.match(b.text, /Bạn đã hoàn tất.*Hãy thử làm mới trang/)
+    assert.equal(await p.text({ selector: LABELS.trustClose.any }), 'Đã hiểu')
+  }],
+
+  ['video dai: "Ban da hoan tat ... lam moi trang" 2 lan -> Da hieu, lam moi Studio, mo lai hop thoai, chon lai file -> dang duoc', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { trust: 2, nocheckwarn: true })
+    const uc = await login(ctx)
+    const h0 = ctx.mock.hits.length
+    const r = await run(ctx, JOB(f, { uc, thumbnail: null, privacy: 'unlisted' })).p
+    const [u] = await uploads(ctx.mock)
+    assert.equal(u.visibility, 'UNLISTED')
+    assert.equal(r.id, u.id)
+    assert.equal(ctx.mock.events.filter((e) => e.type === 'trust-shown').length, 2)
+    assert.equal(ctx.mock.events.filter((e) => e.type === 'trust-closed').length, 2, 'bam "Đã hiểu" moi lan')
+    assert.equal(ctx.mock.hits.slice(h0).filter((h) => h === `GET /studio/channel/${uc}`).length, 3, 'mo trang tong quan 1 lan + lam moi 2 lan')
+    assert.equal(ctx.mock.events.filter((e) => e.type === 'upload-open').length, 3)
+    assert.match(ctx.logs.join('\n'), /bấm "Đã hiểu", làm mới Studio rồi chọn lại file \(lần 2\/2\)/)
+    assert(shots().some((x) => /dang-video-ban-da-hoan-tat/.test(x)), 'luu anh trang khi gap hop thoai')
+  }],
+
+  ['Studio tieng Anh: van "You\'re all set ... refresh" sau 2 lan lam moi -> dung, bao ro, khong noi ban nhap', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { trust: 3, en: true })
+    const uc = await login(ctx)
+    await assert.rejects(run(ctx, JOB(f, { uc, thumbnail: null })).p, (e) => {
+      assert.match(e.message, /sau 2 lần làm mới Studio/)
+      assert.doesNotMatch(e.message, /bản nháp/)
+      return true
+    })
+    assert.equal(ctx.mock.events.filter((e) => e.type === 'trust-closed').length, 2)
+    assert.equal((await uploads(ctx.mock)).length, 0)
+  }],
+
+  ['Google doi xac minh danh tinh (Viet / Anh) -> dung voi loi ro rang, khong bam gi trong hop thoai xac minh', async (ctx) => {
+    const f = files(ctx.tmp)
+    for (const en of [false, true]) {
+      await flags(ctx, { verify: true, en })
+      const uc = await login(ctx)
+      await assert.rejects(run(ctx, JOB(f, { uc, thumbnail: null })).p, (e) => {
+        assert.match(e.message, /xác minh danh tính/)
+        assert.match(e.message, /trang Tài khoản/)
+        assert.match(e.message, /Tool không tự xác minh/)
+        assert.doesNotMatch(e.message, /bản nháp/)
+        return true
+      })
+      assert(ctx.mock.events.some((e) => e.type === 'verify-shown'))
+      assert(!ctx.mock.events.some((e) => e.type === 'verify-clicked'), 'khong bam nut nao cua hop thoai xac minh')
+      assert.equal((await uploads(ctx.mock)).length, 0)
+    }
+  }],
+
+  ['Cong khai + "Dat o che do Cong chieu ngay"', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { nocheckwarn: true })
+    const r = await run(ctx, JOB(f, { thumbnail: null, privacy: 'public', premiere: true })).p
+    const [u] = await uploads(ctx.mock)
+    assert.deepEqual([u.visibility, u.premiere, u.schedulePremiere], ['PUBLIC', true, false])
+    assert.deepEqual([r.visibility, r.premiere], ['public', true])
+    assert.deepEqual(r.warnings, [], ctx.logs.join('\n'))
+  }],
+
+  ['Studio tieng Anh: Khong cong khai (Cong chieu chi co o Cong khai -> bo qua + canh bao)', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { nocheckwarn: true, en: true })
+    const r = await run(ctx, JOB(f, { thumbnail: null, privacy: 'unlisted', premiere: true })).p
+    const [u] = await uploads(ctx.mock)
+    assert.deepEqual([u.visibility, u.premiere, u.lang], ['UNLISTED', false, 'en'])
+    assert.deepEqual([r.visibility, r.premiere], ['unlisted', false])
+    assert.match(r.warnings.join('\n'), /chỉ dùng được với chế độ Công khai/)
+  }],
+
+  ['len lich + "Dat lam video Cong chieu": o ngay khong nhan chu go -> bam lich (thang sau), o gio chon trong danh sach moc 15 phut', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { nocheckwarn: true, notypedate: true, timepick: true })
+    const at = inDays(40, 21, 15)
+    const r = await run(ctx, JOB(f, { thumbnail: null, publishAt: at.toISOString(), schedulePremiere: true })).p
+    const [u] = await uploads(ctx.mock)
+    assert.equal(u.visibility, 'SCHEDULE')
+    assert.equal(u.scheduleDate, `${at.getDate()} thg ${at.getMonth() + 1}, ${at.getFullYear()}`)
+    assert.equal(u.scheduleTime, '21:15')
+    assert.equal(u.schedulePremiere, true)
+    assert(ctx.mock.events.some((e) => e.type === 'calendar-day' && e.date === `${at.getFullYear()}-${at.getMonth() + 1}-${at.getDate()}`), 'bam ngay trong lich')
+    assert(ctx.mock.events.some((e) => e.type === 'time-picked' && e.time === '21:15'), 'chon gio trong danh sach')
+    assert(!ctx.mock.events.some((e) => e.type === 'timezone-clicked'), 'khong doi mui gio')
+    assert.deepEqual([r.visibility, r.premiere, r.schedule], ['schedule', true, at.toISOString()])
+    assert.deepEqual(r.warnings, [], ctx.logs.join('\n'))
+  }],
+
+  ['Studio tieng Anh: len lich bang lich + danh sach gio (9:45 PM), kenh khong co Cong chieu -> canh bao, van len lich', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { nocheckwarn: true, notypedate: true, timepick: true, nopremiere: true, en: true })
+    const at = inDays(5, 21, 40) // lam tron len 21:45
+    const r = await run(ctx, JOB(f, { thumbnail: null, publishAt: at.toISOString(), schedulePremiere: true })).p
+    const [u] = await uploads(ctx.mock)
+    assert.equal(u.visibility, 'SCHEDULE')
+    assert.equal(u.scheduleDate, `${MONTHS[at.getMonth()]} ${at.getDate()}, ${at.getFullYear()}`)
+    assert.equal(u.scheduleTime, '9:45 PM')
+    assert.equal(u.schedulePremiere, false)
+    assert.equal(r.premiere, false)
+    assert.match(r.warnings.join('\n'), /Chưa đặt được "Đặt làm video Công chiếu": không thấy ô này/)
+  }],
   ['loi: gioi han tai len hang ngay -> nem loi ro rang, luu anh trang', async (ctx) => {
     const f = files(ctx.tmp)
     await flags(ctx, { limit: true })
