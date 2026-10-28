@@ -1,20 +1,30 @@
-## YT Auto Studio 0.5.4
+## YT Auto Studio 0.5.5
 
-Bỏ giới hạn 2 MB của thumbnail và cập nhật Gemini lên các model mới nhất.
+Theo dõi tool chạy ngay trong khung trình duyệt, mô tả mặc định cho mọi video, Gemini viết mô tả theo kịch bản, và sửa lỗi đăng video dài.
+
+### Chạy trong khung trình duyệt của tool
+- Mọi thao tác tự động (đăng video, tối ưu, thích / bình luận / ghim, đăng bài…) giờ chạy ngay trong khung trình duyệt bên phải để bạn theo dõi. Khi tool đang chạy, khung hiện ở mọi trang kèm dòng "Tool đang chạy: …".
+- Lúc tool đang chạy, bạn chỉ xem, đừng bấm vào khung. Các nút đổi tài khoản / kênh của khung tạm ẩn.
+- Các việc chạy lần lượt từng việc một. Muốn chạy ngầm như trước (nhiều tài khoản cùng lúc), tắt "Chạy trong khung trình duyệt của tool" trong **Cài đặt**.
 
 ### Đăng video
-- **Thumbnail không còn giới hạn 2 MB:** YouTube đã bỏ giới hạn này, nên ảnh thumbnail lớn hơn 2 MB không còn bị báo lỗi đỏ và vẫn đăng được.
+- **Sửa lỗi "Bạn đã có quyền sử dụng tính năng này rồi. Hãy thử làm mới trang"** (video dài, kênh vừa xác minh). Tool thử lần lượt 3 cách:
+  1. Tải lại Studio.
+  2. Xoá bộ nhớ đệm của Studio, vẫn giữ đăng nhập.
+  3. Mở trang Tính năng của kênh để YouTube cập nhật quyền.
+  
+  Mỗi lần thử, tool chờ lâu hơn trước khi chọn lại file. Nếu vẫn lỗi thì có thể Google cần vài giờ sau khi xác minh: bạn thử lại sau.
+- **Phần mô tả mặc định:** trong **Cài đặt → Mô tả video**, bạn viết vài dòng mà video nào đăng lên cũng có, ví dụ link donate hoặc ebook. Bạn chọn để phần Gemini viết (hoặc mô tả riêng của video) nằm **trên** hay **dưới** phần mặc định.
+  - Khi có phần mặc định, tool thay mô tả Studio tự điền bằng mô tả ghép, nên không bị lặp dòng.
+  - Trang Đăng video hiện đúng "Mô tả sẽ đăng".
+- **Gemini viết mô tả theo kịch bản:**
+  - Đặt file kịch bản cạnh video, ví dụ `Tên video.kich-ban.txt` hoặc `Tên video - kịch bản.docx`. Tool nhận .txt, .md và .docx.
+  - Hoặc bấm "Đính kèm kịch bản" để chọn file bằng tay. Bản này nhận thêm .srt.
+  - Gemini viết mô tả bám đúng nội dung kịch bản. File kịch bản được chuyển vào `da-dang` cùng video.
 
-### Gemini
-- **Model mới** (theo trang tài liệu Gemini API của Google, 28/10/2026):
-  - Gemini 3.8 Flash: trợ giúp toàn diện. Đây là model mặc định.
-  - Gemini 3.5 Flash-Lite: nhanh nhất, rẻ nhất.
-  - Gemini 3.1 Pro: suy luận nâng cao, đang là bản xem trước.
-  - Gemini 4 Argon: dành cho nhiệm vụ phức tạp, model mới.
-- **Cài đặt cũ tự đổi sang model mới:** Gemini 2.5 Flash thành 3.8 Flash, 2.5 Flash-Lite thành 3.5 Flash-Lite, 2.5 Pro thành 3.1 Pro.
-- **Cấp độ tư duy:** chọn Thấp, Trung bình hoặc Cao trong Cài đặt, giống app Gemini. Mặc định là Thấp, nhanh và tiết kiệm hạn mức.
-- **Nút "Tải danh sách model mới nhất":** hỏi Google các model mà API key của bạn dùng được. Google ra model mới thì bạn chọn được ngay, không cần chờ bản tool mới.
-- Tool không còn gửi `temperature` cho các model mới, vì Google đã bỏ thông số này.
+### Tối ưu video
+- **Quét bỏ qua video đã tối ưu ở lần trước:** video đã có nhãn xanh "Đã tối ưu" không bị mở lại để đọc, nên quét nhanh hơn nhiều.
+- Muốn đọc lại một video, bấm "Quét lại" dưới nhãn của video đó.
 
 Đang dùng bản cũ: mở tool, vào **Cập nhật**, bấm **Tải và cài**.
 
@@ -22,6 +32,6 @@ Bỏ giới hạn 2 MB của thumbnail và cập nhật Gemini lên các model m
 
 | Máy của bạn | File |
 |---|---|
-| Windows 10/11 | `YTAutoStudio-0.5.4-windows-setup.exe` |
+| Windows 10/11 | `YTAutoStudio-0.5.5-windows-setup.exe` |
 
 Bản này chỉ build cho Windows. Bản macOS sẽ build khi cần.
