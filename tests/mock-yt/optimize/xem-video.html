@@ -19,7 +19,8 @@
        opt-pinfail=local   huy hieu hien tren trang nhung khong luu (tai lai thi mat)
        opt-ownerlike=1     giao dien chu kenh xem video cua minh (that/xem-da-ghim.html): 1 nut ytd-toggle-button-renderer "Thích" / "Bỏ thích", khong co nut Khong thich
        opt-nolike=1        khong co nut Thich nao (giao dien la)
-       opt-topcap=N        muc "Nổi bật nhất" chi hien N luot (phai doi sang "Mới nhất") -->
+       opt-topcap=N        muc "Nổi bật nhất" chi hien N luot (phai doi sang "Mới nhất")
+      opt-sortbroken=1    menu "Sắp xếp theo" khong mo (khong doi duoc sang "Mới nhất") -->
 <style>
   body { margin: 0; font: 14px Roboto, Arial, sans-serif; background: #0f0f0f; color: #f1f1f1 }
   ytd-comments, ytd-item-section-renderer, ytd-comments-header-renderer, ytd-comment-thread-renderer, ytd-comment-view-model, ytd-comment-simplebox-renderer, ytd-commentbox, ytd-popup-container,
@@ -145,7 +146,8 @@ function header() {
       <tp-yt-iron-dropdown id="dropdown" hidden aria-hidden="true"><div id="contentWrapper"><tp-yt-paper-listbox id="menu" role="listbox">${opt('top', 'Nổi bật nhất', 'Hiện bình luận nổi bật')}${opt('new', 'Mới nhất', 'Hiện bình luận gần đây, bao gồm cả những mục có thể là bình luận rác')}</tp-yt-paper-listbox></div></tp-yt-iron-dropdown></tp-yt-paper-menu-button></yt-dropdown-menu></yt-sort-filter-sub-menu-renderer></span></div>
     <div id="simple-box"><ytd-comment-simplebox-renderer><yt-img-shadow id="author-thumbnail"><img id="img" alt="${signedOut ? '' : esc(me.name)}" src=""></yt-img-shadow><div id="placeholder-area"><yt-formatted-string id="simplebox-placeholder" role="textbox" tabindex="0">Thêm bình luận...</yt-formatted-string></div><div id="comment-dialog"></div></ytd-comment-simplebox-renderer></div></ytd-comments-header-renderer>`
   $('#simplebox-placeholder').onclick = openBox
-  $('#sort-menu #label').onclick = (e) => { e.stopPropagation(); $('#sort-menu #dropdown').hidden = !$('#sort-menu #dropdown').hidden }
+  // opt-sortbroken: menu "Sắp xếp theo" khong mo (that/vi-xem-chat-replay.html: van "Hàng đầu" sau khi tool bam)
+  $('#sort-menu #label').onclick = (e) => { e.stopPropagation(); if (!flag('opt-sortbroken')) $('#sort-menu #dropdown').hidden = !$('#sort-menu #dropdown').hidden }
   for (const a of document.querySelectorAll('#sort-menu [data-sort]')) a.onclick = (e) => {
     e.stopPropagation()
     $('#sort-menu #dropdown').hidden = true

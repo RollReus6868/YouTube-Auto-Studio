@@ -96,12 +96,42 @@ test('quet: so gia tri doc duoc voi mau', () => {
   // danh sach phat: du so tu chon / it danh sach hon N / ten trong mau
   const items = [{ name: 'A', id: 'PL1', on: true }, { name: 'B', id: 'PL2', on: true }]
   const pl = (p, t) => ot.compareFields({ playlists: p }, { ...keep, license: 'keep', ...t })
-  assert.deepEqual(pl({ count: 2 }, { playlistAuto: 3 }).missing, ['playlists'], 'chua mo hop thoai: 2 < 3')
+  // video da o >= 1 danh sach phat = xong (khong can hop thoai, khong can du N)
+  assert.deepEqual(pl({ count: 2 }, { playlistAuto: 3 }).filled, ['playlists'], 'da o 2 danh sach: xong du mau tu chon 3')
   assert.deepEqual(pl({ count: 2, items }, { playlistAuto: 3 }).filled, ['playlists'], 'kenh chi co 2 danh sach')
-  assert.deepEqual(pl({ count: 1 }, { playlistAuto: 0, playlists: ['A'] }).unknown, ['playlists'], 'co ten -> can hop thoai')
-  assert.deepEqual(pl({ count: 2, items: [...items, { name: 'C', on: false }] }, { playlistAuto: 0, playlists: ['C'] }).missing, ['playlists'])
-  assert.deepEqual(pl({ count: 2, items }, { playlistAuto: 0, playlists: ['Không có'] }).filled, ['playlists'], 'ten khong co trong kenh -> khong tinh la thieu')
+  assert.deepEqual(pl({ count: 1 }, { playlistAuto: 0, playlists: ['A'] }).filled, ['playlists'], 'co ten nhung da o 1 danh sach -> xong')
+  assert.deepEqual(pl({ count: 2, items: [...items, { name: 'C', on: false }] }, { playlistAuto: 0, playlists: ['C'] }).filled, ['playlists'], 'thieu C nhung da o danh sach khac -> xong')
+  // chua o danh sach nao: thieu neu kenh co danh sach de tich
+  const off = [{ name: 'A', id: 'PL1', on: false }, { name: 'B', id: 'PL2', on: false }]
+  assert.deepEqual(pl({ count: 0, items: off }, { playlistAuto: 3 }).missing, ['playlists'])
+  assert.deepEqual(pl({ count: 0, items: off }, { playlistAuto: 0, playlists: ['B'] }).missing, ['playlists'])
+  assert.deepEqual(pl({ count: 0, items: off }, { playlistAuto: 0, playlists: ['Không có'] }).filled, ['playlists'], 'ten khong co trong kenh -> khong tinh la thieu')
+  assert.deepEqual(pl({ count: 0, items: [] }, { playlistAuto: 3 }).filled, ['playlists'], 'kenh chua co danh sach phat nao -> khong co gi de lam')
+  assert.deepEqual(pl({ count: 0 }, { playlistAuto: 3 }).missing, ['playlists'], 'chua mo hop thoai, chua o danh sach nao')
+  assert.deepEqual(pl(undefined, { playlistAuto: 3 }).unknown, ['playlists'])
+  // man hinh ket thuc: quet doc duoc (true = da co)
+  assert.deepEqual(ot.compareFields({ endScreen: true }, { ...keep, license: 'keep', endScreen: 'latest' }).filled, ['endScreen'])
+  assert.deepEqual(ot.compareFields({ endScreen: false }, { ...keep, license: 'keep', endScreen: 'latest' }).missing, ['endScreen'])
   assert.deepEqual(ot.compareFields({}, ot.defaultTemplate()).unknown.length, 8, 'khong doc duoc gi -> unknown')
+})
+
+test('toi uu: chi lam muc quet bao thieu (missingTemplate)', () => {
+  const all = { ...ot.defaultTemplate(), description: 'Mô tả', language: 'Tiếng Việt', category: '27', comment: 'Xem {link}', like: true, pin: true }
+  let t = ot.missingTemplate(all, ['playlists', 'location'])
+  assert.deepEqual(ot.studioFields(t), ['playlists', 'location'])
+  assert.equal(t.playlistAuto, 3)
+  assert.equal(t.location, all.location)
+  assert.deepEqual([t.like, t.comment, t.pin], [false, '', false], 'da tung toi uu tren trang xem: khong thich / binh luan lai')
+  t = ot.missingTemplate(all, ['tags', 'ai', 'category', 'ghim'])
+  assert.deepEqual(ot.studioFields(t).sort(), ['ai', 'category', 'tags'])
+  assert.equal(t.tagsMode, all.tagsMode)
+  assert.deepEqual([t.like, !!t.comment, t.pin], [false, true, true], 'con thieu ghim: binh luan (khong dang trung) + ghim')
+  t = ot.missingTemplate(all, [], { watch: true })
+  assert.deepEqual(ot.studioFields(t), [], 'muc Studio da du')
+  assert.deepEqual([t.like, !!t.comment, t.pin], [true, true, true], 'chua tung lam tren trang xem: thich / binh luan / ghim')
+  assert.deepEqual(ot.studioFields(ot.missingTemplate(all, ['thích'])), [])
+  assert.equal(ot.missingTemplate(all, ['thích']).like, true)
+  assert.deepEqual(ot.studioFields(all).includes('like'), false)
 })
 
 test('Studio tieng Anh: ten danh muc / ngon ngu / lua chon', () => {

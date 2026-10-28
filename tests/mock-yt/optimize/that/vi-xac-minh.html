@@ -1,0 +1,799 @@
+<!doctype html>
+<!-- HTML that (Studio tieng Viet): hop thoai "Xac minh danh tinh cua ban" (ytcp-auth-confirmation-dialog) che trang Chi tiet video.
+  Da bo phan form chi tiet / thanh ben / hop thoai danh sach phat (co ten kenh), an danh ID. -->
+<meta charset="utf-8"><style>[role=checkbox],[role=radio]{display:inline-block;min-width:18px;min-height:18px}</style>
+<html lang="vi-VN" dir="ltr" color-version="v2_0" server-dark="" dark="" unified=""><head><title>Chi tiết video - YouTube Studio</title><custom-style></custom-style><custom-style></custom-style>
+<custom-style>
+  
+</custom-style>
+<custom-style>
+  
+</custom-style></head><body id="html-body" rounded-container=""><ytcp-app>
+
+<ytcp-legacy-dialog-manager class="style-scope ytcp-app"><ytcp-dialog-host id="ytcp-auth-confirmation-dialog-host"></ytcp-dialog-host></ytcp-legacy-dialog-manager>
+<ytcp-dialog-manager class="ytcpDialogManagerHost"></ytcp-dialog-manager>
+<ytcp-nitrate class="style-scope ytcp-app"></ytcp-nitrate>
+<ytcp-toast-manager class="style-scope ytcp-app" alignment="center" unified=""><tp-yt-paper-toast id="paper-toast" restore-focus-on-close="" class="style-scope ytcp-toast-manager" aria-hidden="true" style="outline: none; display: none;"><span id="label" class="style-scope tp-yt-paper-toast"></span>
+
+  
+  
+
+</tp-yt-paper-toast>
+</ytcp-toast-manager>
+<snackbar-container class="ytSnackbarContainerHost"></snackbar-container>
+<yt-ephemeral-actions class="ytEphemeralActionsHost" aria-live="polite" aria-atomic="true"></yt-ephemeral-actions>
+
+  <ytsp-sponsors-only-video-post-manager class="style-scope ytcp-app">
+  </ytsp-sponsors-only-video-post-manager>
+
+<ytcp-permanent-operational-error-manager class="style-scope ytcp-app"><ytcp-dialog id="dialog" max-width="576" min-width="576" modal="" no-shrinking="" class="style-scope ytcp-permanent-operational-error-manager" unified=""><tp-yt-paper-dialog id="dialog" restore-focus-on-close="" class=" style-scope ytcp-dialog style-scope ytcp-dialog" aria-labelledby="ytcp-permanent-operational-error-manager-title-AF271441-6E33-406A-9F19-794E0CD99283" style-target="host" role="dialog" tabindex="-1" aria-hidden="true" aria-modal="true" style="outline: none; display: none; min-width: 576px; max-width: 576px;"><div class="header style-scope ytcp-dialog"><div class="header-content style-scope ytcp-dialog"><h1 slot="primary-header" class="style-scope ytcp-permanent-operational-error-manager" id="ytcp-permanent-operational-error-manager-title-AF271441-6E33-406A-9F19-794E0CD99283"> </h1></div><tp-yt-paper-progress indeterminate="" class="style-scope ytcp-dialog" hidden="" aria-label="Đang tiến hành thao tác" role="progressbar" value="0" aria-valuemin="0" aria-valuemax="100" aria-disabled="false"><div id="progressContainer" class="style-scope tp-yt-paper-progress">
+  <div id="secondaryProgress" class="style-scope tp-yt-paper-progress" hidden="" style="transform: scaleX(0);"></div>
+  <div id="primaryProgress" class="style-scope tp-yt-paper-progress indeterminate" style="transform: scaleX(0);"></div>
+</div>
+</tp-yt-paper-progress></div><div class="content style-scope ytcp-dialog"><p slot="content" id="description" class="style-scope ytcp-permanent-operational-error-manager"> </p></div><div class="footer style-scope ytcp-dialog"><div slot="secondary-footer" id="buttons" class="style-scope ytcp-permanent-operational-error-manager"><ytcp-button autofocus="" label="Đóng" style="margin-left: 8px" class="style-scope ytcp-permanent-operational-error-manager" tabindex="-1" type="tonal" button-style="default" icon-alignment="start" aria-disabled="false"><div style="display: contents;" class="style-scope ytcp-button"><ytcp-button-shape><button class="ytcpButtonShapeImplHost ytcpButtonShapeImpl--tonal ytcpButtonShapeImpl--mono ytcpButtonShapeImpl--size-m ytcpButtonShapeImpl--enable-backdrop-filter-experiment" title="" aria-label="Đóng" aria-disabled="false" tabindex="0" style=""><div class="ytcpButtonShapeImpl__button-text-content">Đóng</div><yt-touch-feedback-shape aria-hidden="true" class="ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse"><div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div></yt-touch-feedback-shape></button></ytcp-button-shape></div></ytcp-button></div></div>
+</tp-yt-paper-dialog></ytcp-dialog></ytcp-permanent-operational-error-manager>
+<ytcp-a11y-announcer class="style-scope ytcp-app"><div class="only-visible-for-accessibility style-scope ytcp-a11y-announcer" aria-live="polite">Chi tiết video</div></ytcp-a11y-announcer>
+
+
+
+  <ytcp-entity-page id="entity-page" class="loading style-scope ytcp-app style-scope ytcp-app" first-load="" style="--ytcp-entity-main-content-height: 661px;">
+<ytcp-warm-welcome class="style-scope ytcp-entity-page">
+</ytcp-warm-welcome>
+<div id="main-container" class="style-scope ytcp-entity-page">
+  <tp-yt-iron-overlay-backdrop id="nav-backdrop" tabindex="-1" class="style-scope ytcp-entity-page">
+  
+</tp-yt-iron-overlay-backdrop>
+  <ytcp-top-banner id="top-banner" color-theme="" class="style-scope ytcp-entity-page"><ytcp-banner class="style-scope ytcp-top-banner closing" color-theme="" hidden="" unified="" unified-typography=""><div class="container style-scope ytcp-banner" hidden="">
+  
+</div></ytcp-banner>
+</ytcp-top-banner>
+  <ytcp-header class="ytcpAppHeaderHost style-scope ytcp-entity-page ytcpAppHeaderUnified" first-load="true">
+  <header class="ytcpAppHeaderHeader ytcpAppHeaderFirstLoad"><ytcp-icon-button class="ytcpAppHeaderCollapseExpandIcon" tabindex="0" unified="" aria-disabled="false" aria-label="Thu gọn menu" role="button"><yt-icon class="remove-defaults style-scope ytcp-icon-button"><span class="yt-icon-shape style-scope yt-icon ytSpecIconShapeHost"><div style="width: 100%; height: 100%; display: block; fill: currentcolor;"></div></span></yt-icon><ytcp-tooltip offset="6" suppress-aria-announcement="true" class="style-scope ytcp-icon-button" style="display: none;"></ytcp-tooltip></ytcp-icon-button><ytcp-home-button><a id="home-button" class="style-scope ytcp-home-button" target="_self" title="Trang tổng quan của YouTube Studio" href="/channel/UCanonChannel00000000001"><img height="24" class="style-scope ytcp-home-button" src="https://www.gstatic.com/youtube/img/creator/yt_studio_logo_v2_darkmode.svg" alt="Trang tổng quan của YouTube Studio"></a></ytcp-home-button><ytcp-button class="ytcpAppHeaderSkipNavigation" tabindex="-1" type="tonal" button-style="default" icon-alignment="start" aria-disabled="false"><div style="display: contents;" class="style-scope ytcp-button"><ytcp-button-shape><button class="ytcpButtonShapeImplHost ytcpButtonShapeImpl--tonal ytcpButtonShapeImpl--mono ytcpButtonShapeImpl--size-m ytcpButtonShapeImpl--enable-backdrop-filter-experiment" title="" aria-label="Bỏ qua phần hướng dẫn" aria-disabled="false" tabindex="0" style=""><div class="ytcpButtonShapeImpl__button-text-content">Bỏ qua phần hướng dẫn</div><yt-touch-feedback-shape aria-hidden="true" class="ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse"><div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div></yt-touch-feedback-shape></button></ytcp-button-shape></div></ytcp-button><ytcp-omnisearch class="ytcpAppHeaderOmnisearch" unified="">
+<tp-yt-iron-overlay-backdrop id="backdrop" class="style-scope ytcp-omnisearch">
+</tp-yt-iron-overlay-backdrop>
+
+<div id="search-layer" tabindex="-1" class="style-scope ytcp-omnisearch">
+  <yt-icon class="search-icon style-scope ytcp-omnisearch" icon="yt-sys-icons:search"><span class="yt-icon-shape style-scope yt-icon ytSpecIconShapeHost"><div style="width: 100%; height: 100%; display: block; fill: currentcolor;"></div></span></yt-icon>
+  <ytcp-ve track-click="" class="style-scope ytcp-omnisearch" role="none">
+    <form name="searchForm" class="style-scope ytcp-omnisearch">
+      <input id="query-input" autocomplete="off" aria-controls="results" class="style-scope ytcp-omnisearch" placeholder="Tìm kiếm trên kênh của bạn" aria-activedescendant="" aria-expanded="false">
+    </form>
+  </ytcp-ve>
+
+  <ytcp-icon-button id="clear-icon" icon="yt-sys-icons:close" tooltip-label="Xóa" class="style-scope ytcp-omnisearch" hidden="" tabindex="0" unified="" aria-disabled="false" aria-label="Xóa" role="button"><yt-icon class="remove-defaults style-scope ytcp-icon-button"><span class="yt-icon-shape style-scope yt-icon ytSpecIconShapeHost"><div style="width: 100%; height: 100%; display: block; fill: currentcolor;"></div></span></yt-icon><ytcp-tooltip offset="6" suppress-aria-announcement="true" class="style-scope ytcp-icon-button" style="display: none;"></ytcp-tooltip></ytcp-icon-button>
+  <tp-yt-paper-progress id="loading-bar" indeterminate="" class="style-scope ytcp-omnisearch" hidden="" role="progressbar" value="0" aria-valuemin="0" aria-valuemax="100" aria-disabled="false"><div id="progressContainer" class="style-scope tp-yt-paper-progress">
+  <div id="secondaryProgress" class="style-scope tp-yt-paper-progress" hidden="" style="transform: scaleX(0);"></div>
+  <div id="primaryProgress" class="style-scope tp-yt-paper-progress indeterminate" style="transform: scaleX(0);"></div>
+</div>
+</tp-yt-paper-progress>
+  <div id="results" class="results-not-ready style-scope ytcp-omnisearch style-scope ytcp-omnisearch">
+    
+
+    
+  </div>
+</div>
+</ytcp-omnisearch><div class="ytcpAppHeaderRightSection"><div class="ytcpAppHeaderRightSectionContent"><div class="ytcpAppHeaderIconsSection"><ytcp-icon-button class="ytcpAppHeaderSearchIcon" tabindex="0" unified="" aria-disabled="false" aria-label="Tìm kiếm" role="button"><yt-icon class="remove-defaults style-scope ytcp-icon-button"><span class="yt-icon-shape style-scope yt-icon ytSpecIconShapeHost"><div style="width: 100%; height: 100%; display: block; fill: currentcolor;"></div></span></yt-icon><ytcp-tooltip offset="6" suppress-aria-announcement="true" class="style-scope ytcp-icon-button" style="display: none;"></ytcp-tooltip></ytcp-icon-button><ytcp-sam-chat class="ytcpSamChatHost" chat-type="2"><ytcp-icon-button tabindex="0" unified="" aria-disabled="false" aria-label="Trò chuyện với Bộ phận hỗ trợ nhà sáng tạo" role="button"><yt-icon class="remove-defaults style-scope ytcp-icon-button"><span class="yt-icon-shape style-scope yt-icon ytSpecIconShapeHost"><div style="width: 100%; height: 100%; display: block; fill: currentcolor;"></div></span></yt-icon><ytcp-tooltip offset="6" suppress-aria-announcement="true" class="style-scope ytcp-icon-button" style="display: none;"></ytcp-tooltip></ytcp-icon-button><ytcp-feature-discovery-tour-step>
+</ytcp-feature-discovery-tour-step></ytcp-sam-chat><ytcp-help enable-promoted-product-links="" is-eligible-for-creator-chat="" context="studio_web_video_edit"><ytcp-icon-button class="ytcpAppHeaderHelpIcon" tabindex="0" unified="" aria-disabled="false" aria-label="Trợ giúp" role="button"><yt-icon class="remove-defaults style-scope ytcp-icon-button"><span class="yt-icon-shape style-scope yt-icon ytSpecIconShapeHost"><div style="width: 100%; height: 100%; display: block; fill: currentcolor;"></div></span></yt-icon><ytcp-tooltip offset="6" suppress-aria-announcement="true" class="style-scope ytcp-icon-button" style="display: none;"></ytcp-tooltip></ytcp-icon-button></ytcp-help><ytcp-inbox-trigger class="ytcpInboxTriggerHost"><ytcp-icon-button tabindex="0" unified="" aria-disabled="false" aria-label="Thông báo" role="button"><yt-icon class="remove-defaults style-scope ytcp-icon-button"><span class="yt-icon-shape style-scope yt-icon ytSpecIconShapeHost"><div style="width: 100%; height: 100%; display: block; fill: currentcolor;"></div></span></yt-icon><ytcp-tooltip offset="6" suppress-aria-announcement="true" class="style-scope ytcp-icon-button" style="display: none;"></ytcp-tooltip></ytcp-icon-button></ytcp-inbox-trigger></div><ytcp-creator-chat-trigger class="ytcpCreatorChatTriggerHost ytcpAppHeaderCreatorChatTriggerTextButton"><div><div><ytcp-creator-chat-spark class="ytcpCreatorChatSparkHost widgetsWizYtcpTooltipHost"><button-view-model class="ytSpecButtonViewModelHost ytcpCreatorChatSparkButton"><button class="ytSpecButtonShapeNextHost ytSpecButtonShapeNextOutline ytSpecButtonShapeNextMono ytSpecButtonShapeNextSizeM ytSpecButtonShapeNextIconLeading ytSpecButtonShapeNextEnableBackdropFilterExperiment" title="" aria-label="Hỏi Studio" aria-disabled="false" style=""><div aria-hidden="true" class="ytSpecButtonShapeNextIcon ytSpecButtonShapeNextElevatedContent"><span class="ytIconWrapperHost" style="width: 24px; height: 24px;"><span class="yt-icon-shape ytSpecIconShapeHost"><div style="width: 100%; height: 100%; display: block; fill: currentcolor;"></div></span></span></div><div class="ytSpecButtonShapeNextButtonTextContent ytSpecButtonShapeNextElevatedContent">Hỏi Studio</div><yt-touch-feedback-shape aria-hidden="true" class="ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse"><div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div></yt-touch-feedback-shape><yt-animated-asset-view-model class="ytAnimatedAssetViewModelHost ytSpecButtonShapeNextMiddlegroundAsset"><lottie-component class="ytLottieComponentHost ytAnimatedAssetViewModelFill"></lottie-component></yt-animated-asset-view-model></button></button-view-model></ytcp-creator-chat-spark></div><ytcp-feature-discovery-tour-step>
+</ytcp-feature-discovery-tour-step><ytcp-feature-discovery-tour-step>
+</ytcp-feature-discovery-tour-step></div></ytcp-creator-chat-trigger><ytcp-button class="ytcpAppHeaderCreateIcon" tabindex="-1" type="outline" button-style="default" icon-alignment="start" icon="yt-sys-icons:video_call" aria-disabled="false"><div style="display: contents;" class="style-scope ytcp-button"><ytcp-button-shape><button class="ytcpButtonShapeImplHost ytcpButtonShapeImpl--outline ytcpButtonShapeImpl--mono ytcpButtonShapeImpl--size-m ytcpButtonShapeImpl--icon-leading ytcpButtonShapeImpl--enable-backdrop-filter-experiment" title="" aria-label="Tạo" aria-disabled="false" tabindex="0" style=""><div aria-hidden="true" class="ytcpButtonShapeImpl__icon"><span class="ytIconWrapperHost" style="width: 24px; height: 24px;"><span class="yt-icon-shape ytSpecIconShapeHost"><div style="width: 100%; height: 100%; display: block; fill: currentcolor;"></div></span></span></div><div class="ytcpButtonShapeImpl__button-text-content">Tạo</div><yt-touch-feedback-shape aria-hidden="true" class="ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse"><div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div></yt-touch-feedback-shape></button></ytcp-button-shape></div></ytcp-button><ytd-topbar-menu-button-renderer class="ytcpAppHeaderAvatar widgetsWizYtcpTooltipHost" aria-labelledby="goog_87593059">
+  <button id="avatar-btn" aria-haspopup="true" class="style-scope ytd-topbar-menu-button-renderer" aria-label="Account">
+    <yt-img-shadow height="32" width="32" class="style-scope ytd-topbar-menu-button-renderer no-transition" style="background-color: transparent;" loaded=""><img id="img" draggable="false" class="style-scope yt-img-shadow" alt="" height="32" width="32" src=""></yt-img-shadow>
+  </button>
+
+<div id="button" class="style-scope ytd-topbar-menu-button-renderer"></div>
+</ytd-topbar-menu-button-renderer><ytcp-paper-tooltip>
+<ytcp-paper-tooltip-placeholder aria-live="polite" role="tooltip" class="style-scope ytcp-paper-tooltip" disable-upgrade="" tabindex="-1" id="goog_87593059">
+  <div id="slot-wrapper" class="style-scope ytcp-paper-tooltip"></div>
+  <div id="tooltip-placeholder-fake-slot" class="style-scope ytcp-paper-tooltip">Tài khoản</div>
+  
+</ytcp-paper-tooltip-placeholder>
+</ytcp-paper-tooltip></div></div></header></ytcp-header>
+  <ytcp-banner class="entity-banner style-scope ytcp-entity-page closing" set-ytcp-banner-animated-api="function () { [native code] }" unified="" unified-typography=""><div class="container style-scope ytcp-banner" hidden="">
+  
+</div></ytcp-banner>
+  <div class="nav-and-main-content style-scope ytcp-entity-page">
+    <div class="nav-drawer-collapsed-placeholder style-scope ytcp-entity-page" hidden=""></div>
+    
+    <main id="main" class="style-scope ytcp-entity-page" studio-theme="DEFAULT">
+      
+    <div class="all-pages style-scope ytcp-app">
+      <ytcp-animatable class="style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable id="page-title" class="style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="channel" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="channel.ask_studio" class="page  style-scope ytcp-app style-scope ytcp-app">
+      </ytcp-animatable>
+      
+      
+      <ytcp-animatable name="channel.activity" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="channel.editing" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="channel.translations" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="channel.analytics" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      
+      <ytcp-animatable name="channel.analytics.hub_overview" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="channel.analytics.hub_content" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="channel.analytics.hub_audience" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="channel.analytics.hub_revenue" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="channel.analytics.hub_research" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="video.comments" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="video.edit" class="page selected style-scope ytcp-app style-scope ytcp-app">
+        
+          <ytcp-video-details-section id="edit" class="style-scope ytcp-app" show-scrim=""><ytcp-latency-measurement trigger-route-regex="video.edit" class="style-scope ytcp-video-details-section"><ytcp-latency-measurement-clock-stopper class="style-scope ytcp-latency-measurement"></ytcp-latency-measurement-clock-stopper></ytcp-latency-measurement><ytcp-sticky-header optional="" class="style-scope ytcp-video-details-section" unified="" stuck=""><ytcp-top-banner banner-location="VIDEO_DETAILS" color-theme="" class="style-scope ytcp-video-details-section"><ytcp-banner class="style-scope ytcp-top-banner closing" color-theme="" hidden="" unified="" unified-typography=""><div class="container style-scope ytcp-banner" hidden="">
+  
+</div></ytcp-banner>
+</ytcp-top-banner><ytcp-entity-page-header class="style-scope ytcp-video-details-section"><div class="wrapper style-scope ytcp-entity-page-header"><div class="primary style-scope ytcp-entity-page-header"><h1 class="page-title style-scope ytcp-entity-page-header">Chi tiết video</h1></div><div class="buttons style-scope ytcp-video-details-section" slot="secondary"><ytcp-button id="discard" class="style-scope ytcp-video-details-section" tabindex="-1" type="tonal" button-style="default" icon-alignment="start" aria-disabled="false"><div style="display: contents;" class="style-scope ytcp-button"><ytcp-button-shape><button class="ytcpButtonShapeImplHost ytcpButtonShapeImpl--tonal ytcpButtonShapeImpl--mono ytcpButtonShapeImpl--size-m ytcpButtonShapeImpl--enable-backdrop-filter-experiment" title="" aria-label="Huỷ thay đổi" aria-disabled="false" tabindex="0" style=""><div class="ytcpButtonShapeImpl__button-text-content">Huỷ thay đổi</div><yt-touch-feedback-shape aria-hidden="true" class="ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse"><div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div></yt-touch-feedback-shape></button></ytcp-button-shape></div></ytcp-button><ytcp-button id="save" track-click="" class="style-scope ytcp-video-details-section" tabindex="-1" type="filled" button-style="default" icon-alignment="start" aria-disabled="false"><div style="display: contents;" class="style-scope ytcp-button"><ytcp-button-shape><button class="ytcpButtonShapeImplHost ytcpButtonShapeImpl--filled ytcpButtonShapeImpl--mono ytcpButtonShapeImpl--size-m ytcpButtonShapeImpl--enable-backdrop-filter-experiment" title="" aria-label="Lưu" aria-disabled="false" tabindex="0" style=""><div class="ytcpButtonShapeImpl__button-text-content">Lưu</div><yt-touch-feedback-shape aria-hidden="true" class="ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponseInverse"><div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div></yt-touch-feedback-shape></button></ytcp-button-shape></div></ytcp-button><ytcp-video-overflow-menu id="video-overflow-menu" class="style-scope ytcp-video-details-section"><ytcp-icon-button id="overflow-menu-button" icon="more-vert" track-click="" class="style-scope ytcp-video-overflow-menu" tabindex="0" unified="" aria-disabled="false" aria-label="Tùy chọn" role="button"><yt-icon class="remove-defaults style-scope ytcp-icon-button"><span class="yt-icon-shape style-scope yt-icon ytSpecIconShapeHost"><div style="width: 100%; height: 100%; display: block; fill: currentcolor;"></div></span></yt-icon><ytcp-tooltip offset="6" suppress-aria-announcement="true" class="style-scope ytcp-icon-button" style="display: none;"></ytcp-tooltip></ytcp-icon-button><ytcp-text-menu id="overflow-menu" class="style-scope ytcp-video-overflow-menu" unified=""><tp-yt-paper-dialog id="dialog" style-target="dialog" class="style-scope ytcp-text-menu" role="dialog" tabindex="-1" aria-hidden="true" style="outline: none; display: none;">
+  
+  <div class="content style-scope ytcp-text-menu">
+    
+    <tp-yt-paper-listbox id="paper-list" selectable=".selectable-item" class="style-scope ytcp-text-menu" role="listbox" tabindex="0">
+      
+      
+    
+</tp-yt-paper-listbox>
+  </div>
+
+</tp-yt-paper-dialog>
+</ytcp-text-menu></ytcp-video-overflow-menu></div></div></ytcp-entity-page-header>
+</ytcp-sticky-header><ytcp-error-section enable-retry="true" class="style-scope ytcp-video-details-section" hidden=""><div class="hcenter-child style-scope ytcp-error-section">
+  <div id="error-block" class="style-scope ytcp-error-section">
+    <div id="error-image" class="style-scope ytcp-error-section">
+      <img alt="" class="style-scope ytcp-error-section" src="https://www.gstatic.com/youtube/img/creator/error_illustration_v2_darkmode.svg">
+    </div>
+    <p id="error-message" class="style-scope ytcp-error-section">Rất tiếc, đã xảy ra lỗi.</p>
+    <ytcp-button id="error-retry-button" class="style-scope ytcp-error-section" tabindex="-1" type="tonal" button-style="default" icon-alignment="start" aria-disabled="false"><div style="display: contents;" class="style-scope ytcp-button"><ytcp-button-shape><button class="ytcpButtonShapeImplHost ytcpButtonShapeImpl--tonal ytcpButtonShapeImpl--mono ytcpButtonShapeImpl--size-m ytcpButtonShapeImpl--enable-backdrop-filter-experiment" title="" aria-label="Thử lại" aria-disabled="false" tabindex="0" style=""><div class="ytcpButtonShapeImpl__button-text-content">Thử lại</div><yt-touch-feedback-shape aria-hidden="true" class="ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse"><div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div></yt-touch-feedback-shape></button></ytcp-button-shape></div></ytcp-button>
+  </div>
+</div>
+</ytcp-error-section><div class="scrim style-scope ytcp-video-details-section"></div></ytcp-video-details-section>
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="video.live_settings" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable id="video-editor" name="video.editor" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="video.translations" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="video.analytics" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="video.analytics.hub_overview" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="video.analytics.hub_reach" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="video.analytics.hub_engagement" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="video.analytics.hub_audience" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="video.analytics.hub_revenue" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="video.monetization" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="video.rights_management" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="video.claims" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="video.policy" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="video.copyright" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="video.clips" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="channel.codelab" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="channel.contentmatches" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="channel.monetization" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="channel.music" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="channel.music_storefront" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      
+      <ytcp-animatable name="owner" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="owner.assets" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="owner.programs" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="playlist.analytics" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="playlist.analytics.hub_overview" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="playlist.edit" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="playlist.comments" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="playlist.videos" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      
+        <ytcp-animatable name="playlist.languages" class="page  style-scope ytcp-app style-scope ytcp-app">
+          
+        </ytcp-animatable>
+      
+      <ytcp-animatable name="program.overview" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="program.metadata" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="program.artwork" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="program.history" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="owner.asset_groups" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="asset_group.assets" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="asset_group.metadata" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="asset_group.claimed_videos" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="owner.issues" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="owner.channels" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="owner.analytics" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="owner.claims.manual" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="owner.campaigns" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="owner.copyright" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="asset_group.campaigns" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="owner.delivery" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="owner.allowlist" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="owner.off_platform_licenses" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="owner.pitch_music" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="owner.loudspeaker" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="owner.videos" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="owner.reports" class="page  full-height style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="owner.claimed_videos" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="owner.policies" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="release.overview" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="release.art_tracks" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="release.availability" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="release.comments" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="art_track.overview" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="art_track.availability" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="art_track.duplicates" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="asset.metadata" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="asset.ownership" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="asset.history" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="asset.sound_recordings" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="asset.potential_embeds" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="asset.references" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="asset.embeds" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="asset.issues" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="asset.composition" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="asset.composition_ownership" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="asset.composition_history" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="asset.claimed_videos" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="asset.licenses" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="asset.analytics" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="group.analytics" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="artist.analytics" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="artist.analytics.hub_overview" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="artist.analytics.hub_content" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="artist.analytics.hub_audience" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="artist.analytics.hub_revenue" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="artist.analytics.hub_research" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="artist.events" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="artist.presskit" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="artist_roster.analytics" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="artist_roster.artists" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="song.analytics" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="song.analytics.hub_overview" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="song.analytics.hub_audience" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="post.comments" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="post.edit" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="mini_app.edit" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="mini_app.comments" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="promotion.edit" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      <ytcp-animatable name="channel.content.brandboost.details" class="page  style-scope ytcp-app style-scope ytcp-app">
+        
+      </ytcp-animatable>
+      
+      
+    </div>
+    <ytcp-account-linking-dialog-trigger class="style-scope ytcp-app"></ytcp-account-linking-dialog-trigger>
+  
+    </main>
+    <div id="persistent-panel-animation-container" class="style-scope ytcp-entity-page" inert="">
+      <div id="persistent-panel-drag-handle" class="style-scope ytcp-entity-page">
+        <div id="persistent-panel-drag-handle-inner" class="style-scope ytcp-entity-page"></div>
+      </div>
+      <div id="persistent-panel-container" class="style-scope ytcp-entity-page">
+        <div id="persistent-panel-sidebar-container" class="style-scope ytcp-entity-page" hidden=""></div>
+        <div id="persistent-panel-content" class="style-scope ytcp-entity-page"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+</ytcp-entity-page>
+
+
+
+
+
+
+<ytcp-error-section class="app-load style-scope ytcp-app" feature="YTCP_APP" top-level="" hidden=""><div class="hcenter-child style-scope ytcp-error-section">
+  <div id="error-block" class="style-scope ytcp-error-section">
+    <div id="error-image" class="style-scope ytcp-error-section">
+      <img alt="" class="style-scope ytcp-error-section" src="https://www.gstatic.com/youtube/img/creator/error_illustration_v2_darkmode.svg">
+    </div>
+    <p id="error-message" class="style-scope ytcp-error-section">Rất tiếc, đã xảy ra lỗi.</p>
+    <ytcp-button id="error-retry-button" class="style-scope ytcp-error-section" hidden="" tabindex="-1" type="tonal" button-style="default" icon-alignment="start" aria-disabled="false"><div style="display: contents;" class="style-scope ytcp-button"><ytcp-button-shape><button class="ytcpButtonShapeImplHost ytcpButtonShapeImpl--tonal ytcpButtonShapeImpl--mono ytcpButtonShapeImpl--size-m ytcpButtonShapeImpl--enable-backdrop-filter-experiment" title="" aria-label="Thử lại" aria-disabled="false" tabindex="0" style=""><div class="ytcpButtonShapeImpl__button-text-content">Thử lại</div><yt-touch-feedback-shape aria-hidden="true" class="ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse"><div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div></yt-touch-feedback-shape></button></ytcp-button-shape></div></ytcp-button>
+  </div>
+</div>
+</ytcp-error-section>
+
+
+  <ytcp-popup-container class="style-scope ytcp-app">
+</ytcp-popup-container>
+
+
+  <yt-tooltip class="ytTooltipContainerHost" aria-hidden="true"><yt-popover popover="manual" class="ytPopoverComponentHost ytTooltipContainerDefaultTooltipContent"><span hidden="true"></span></yt-popover></yt-tooltip>
+
+
+
+<ytls-apiary-network-manager class="style-scope ytcp-app"><yt-network-manager id="inner-network-manager" class="style-scope ytls-apiary-network-manager"></yt-network-manager>
+</ytls-apiary-network-manager></ytcp-app><ytcp-text-menu id="search-results" class="style-scope ytcp-form-autocomplete" unified="" style="--ytcp-text-menu-icon-color: var(--ytcp-text-disabled); --text-menu-dialog-margin: 0;"><tp-yt-paper-dialog id="dialog" style-target="dialog" class="style-scope ytcp-text-menu" role="dialog" tabindex="-1" style="outline: none; min-width: 312px; position: fixed; box-sizing: border-box; left: 162.781px; top: 414.531px; max-width: initial; max-height: 224px; display: none;" aria-hidden="true">
+  
+  <div class="content style-scope ytcp-text-menu">
+    
+      <div id="header-text" class="style-scope ytcp-text-menu" hidden=""></div>
+    
+    <tp-yt-paper-listbox id="paper-list" selectable=".selectable-item" class="style-scope ytcp-text-menu" role="listbox" tabindex="0">
+      
+        <tp-yt-paper-item id="text-item-0" class="tp-yt-paper-item  selectable-item style-scope ytcp-text-menu style-scope ytcp-text-menu" test-id="empty_item_key" role="option" aria-hidden="false" style-target="host" tabindex="-1" aria-disabled="false" aria-selected="false">
+          <ytcp-ve class="style-scope ytcp-text-menu" role="none">
+            
+            
+              
+                
+                
+                  <yt-icon class="menu-icon style-scope ytcp-text-menu"></yt-icon>
+                
+              
+              <tp-yt-paper-item-body class="style-scope ytcp-text-menu">
+                <div class="style-scope ytcp-text-menu">
+                  <div class="right-container style-scope ytcp-text-menu">
+                    <div class="text-content  style-scope ytcp-text-menu style-scope ytcp-text-menu">
+                      
+                      <yt-formatted-string class="item-text main-text style-scope ytcp-text-menu"><span dir="auto" class="style-scope yt-formatted-string" style="color: rgb(170, 170, 170);">Không có</span></yt-formatted-string>
+                      
+                    </div>
+                  </div>
+                </div>
+                
+              
+</tp-yt-paper-item-body>
+              
+            
+            
+          </ytcp-ve>
+        
+</tp-yt-paper-item>
+        
+        
+        
+      
+        <tp-yt-paper-item id="text-item-1" class="tp-yt-paper-item  selectable-item style-scope ytcp-text-menu style-scope ytcp-text-menu" test-id="SEPARATOR" role="separator" disabled="" aria-hidden="true" style-target="host" tabindex="-1" aria-disabled="true" aria-selected="false" style="pointer-events: none;">
+          <ytcp-ve class="style-scope ytcp-text-menu" role="none">
+            
+            
+            
+          </ytcp-ve>
+        
+</tp-yt-paper-item>
+        
+        
+        
+      
+        <tp-yt-paper-item id="text-item-2" class="tp-yt-paper-item selectable-item style-scope ytcp-text-menu iron-selected" test-id="{&quot;placeId&quot;:&quot;ChIJCzYy5IS16lQRQrfeQ5K5Oxw&quot;,&quot;title&quot;:&quot;United States&quot;,&quot;subtitle&quot;:&quot;&quot;}" role="option" aria-hidden="false" style-target="host" tabindex="0" aria-disabled="false" aria-selected="true">
+          <ytcp-ve class="style-scope ytcp-text-menu" role="none">
+            
+            
+              
+                
+                
+                  <yt-icon class="menu-icon style-scope ytcp-text-menu"><span class="yt-icon-shape style-scope yt-icon ytSpecIconShapeHost"><div style="width: 100%; height: 100%; display: block; fill: currentcolor;"></div></span></yt-icon>
+                
+              
+              <tp-yt-paper-item-body class="style-scope ytcp-text-menu">
+                <div class="style-scope ytcp-text-menu">
+                  <div class="right-container style-scope ytcp-text-menu">
+                    <div class="text-content  style-scope ytcp-text-menu style-scope ytcp-text-menu">
+                      
+                      <yt-formatted-string class="item-text main-text style-scope ytcp-text-menu"><span dir="auto" class="style-scope yt-formatted-string" style="color: rgb(255, 255, 255);">United States</span><span dir="auto" class="style-scope yt-formatted-string"> </span><span dir="auto" class="style-scope yt-formatted-string" style="color: rgb(170, 170, 170);"></span></yt-formatted-string>
+                      
+                    </div>
+                  </div>
+                </div>
+                
+              
+</tp-yt-paper-item-body>
+              
+            
+            
+          </ytcp-ve>
+        
+</tp-yt-paper-item>
+        
+        
+        
+      
+        <tp-yt-paper-item id="text-item-3" class="tp-yt-paper-item  selectable-item style-scope ytcp-text-menu style-scope ytcp-text-menu" test-id="{&quot;placeId&quot;:&quot;ChIJBQ-2twOlemQREDZxw68t4QQ&quot;,&quot;title&quot;:&quot;United States Minor Outlying Islands&quot;,&quot;subtitle&quot;:&quot;&quot;}" role="option" aria-hidden="false" style-target="host" tabindex="-1" aria-disabled="false" aria-selected="false">
+          <ytcp-ve class="style-scope ytcp-text-menu" role="none">
+            
+            
+              
+                
+                
+                  <yt-icon class="menu-icon style-scope ytcp-text-menu"><span class="yt-icon-shape style-scope yt-icon ytSpecIconShapeHost"><div style="width: 100%; height: 100%; display: block; fill: currentcolor;"></div></span></yt-icon>
+                
+              
+              <tp-yt-paper-item-body class="style-scope ytcp-text-menu">
+                <div class="style-scope ytcp-text-menu">
+                  <div class="right-container style-scope ytcp-text-menu">
+                    <div class="text-content  style-scope ytcp-text-menu style-scope ytcp-text-menu">
+                      
+                      <yt-formatted-string class="item-text main-text style-scope ytcp-text-menu"><span dir="auto" class="style-scope yt-formatted-string" style="color: rgb(255, 255, 255);">United States Minor Outlying Islands</span><span dir="auto" class="style-scope yt-formatted-string"> </span><span dir="auto" class="style-scope yt-formatted-string" style="color: rgb(170, 170, 170);"></span></yt-formatted-string>
+                      
+                    </div>
+                  </div>
+                </div>
+                
+              
+</tp-yt-paper-item-body>
+              
+            
+            
+          </ytcp-ve>
+        
+</tp-yt-paper-item>
+        
+        
+        
+      
+        <tp-yt-paper-item id="text-item-4" class="tp-yt-paper-item  selectable-item style-scope ytcp-text-menu style-scope ytcp-text-menu" test-id="{&quot;placeId&quot;:&quot;ChIJuaza8mUQBYwRBRzFGx2JHfk&quot;,&quot;title&quot;:&quot;United States Virgin Islands&quot;,&quot;subtitle&quot;:&quot;&quot;}" role="option" aria-hidden="false" style-target="host" tabindex="-1" aria-disabled="false" aria-selected="false">
+          <ytcp-ve class="style-scope ytcp-text-menu" role="none">
+            
+            
+              
+                
+                
+                  <yt-icon class="menu-icon style-scope ytcp-text-menu"><span class="yt-icon-shape style-scope yt-icon ytSpecIconShapeHost"><div style="width: 100%; height: 100%; display: block; fill: currentcolor;"></div></span></yt-icon>
+                
+              
+              <tp-yt-paper-item-body class="style-scope ytcp-text-menu">
+                <div class="style-scope ytcp-text-menu">
+                  <div class="right-container style-scope ytcp-text-menu">
+                    <div class="text-content  style-scope ytcp-text-menu style-scope ytcp-text-menu">
+                      
+                      <yt-formatted-string class="item-text main-text style-scope ytcp-text-menu"><span dir="auto" class="style-scope yt-formatted-string" style="color: rgb(255, 255, 255);">United States Virgin Islands</span><span dir="auto" class="style-scope yt-formatted-string"> </span><span dir="auto" class="style-scope yt-formatted-string" style="color: rgb(170, 170, 170);"></span></yt-formatted-string>
+                      
+                    </div>
+                  </div>
+                </div>
+                
+              
+</tp-yt-paper-item-body>
+              
+            
+            
+          </ytcp-ve>
+        
+</tp-yt-paper-item>
+        
+        
+        
+      
+        <tp-yt-paper-item id="text-item-5" class="tp-yt-paper-item  selectable-item style-scope ytcp-text-menu style-scope ytcp-text-menu" test-id="{&quot;placeId&quot;:&quot;ChIJGeh9CjJDXz4RTEpHvxzllsw&quot;,&quot;title&quot;:&quot;United States Consulate Dubai&quot;,&quot;subtitle&quot;:&quot;Al Seef Street - Dubai - Các tiểu Vương quốc Ả rập Thống nhất&quot;}" role="option" aria-hidden="false" style-target="host" tabindex="-1" aria-disabled="false" aria-selected="false">
+          <ytcp-ve class="style-scope ytcp-text-menu" role="none">
+            
+            
+              
+                
+                
+                  <yt-icon class="menu-icon style-scope ytcp-text-menu"><span class="yt-icon-shape style-scope yt-icon ytSpecIconShapeHost"><div style="width: 100%; height: 100%; display: block; fill: currentcolor;"></div></span></yt-icon>
+                
+              
+              <tp-yt-paper-item-body class="style-scope ytcp-text-menu">
+                <div class="style-scope ytcp-text-menu">
+                  <div class="right-container style-scope ytcp-text-menu">
+                    <div class="text-content  style-scope ytcp-text-menu style-scope ytcp-text-menu">
+                      
+                      <yt-formatted-string class="item-text main-text style-scope ytcp-text-menu"><span dir="auto" class="style-scope yt-formatted-string" style="color: rgb(255, 255, 255);">United States Consulate Dubai</span><span dir="auto" class="style-scope yt-formatted-string"> </span><span dir="auto" class="style-scope yt-formatted-string" style="color: rgb(170, 170, 170);">Al Seef Street - Dubai - Các tiểu Vương quốc Ả rập Thống nhất</span></yt-formatted-string>
+                      
+                    </div>
+                  </div>
+                </div>
+                
+              
+</tp-yt-paper-item-body>
+              
+            
+            
+          </ytcp-ve>
+        
+</tp-yt-paper-item>
+        
+        
+        
+      
+        <tp-yt-paper-item id="text-item-6" class="tp-yt-paper-item  selectable-item style-scope ytcp-text-menu style-scope ytcp-text-menu" test-id="{&quot;placeId&quot;:&quot;ChIJs04OiyAa2jERJUlR2rlNRhw&quot;,&quot;title&quot;:&quot;United States Embassy&quot;,&quot;subtitle&quot;:&quot;Napier Road, Singapore&quot;}" role="option" aria-hidden="false" style-target="host" tabindex="-1" aria-disabled="false" aria-selected="false">
+          <ytcp-ve class="style-scope ytcp-text-menu" role="none">
+            
+            
+              
+                
+                
+                  <yt-icon class="menu-icon style-scope ytcp-text-menu"><span class="yt-icon-shape style-scope yt-icon ytSpecIconShapeHost"><div style="width: 100%; height: 100%; display: block; fill: currentcolor;"></div></span></yt-icon>
+                
+              
+              <tp-yt-paper-item-body class="style-scope ytcp-text-menu">
+                <div class="style-scope ytcp-text-menu">
+                  <div class="right-container style-scope ytcp-text-menu">
+                    <div class="text-content  style-scope ytcp-text-menu style-scope ytcp-text-menu">
+                      
+                      <yt-formatted-string class="item-text main-text style-scope ytcp-text-menu"><span dir="auto" class="style-scope yt-formatted-string" style="color: rgb(255, 255, 255);">United States Embassy</span><span dir="auto" class="style-scope yt-formatted-string"> </span><span dir="auto" class="style-scope yt-formatted-string" style="color: rgb(170, 170, 170);">Napier Road, Singapore</span></yt-formatted-string>
+                      
+                    </div>
+                  </div>
+                </div>
+                
+              
+</tp-yt-paper-item-body>
+              
+            
+            
+          </ytcp-ve>
+        
+</tp-yt-paper-item>
+        
+        
+        
+      
+      
+    
+</tp-yt-paper-listbox>
+  </div>
+
+</tp-yt-paper-dialog>
+</ytcp-text-menu><ytcp-auth-confirmation-dialog><ytcp-confirmation-dialog id="confirmation-dialog" class="style-scope ytcp-auth-confirmation-dialog" unified=""><ytcp-dialog id="dialog" modal="" class="style-scope ytcp-confirmation-dialog" unified=""><tp-yt-paper-dialog id="dialog" restore-focus-on-close="" class=" style-scope ytcp-dialog style-scope ytcp-dialog" aria-labelledby="dialog-title-457C6A18-F002-43FC-A958-C471D8B6D62C" style-target="host" role="dialog" tabindex="-1" aria-modal="true" with-backdrop="" style="outline: none; min-width: 576px; max-width: 576px; position: fixed; top: 219.5px; left: 344px; box-sizing: border-box; max-height: 639px; z-index: 2204; min-height: 200px;"><div class="header style-scope ytcp-dialog"><div class="header-content style-scope ytcp-dialog"><h1 slot="primary-header" class="dialog-title style-scope ytcp-confirmation-dialog" id="dialog-title-457C6A18-F002-43FC-A958-C471D8B6D62C">Xác minh danh tính của bạn</h1></div><tp-yt-paper-progress indeterminate="" class="style-scope ytcp-dialog" hidden="" aria-label="Đang tiến hành thao tác" role="progressbar" value="0" aria-valuemin="0" aria-valuemax="100" aria-disabled="false"><div id="progressContainer" class="style-scope tp-yt-paper-progress">
+  <div id="secondaryProgress" class="style-scope tp-yt-paper-progress" hidden="" style="transform: scaleX(0);"></div>
+  <div id="primaryProgress" class="style-scope tp-yt-paper-progress indeterminate" style="transform: scaleX(0);"></div>
+</div>
+</tp-yt-paper-progress></div><div class="content style-scope ytcp-dialog"><div class="ytcp-dialog-slot-content style-scope ytcp-confirmation-dialog" slot="content"><div id="dialog-content-text" class="style-scope ytcp-confirmation-dialog"><yt-icon class="content-icon style-scope ytcp-confirmation-dialog" item-icon="" hidden=""></yt-icon><p slot="dialog-content" class="style-scope ytcp-auth-confirmation-dialog">
+      Để tiếp tục, chúng tôi cần xác thực danh tính của bạn. Bước bảo mật bổ sung này
+  giúp đảm bảo an toàn cho tài khoản của bạn.
+  </p></div><div class="style-scope ytcp-confirmation-dialog" hidden=""><div id="dialog-content-confirm-checkboxes" class="style-scope ytcp-confirmation-dialog"><label class="checkbox-wrapper style-scope ytcp-confirmation-dialog ytcp-checkbox-label"><ytcp-checkbox-lit id="confirm-checkbox" label-wrap="" class="style-scope ytcp-confirmation-dialog">
+    <div id="root-container" class="style-scope ytcp-checkbox-lit">
+      <div id="checkbox-line-height-aligner-container" class="style-scope ytcp-checkbox-lit">
+        <div id="checkbox-line-height-aligner" class="style-scope ytcp-checkbox-lit">
+          <div id="checkbox-container" class="style-scope ytcp-checkbox-lit">
+            <div id="checkbox" role="checkbox" tabindex="0" aria-checked="false" aria-disabled="false" aria-label="" class="style-scope ytcp-checkbox-lit">
+              
+            </div>
+            
+          </div>
+        </div>
+      </div>
+      
+      <input slot="hidden-input" type="checkbox" class="style-scope ytcp-confirmation-dialog">
+    </div>
+  </ytcp-checkbox-lit><span class="confirm-checkbox-label style-scope ytcp-confirmation-dialog" slot="label">  </span></label></div></div><div class="style-scope ytcp-confirmation-dialog" hidden=""><ytcp-form-textarea id="confirm-input" hide-initial-errors="" is-new-line-forbidden="" no-wrap="" required="" rows="1" class="style-scope ytcp-confirmation-dialog" unified=""><div class="text-container style-scope ytcp-form-textarea">
+  
+    <div id="section-label" class="style-scope ytcp-form-textarea">
+      undefined (bắt buộc)
+      <div id="label-help-tooltip" class="style-scope ytcp-form-textarea" hidden="">
+        <ytcp-ve class="style-scope ytcp-form-textarea" role="none">
+          <yt-icon id="help-icon" class="help-outline-icon style-scope ytcp-form-textarea" icon="yt-sys-icons16:help" mini="" tabindex="0" aria-labelledby="goog_87593086"><span class="yt-icon-shape style-scope yt-icon ytSpecIconShapeHost"><div style="width: 100%; height: 100%; display: block; fill: currentcolor;"></div></span></yt-icon>
+        </ytcp-ve>
+        <ytcp-paper-tooltip for="help-icon" position="top" type="explanatory" class="style-scope ytcp-form-textarea">
+<ytcp-paper-tooltip-placeholder aria-live="polite" role="tooltip" class="style-scope ytcp-paper-tooltip" disable-upgrade="" tabindex="-1" id="goog_87593086">
+  <div id="slot-wrapper" class="style-scope ytcp-paper-tooltip"></div>
+  <div id="tooltip-placeholder-fake-slot" class="style-scope ytcp-paper-tooltip">
+          <ytcp-paper-tooltip-body class="style-scope ytcp-form-textarea">
+
+
+
+            
+          
+
+</ytcp-paper-tooltip-body>
+        </div>
+  
+</ytcp-paper-tooltip-placeholder>
+</ytcp-paper-tooltip>
+      </div>
+    </div>
+    
+  
+  <textarea class="style-scope ytcp-form-textarea" required="" rows="1" aria-required="true" aria-invalid="false">  </textarea>
+  <div class="style-scope ytcp-form-textarea">
+    <div class="char-counter style-scope ytcp-form-textarea"> </div>
+  </div>
+</div>
+<ytcp-form-error-tip anchor-selector="textarea" class="style-scope ytcp-form-textarea" position="top" hidden=""><div id="message" role="alert" aria-live="polite" class="style-scope ytcp-form-error-tip">
+  
+  </div><div id="tail" class="style-scope ytcp-form-error-tip"></div></ytcp-form-error-tip>
+
+
+</ytcp-form-textarea></div></div></div><div class="footer style-scope ytcp-dialog"><div slot="primary-footer" class="style-scope ytcp-confirmation-dialog"></div><div slot="secondary-footer" id="dialog-buttons" class="style-scope ytcp-confirmation-dialog"><ytcp-button id="cancel-button" track-click="" class="style-scope ytcp-confirmation-dialog" tabindex="-1" type="tonal" button-style="default" icon-alignment="start" aria-disabled="false"><div style="display: contents;" class="style-scope ytcp-button"><ytcp-button-shape><button class="ytcpButtonShapeImplHost ytcpButtonShapeImpl--tonal ytcpButtonShapeImpl--mono ytcpButtonShapeImpl--size-m ytcpButtonShapeImpl--enable-backdrop-filter-experiment" title="" aria-label="Tìm hiểu thêm" aria-disabled="false" tabindex="0" style=""><div class="ytcpButtonShapeImpl__button-text-content">Tìm hiểu thêm</div><yt-touch-feedback-shape aria-hidden="true" class="ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse"><div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div></yt-touch-feedback-shape></button></ytcp-button-shape></div></ytcp-button><ytcp-button id="confirm-button" track-click="" class="style-scope ytcp-confirmation-dialog" tabindex="-1" type="filled" button-style="default" icon-alignment="start" aria-disabled="false"><div style="display: contents;" class="style-scope ytcp-button"><ytcp-button-shape><button class="ytcpButtonShapeImplHost ytcpButtonShapeImpl--filled ytcpButtonShapeImpl--mono ytcpButtonShapeImpl--size-m ytcpButtonShapeImpl--enable-backdrop-filter-experiment" title="" aria-label="Tiếp theo" aria-disabled="false" tabindex="0" style=""><div class="ytcpButtonShapeImpl__button-text-content">Tiếp theo</div><yt-touch-feedback-shape aria-hidden="true" class="ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponseInverse"><div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div></yt-touch-feedback-shape></button></ytcp-button-shape></div></ytcp-button></div></div><ytcp-toast-manager class="style-scope ytcp-dialog" alignment="center" unified=""><tp-yt-paper-toast id="paper-toast" restore-focus-on-close="" class="style-scope ytcp-toast-manager" aria-hidden="true" style="outline: none; display: none;"><span id="label" class="style-scope tp-yt-paper-toast"></span>
+
+  
+  
+
+</tp-yt-paper-toast>
+</ytcp-toast-manager><div class="only-visible-for-accessibility style-scope ytcp-dialog" aria-live="polite"></div>
+</tp-yt-paper-dialog></ytcp-dialog><div class="popup-host-behavior-backdrop" style="position: fixed; pointer-events: none; inset: 0px; background: rgb(0, 0, 0); opacity: 0.8; z-index: 2203;"></div></ytcp-confirmation-dialog></ytcp-auth-confirmation-dialog><tp-yt-iron-overlay-backdrop class="opened" opened="" style="opacity: 0; z-index: 2203;">
+</tp-yt-iron-overlay-backdrop><ytve-endscreen-modal></ytve-endscreen-modal><tp-yt-iron-a11y-announcer tabindex="-1"><div class="style-scope tp-yt-iron-a11y-announcer" aria-live="polite"></div>
+</tp-yt-iron-a11y-announcer></body></html>

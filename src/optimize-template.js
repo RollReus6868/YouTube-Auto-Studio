@@ -136,6 +136,29 @@ function afterUploadTemplate(template, missed = [], { after = false, playlists =
   return touchedFields(res).length ? res : null
 }
 
+// Mau chi gom cac muc QUET THAY THIEU (missing: ten muc cua compareFields + 'thích' / 'bình luận' / 'ghim'):
+// muc da dien (bat ky gia tri nao mau chap nhan) giu nguyen, khong lam lai. watch = true: lam ca thich / binh luan /
+// ghim (video tool chua tung lam o trang xem video: quet khong biet nen de commentAndPin tu kiem, khong dang trung).
+const WATCH_KEYS = ['thích', 'bình luận', 'ghim']
+function missingTemplate(template, missing = [], { watch = false } = {}) {
+  const src = normalizeTemplate(template)
+  const out = keepAll()
+  const m = new Set(missing || [])
+  for (const k of m) {
+    if (k === 'playlists') { out.playlists = src.playlists; out.playlistAuto = src.playlistAuto }
+    else if (k === 'tags') { out.tagsMode = src.tagsMode; out.extraTags = src.extraTags }
+    else if (['category', 'location', 'language', 'description'].includes(k) || (ONE_OF[k] && k !== 'tagsMode')) out[k] = src[k]
+  }
+  if (src.like && (watch || m.has('thích'))) out.like = true
+  if (src.comment && (watch || m.has('bình luận') || m.has('ghim'))) {
+    out.comment = src.comment
+    out.pin = src.pin && (watch || m.has('bình luận') || m.has('ghim'))
+  }
+  return normalizeTemplate(out)
+}
+// Mau co dung toi muc nao trong Studio (khong tinh thich / binh luan / ghim)
+const studioFields = (template) => touchedFields(template).filter((k) => !['like', 'comment'].includes(k))
+
 // Video trong hang cho tu toi uu: nguoi dung co the sua preset sau khi dang -> cac muc mau `tpl` dang dat
 // (va thich / binh luan / ghim) lay gia tri moi nhat cua preset; danh sach phat / the giu theo video.
 function refreshPending(tpl, presetTemplate) {
@@ -307,21 +330,20 @@ const isOptimized = (db, channelKey, videoId) => !!(db && db[channelKey] && db[c
 // ---- quet: so gia tri doc duoc tren trang Chi tiet video voi mau ----
 // read: gia tri doc boi inspectVideo (src/flows/optimize.js); muc undefined = khong doc duoc / khong doc.
 //   playlists: { count, items?: [{ name, id, on }] }, paidPromotion/ai/remix: 'yes'|'no'|'all'|... ('' = chua chon),
+//   endScreen: true (video da co man hinh ket thuc) | false,
 //   tags: [..], language: [ngon ngu video, ngon ngu tieu de], recordingDate/location/category: chu,
 //   license: { value: 'youtube'|'creativeCommon'|'', locked }, embeddable: bool, comments: 'on'|'pause'|'off'|''
 // Tra ve { missing, filled, unknown } (ten muc cua mau). Muc 'keep' bo qua.
+// Danh sach phat: video da o >= 1 danh sach phat = XONG (khong mo hop thoai, khong tich them).
+// Video chua o danh sach nao: thieu neu kenh co danh sach de tich (ten trong mau co trong kenh / tu chon N);
+// kenh chua co danh sach phat nao (hop thoai trong) hoac ten trong mau khong co trong kenh -> khong co gi de lam.
 function playlistsFilled(p, t) {
   if (!p) return undefined
-  if (p.items) {
-    const named = t.playlists.every((want) => {
-      const hits = p.items.filter((x) => lc(x.name) === lc(want) || (x.id && x.id === want))
-      return hits.every((x) => x.on) // khong co danh sach nay trong kenh -> khong tinh la thieu
-    })
-    const on = p.items.filter((x) => x.on).length
-    return named && on >= Math.min(t.playlistAuto, p.items.length)
-  }
-  if (t.playlists.length) return p.count ? undefined : false // co ten -> can mo hop thoai moi biet
-  return p.count >= t.playlistAuto
+  if (p.count >= 1) return true
+  if (!p.items) return false
+  if (p.items.some((x) => x.on)) return true
+  const named = t.playlists.some((want) => p.items.some((x) => lc(x.name) === lc(want) || (x.id && x.id === want)))
+  return !(named || (t.playlistAuto > 0 && p.items.length > 0))
 }
 function compareFields(read, template, { title = '' } = {}) {
   const t = normalizeTemplate(template)
@@ -340,7 +362,7 @@ function compareFields(read, template, { title = '' } = {}) {
   if (t.license !== 'keep') add('license', has('license') ? r.license.locked || r.license.value === t.license : undefined)
   if (t.embeddable !== 'keep') add('embeddable', has('embeddable') ? r.embeddable === (t.embeddable === 'yes') : undefined)
   if (t.category !== 'keep') add('category', has('category') ? sameAny(r.category, optionNames('category', t.category)) : undefined)
-  if (t.endScreen !== 'keep') add('endScreen', has('endScreen') ? !!r.endScreen : undefined) // trang Chi tiet khong cho biet
+  if (t.endScreen !== 'keep') add('endScreen', has('endScreen') ? !!r.endScreen : undefined) // quet mo trinh chinh man hinh ket thuc de xem
   const out = { missing: [], filled: [], unknown: [] }
   for (const [k, v] of checks) out[v === true ? 'filled' : v === false ? 'missing' : 'unknown'].push(k)
   return out
@@ -348,6 +370,6 @@ function compareFields(read, template, { title = '' } = {}) {
 
 module.exports = {
   CATEGORY_NAMES, CATEGORY_NAMES_EN, STUDIO_LANGUAGES, LANGUAGE_EN, optionNames, calendarMonthLabels, parseMonthLabel, visibilityKind, canCommentVisibility, COMMENT_VARS, defaultTemplate, normalizeTemplate, templateFor, setTemplate,
-  keepAll, afterUploadTemplate, refreshPending, API_PRESET_FIELDS, migrateApiPreset, presetSeed,
+  keepAll, afterUploadTemplate, missingTemplate, studioFields, WATCH_KEYS, refreshPending, API_PRESET_FIELDS, migrateApiPreset, presetSeed,
   renderComment, tagsToAdd, tagLength, fmtStudioDate, parseStudioDate, recordingDateFor, touchedFields, markOptimized, isOptimized, compareFields,
 }

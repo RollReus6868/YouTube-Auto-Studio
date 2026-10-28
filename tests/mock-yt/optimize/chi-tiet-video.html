@@ -81,6 +81,31 @@ let saved = OPT.load(KEY, { ...(id.startsWith('Done') ? OPT.optimized(video) : O
 let W = JSON.parse(JSON.stringify(saved))
 const $ = (s, r = document) => r.querySelector(s)
 const esc = OPT.esc
+// localStorage 'opt-processing': video dang tai len / xu ly (that/en-chi-tiet.html): muc "Phoi lai" chi co dong
+//   #content-remixing-unavailable-msg, lien ket "Man hinh ket thuc" [disabled] (bam khong mo).
+// 'opt-noplaylists': kenh chua co danh sach phat nao (hop thoai chi co "Danh sach phat moi" + "Xong").
+// 'opt-plslow': o tich trong hop thoai danh sach phat ve cham (2,5 giay).
+// 'opt-verify' = 'load' | 'save': hop thoai "Xac minh danh tinh cua ban" (that/vi-xac-minh.html) hien luc mo trang / khi bam Luu.
+// 'opt-trust': hop thoai yt-trust-tiers-wizard-dialog dang hien.
+const PROCESSING = !!localStorage.getItem('opt-processing')
+const PLS = localStorage.getItem('opt-noplaylists') ? [] : OPT.playlists
+function verifyDialog() {
+  if (document.querySelector('ytcp-auth-confirmation-dialog')) return
+  const d = document.createElement('ytcp-auth-confirmation-dialog')
+  d.innerHTML = `<ytcp-confirmation-dialog id="confirmation-dialog" unified><ytcp-dialog id="dialog" modal unified><tp-yt-paper-dialog id="dialog" role="dialog" aria-modal="true" with-backdrop style="position:fixed;top:120px;left:300px;width:576px;z-index:2204;background:#282828;border:1px solid #555;padding:16px">
+    <div class="header"><div class="header-content"><h1 slot="primary-header" class="dialog-title">Xác minh danh tính của bạn</h1></div></div>
+    <div class="content"><div class="ytcp-confirmation-dialog">Để tiếp tục, chúng tôi cần xác thực danh tính của bạn. Bước bảo mật bổ sung này giúp đảm bảo an toàn cho tài khoản của bạn.</div></div>
+    <div class="footer">${OPT.button('help-button', 'Tìm hiểu thêm')} ${OPT.button('confirm-button', 'Tiếp theo')}</div></tp-yt-paper-dialog></ytcp-dialog></ytcp-confirmation-dialog>`
+  const bg = document.createElement('tp-yt-iron-overlay-backdrop'); bg.className = 'backdrop'; bg.style.zIndex = 2203
+  document.body.append(bg, d)
+}
+function trustDialog() {
+  const d = document.createElement('yt-trust-tiers-wizard-dialog')
+  d.innerHTML = `<ytcp-dialog><tp-yt-paper-dialog role="dialog" style="position:fixed;top:120px;left:300px;width:576px;z-index:2204;background:#282828;padding:16px"><h1>Xác minh để dùng tính năng này</h1>${OPT.button('', 'Tiếp theo')}</tp-yt-paper-dialog></ytcp-dialog>`
+  document.body.append(d)
+}
+if (localStorage.getItem('opt-verify') === 'load') setTimeout(verifyDialog, 900)
+if (localStorage.getItem('opt-trust')) setTimeout(trustDialog, 900)
 document.getElementById('top-buttons').innerHTML = OPT.button('discard', 'Huỷ thay đổi', { disabled: true }) + ' ' + OPT.button('save', 'Lưu', { disabled: true })
 
 function dirty() {
@@ -157,7 +182,7 @@ function advanced() {
     <div class="checkbox-list"><ytcp-form-checkbox id="allow-embed" data-k="embed">${OPT.checkbox('', 'Cho phép nhúng', true)}</ytcp-form-checkbox>
     ${OPT.checkbox('notify-subscribers', 'Xuất bản lên trang Kênh đăng ký và thông báo đến người đăng ký', true, true)}</div>`)}
   ${section('content-remixing-container', 'Phối lại cho Shorts', 'Cho phép mọi người tạo video ngắn bằng nội dung trong video này.',
-    `<ytcp-video-metadata-remix-settings>${radios('remix', [['REMIX_SOURCE_OPTION_OPT_IN', 'Cho phép phối lại video và âm thanh'], ['REMIX_SOURCE_OPTION_VISUAL_OPT_OUT_AND_PERFORM_ACTIONS', 'Chỉ cho phép phối lại âm thanh'], ['REMIX_SOURCE_OPTION_OPT_OUT_AND_MUTE_DERIVATIVES', 'Không cho phép phối lại']])}</ytcp-video-metadata-remix-settings>`)}
+    PROCESSING ? '<div class="infobox" id="content-remixing-unavailable-msg">Bạn có thể thay đổi chế độ cài đặt này sau khi video được xử lý xong</div>' : `<ytcp-video-metadata-remix-settings>${radios('remix', [['REMIX_SOURCE_OPTION_OPT_IN', 'Cho phép phối lại video và âm thanh'], ['REMIX_SOURCE_OPTION_VISUAL_OPT_OUT_AND_PERFORM_ACTIONS', 'Chỉ cho phép phối lại âm thanh'], ['REMIX_SOURCE_OPTION_OPT_OUT_AND_MUTE_DERIVATIVES', 'Không cho phép phối lại']])}</ytcp-video-metadata-remix-settings>`)}
   ${section('category-container', 'Danh mục', 'Thêm video của bạn vào một danh mục để người xem dễ dàng tìm thấy hơn', select('ytcp-form-select', 'category', 'category', '', ['Phim và hoạt hình', 'Âm nhạc', 'Giáo dục', 'Mọi người và blog', 'Giải trí', 'Tin tức và chính trị']))}
   ${section('', 'Bình luận và mức phân loại', 'Chọn xem bạn muốn hiển thị hay ẩn phần bình luận và chọn cách hiển thị.', `<ytcp-comment-moderation-settings>
     ${select('ytcp-select', 'enablement-state-select', 'comments', 'Bình luận', ['Bật', 'Tạm dừng', 'Tắt'])} ${select('ytcp-select', 'moderation-type-select', 'mod', 'Kiểm duyệt', ['Cơ bản'])}
@@ -172,12 +197,12 @@ function right() {
     <div class="description">Đường liên kết của video</div><a href="https://youtu.be/${id}" id="link">https://youtu.be/${id}</a>
     <div class="description">Tên tệp</div><div>${esc(video.title)}</div>
     <div class="description">Chế độ hiển thị</div><div>${video.vis}</div>
-    ${link('subtitles-editor-link', 'Phụ đề')}${link('endscreen-editor-link', 'Màn hình kết thúc')}${link('info-cards-editor-link', 'Thẻ')}${link('quiz-editor-link', 'Câu đố vui')}`
+    ${link('subtitles-editor-link', 'Phụ đề')}${link('endscreen-editor-link', 'Màn hình kết thúc').replace(PROCESSING ? 'role="button"' : '@@', 'role="button" disabled').replace(PROCESSING ? '<ytcp-dropdown-trigger' : '@@', '<ytcp-dropdown-trigger disabled')}${link('info-cards-editor-link', 'Thẻ')}${link('quiz-editor-link', 'Câu đố vui')}`
 }
 
 function paint() {
   const pl = $('#pl-trigger .dropdown-trigger-text')
-  if (pl) pl.textContent = !W.playlists.length ? 'Chọn' : W.playlists.length === 1 ? OPT.playlists.find((p) => p.id === W.playlists[0]).name : `${W.playlists.length} danh sách phát`
+  if (pl) pl.textContent = !W.playlists.length ? 'Chọn' : W.playlists.length === 1 ? (OPT.playlists.find((p) => p.id === W.playlists[0]) || { name: W.playlists[0] }).name : `${W.playlists.length} danh sách phát`
   if (!$('#paid-promotion')) return
   for (const g of document.querySelectorAll('tp-yt-paper-radio-group[data-k]')) for (const r of g.children) r.setAttribute('aria-checked', String(W[g.dataset.k] === r.dataset.v))
   for (const s of document.querySelectorAll('[data-opts]')) s.querySelector('.dropdown-trigger-text').textContent = W[s.dataset.k] !== undefined ? W[s.dataset.k] : JSON.parse(s.dataset.opts)[0]
@@ -192,11 +217,14 @@ function paint() {
 }
 
 // ---- hop thoai danh sach phat (yt-4) ----
+function playlistRows(el, sel) {
+  el.innerHTML = PLS.map((p, i) => `<li class="row"><label id="checkbox-item-${i}">${OPT.checkbox(`checkbox-${i}`, '', sel.has(p.id)).replace('<ytcp-checkbox-lit', `<ytcp-checkbox-lit test-id="${p.id}"`).replace(/aria-label="[^"]*"/, 'aria-label=""')}<span id="checkbox-label-${i}" class="checkbox-label"><span class="label label-text">${esc(p.name)}</span></span></label>${p.podcast ? '<ytcp-badge class="badge"><div class="container"><div class="label">Podcast</div></div></ytcp-badge>' : ''}</li>`).join('')
+}
 function playlistDialog() {
   const sel = new Set(W.playlists)
   const d = document.createElement('ytcp-playlist-dialog')
   d.innerHTML = `<tp-yt-paper-dialog id="dialog" role="dialog" aria-label="Chọn danh sách phát"><ytcp-checkbox-group id="playlists-list"><ul>
-    ${OPT.playlists.map((p, i) => `<li class="row"><label id="checkbox-item-${i}">${OPT.checkbox(`checkbox-${i}`, '', sel.has(p.id)).replace('<ytcp-checkbox-lit', `<ytcp-checkbox-lit test-id="${p.id}"`).replace(/aria-label="[^"]*"/, 'aria-label=""')}<span id="checkbox-label-${i}" class="checkbox-label"><span class="label label-text">${esc(p.name)}</span></span></label>${p.podcast ? '<ytcp-badge class="badge"><div class="container"><div class="label">Podcast</div></div></ytcp-badge>' : ''}</li>`).join('')}
+    ${(localStorage.getItem('opt-plslow') ? [] : PLS).map((p, i) => `<li class="row"><label id="checkbox-item-${i}">${OPT.checkbox(`checkbox-${i}`, '', sel.has(p.id)).replace('<ytcp-checkbox-lit', `<ytcp-checkbox-lit test-id="${p.id}"`).replace(/aria-label="[^"]*"/, 'aria-label=""')}<span id="checkbox-label-${i}" class="checkbox-label"><span class="label label-text">${esc(p.name)}</span></span></label>${p.podcast ? '<ytcp-badge class="badge"><div class="container"><div class="label">Podcast</div></div></ytcp-badge>' : ''}</li>`).join('')}
     </ul></ytcp-checkbox-group><div class="action-buttons">${OPT.button('', 'Danh sách phát mới', { cls: 'new-playlist-button' })}<span hidden>${OPT.button('', 'Lưu', { disabled: true, cls: 'save-button' })}</span>${OPT.button('', 'Xong', { cls: 'done-button' })}</div></tp-yt-paper-dialog>`
   const bg = document.createElement('tp-yt-iron-overlay-backdrop'); bg.className = 'backdrop'
   d.addEventListener('click', (e) => {
@@ -209,6 +237,11 @@ function playlistDialog() {
   })
   bg.onclick = () => { d.remove(); bg.remove() }
   setTimeout(() => document.body.append(bg, d), 300)
+  // ve cham: them cac dong sau 2,5 giay (iron-list chua ve khi cua so chay ngam)
+  if (localStorage.getItem('opt-plslow')) setTimeout(() => {
+    const tmp = document.createElement('ytcp-playlist-dialog'); playlistRows(tmp, sel)
+    d.querySelector('#playlists-list ul').innerHTML = tmp.innerHTML
+  }, 2500)
 }
 
 // ---- chon ngay quay: giong the that (that/ngay-quay-lich.html) ----
@@ -281,7 +314,8 @@ function endScreen() {
     <div id="content"><ytve-editor><div id="es-body">Đang tải…</div></ytve-editor></div></tp-yt-paper-dialog></ytcp-dialog>`
   document.body.appendChild(host)
   const close = () => host.remove()
-  const elements = '<div class="element-header"><span class="element-label">Thành phần "Đăng ký"</span></div><div class="entityName">Đăng ký: Dark Bible Study</div><div class="entityName">Video: Phù hợp nhất với người xem</div><div class="entityName">Danh sách phát: Dark Bible Study</div>'
+  // nhu that (that/man-hinh-ket-thuc.html): moi thanh phan la ytve-options-panel-entity-item
+  const elements = '<div class="element-header"><span class="element-label">Thành phần "Đăng ký"</span></div>' + ['Đăng ký: Dark Bible Study', 'Video: Phù hợp nhất với người xem', 'Danh sách phát: Dark Bible Study'].map((x) => `<ytve-options-panel-entity-item><div class="entityName">${x}</div></ytve-options-panel-entity-item>`).join('')
   const head = `<div class="header">${OPT.button('add-element-menu-button', 'Thành phần').replace('aria-label="Thành phần"', 'aria-label="Thêm màn hình kết thúc"')} ${OPT.button('', 'Nhập từ video')}</div>`
   setTimeout(() => {
     const body = $('#es-body', host)
@@ -328,7 +362,7 @@ function bind() {
     paint()
   }
   $('#toggle-button button').setAttribute('aria-label', en ? MORE : 'Hiện chế độ cài đặt nâng cao')
-  $('#endscreen-editor-link').onclick = endScreen
+  $('#endscreen-editor-link').onclick = () => { if (!PROCESSING) endScreen() }
 }
 
 function bindAdvanced() {
@@ -352,6 +386,7 @@ function bindAdvanced() {
 setTimeout(() => {
   $('#save').onclick = () => {
     if ($('#save').getAttribute('aria-disabled') === 'true') return
+    if (localStorage.getItem('opt-verify') === 'save') return verifyDialog()
     const dim = document.createElement('div'); dim.className = 'dim'; document.body.appendChild(dim)
     setTimeout(() => {
       saved = JSON.parse(JSON.stringify(W))

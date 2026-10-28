@@ -76,9 +76,10 @@ module.exports = [
     assert.deepEqual(read.language, ['Tiếng Anh (Hoa Kỳ)', 'Tiếng Anh (Hoa Kỳ)'])
     assert.deepEqual(read.license, { value: 'youtube', locked: false })
     assert.deepEqual([read.embeddable, read.category, read.comments], [true, 'Mọi người và blog', 'on'])
-    // so voi mau mac dinh (danh sach phat: chua mo hop thoai -> 2 < 3 la thieu)
+    // so voi mau mac dinh: video da o 2 danh sach phat = xong (khong can du 3, khong mo hop thoai)
     const r = ot.compareFields(read, ot.defaultTemplate(), { title })
-    assert.deepEqual(r.missing, ['playlists', 'paidPromotion', 'location'], JSON.stringify(r))
+    assert.deepEqual(r.missing, ['paidPromotion', 'location'], JSON.stringify(r))
+    assert(r.filled.includes('playlists'))
     assert.deepEqual(r.unknown, ['endScreen'])
     assert(r.filled.includes('tags'), 'tieu de da co trong the (khong phan biet hoa thuong)')
   }],
@@ -122,8 +123,9 @@ module.exports = [
     // tu chon 3 danh sach dau: chi co o tich danh sach phat (nut "Danh sach phat moi" khong phai o tich)
     assert.deepEqual(items.map((x) => [x.name, x.on]), [['Dark Bible Movie', true], ['Bible Movie', true], ['LIVE', false]])
     assert(await page.count({ ...L.done, within: SEL.dialogs }), 'nut Xong')
-    // quet: hop thoai cho biet 2/3 danh sach dang tich -> mau tu chon 3 thi con thieu, tu chon 2 thi du
-    assert.equal(ot.compareFields({ playlists: { count: 2, items } }, { playlistAuto: 3 }).missing.includes('playlists'), true)
+    // quet: video da o >= 1 danh sach phat = xong (mau tu chon 3 cung vay)
+    assert.equal(ot.compareFields({ playlists: { count: 2, items } }, { playlistAuto: 3 }).filled.includes('playlists'), true)
+    assert.equal(ot.compareFields({ playlists: { count: 0, items: items.map((x) => ({ ...x, on: false })) } }, { playlistAuto: 3 }).missing.includes('playlists'), true)
     assert.deepEqual(ot.compareFields({ playlists: { count: 2, items } }, { playlistAuto: 2 }).filled.includes('playlists'), true)
     assert.deepEqual(ot.compareFields({ playlists: { count: 2, items } }, { playlistAuto: 0, playlists: ['Bible Movie'] }).filled.includes('playlists'), true)
   }],
@@ -294,5 +296,89 @@ module.exports = [
     assert.equal(await page.eval((s) => window.__ya.one({ selector: s }).id, SEL.next), 'navigate-after')
     assert(await _t.isEnabled(page, { selector: SEL.next }), 'nut trang tiep theo bam duoc')
   }],
-]
 
+  // ---- HTML luu ngay 28/10/2026 (da an danh: ten kenh, tieu de, nguoi binh luan, ID) ----
+  ['HTML that (Studio tieng Anh, video dang xu ly): quet doc dung moi muc; muc bi khoa bao ngay', async ({ page, urls }) => {
+    page.timeout = 3000
+    await page.goto(`${urls.studio}/that-optimize/en-chi-tiet`)
+    const o = { timeout: 3000 }
+    const read = {}
+    const bad = []
+    for (const k of ['description', 'playlists', 'paidPromotion', 'ai', 'tags', 'language', 'recordingDate', 'location', 'license', 'embeddable', 'category', 'comments']) {
+      try { read[k] = await _t.READ[k](page, o) } catch (e) { bad.push(`${k}: ${e.message}`) }
+    }
+    const title = await _t.READ.title(page)
+    console.log(JSON.stringify(read))
+    assert.deepEqual(bad, [], bad.join('\n'))
+    assert.equal(title, 'Seven Old Scriptures Every Reader Should Know')
+    assert.deepEqual(read.playlists, { text: '2 playlists', count: 2 })
+    assert.deepEqual([read.paidPromotion, read.ai], ['no', 'yes'])
+    assert.deepEqual(read.tags, ['Sample Bible Channel', title])
+    assert.deepEqual(read.language, ['English (United States)', 'English (United States)'])
+    assert.deepEqual([read.recordingDate, read.location, read.category, read.comments, read.embeddable], ['Oct 27, 2026', 'United States', 'People & Blogs', 'on', true])
+    assert.deepEqual(read.license, { value: 'youtube', locked: false })
+    // "Shorts remixing" chua co nut chon, "End screen" [disabled]: bao ngay (truoc day cho 20 giay roi bao "Quá 20 giây")
+    const t0 = Date.now()
+    await assert.rejects(_t.READ.remix(page, o), /Video đang tải lên \/ xử lý: Studio chưa cho đổi "Phối lại cho Shorts"/)
+    assert(Date.now() - t0 < 2500, 'khong cho het thoi gian')
+    assert.equal(await _t.esLocked(page), true, 'lien ket "End screen" bi khoa')
+    assert.equal(await _t.blocker(page), '', 'khong co hop thoai chan')
+    // so voi mau mac dinh (Studio tieng Anh): moi muc mau chap nhan deu tinh la xong
+    const r = ot.compareFields(read, ot.defaultTemplate(), { title })
+    assert.deepEqual([r.missing, r.filled], [[], ['playlists', 'paidPromotion', 'ai', 'tags', 'recordingDate', 'location']], JSON.stringify(r))
+    const all = ot.compareFields(read, { ...ot.defaultTemplate(), language: 'Tiếng Anh (Hoa Kỳ)', category: '22', comments: 'on', license: 'youtube', embeddable: 'yes', description: 'x' }, { title })
+    assert.deepEqual(all.missing, [], JSON.stringify(all))
+  }],
+
+  ['HTML that: hop thoai "Xác minh danh tính của bạn" -> dung video, bao nguoi dung tu xac minh', async ({ page, urls }) => {
+    page.timeout = 3000
+    await page.goto(`${urls.studio}/that-optimize/vi-xac-minh`)
+    assert.equal(await _t.blocker(page), 'verify')
+    const e = await _t.assertNotBlocked(page).then(() => null, (x) => x)
+    assert(e && e.code === 'verify', 'nem loi code verify')
+    assert.match(e.message, /Xác minh danh tính của bạn/)
+    assert.match(e.message, /không tự xác minh/)
+    assert.match(e.message, /trang Tài khoản/)
+    // trang khong co hop thoai: khong bao nham
+    for (const n of ['chi-tiet', 'xem-video', 'danh-sach-phat']) {
+      await page.goto(`${urls.studio}/that-optimize/${n}`)
+      assert.equal(await _t.blocker(page), '', n)
+    }
+  }],
+
+  ['HTML that (YouTube tieng Anh): ghim binh luan - binh luan cua kenh, menu "Pin", hop thoai "Pin this comment?"', async ({ page, urls }) => {
+    page.timeout = 3000
+    await page.goto(`${urls.studio}/that-optimize/en-xem-ghim`)
+    const scan = await _t.scanThreads(page, 'Rivers of the Garden: The Names in Genesis 2', { name: 'Sample Bible Channel', handle: '@SampleBibleChannel' })
+    assert.equal(scan.count, 7)
+    assert.deepEqual(scan.match && [scan.match.i, scan.match.author, scan.match.creator, scan.match.pinned], [0, '@samplebiblechannel', true, false])
+    assert.equal(await _t.commentIdentity(page), 'Sample Bible Channel')
+    assert.equal(await page.count({ ...L.commentMenu, selector: 'button, [role=button]', within: '[data-ya-thread="me"]' }), 1, 'nut "Action menu"')
+    assert.equal(await _t.headerCount(page), 6, '"6 Comments"')
+    assert.equal(await page.count(WATCH.sortMenu), 1)
+    assert.equal(await page.count({ ...WATCH.newest, hidden: true }), 1, 'muc "Newest"')
+    // menu va hop thoai da dong luc luu (con trong trang): chu tieng Anh van khop
+    const hid = (t) => page.eval((t) => window.__ya.find(t, true).length, t)
+    assert.equal(await hid({ ...L.pin, hidden: true, within: { selector: SEL.menus, hidden: true } }), 1, 'muc "Pin" trong menu binh luan')
+    assert.equal(await hid({ ...L.pinDialog, selector: L.pinDialog.dlg, hidden: true }), 1, 'hop thoai "Pin this comment?"')
+    assert(await hid({ ...L.pinConfirm, hidden: true, within: { selector: L.pinDialog.dlg, hidden: true } }) >= 1, 'nut "Pin" trong hop thoai')
+    const like = await page.eval((t) => window.__ya.find(t, true).map((b) => b.getAttribute('aria-pressed')), { ...L.like, selector: SEL.likeButton })
+    assert.deepEqual(like, ['true'])
+  }],
+
+  ['HTML that (YouTube tieng Viet): video co phat lai tro chuyen, 2 binh luan - da tai het thi khong can doi "Mới nhất"', async ({ page, urls }) => {
+    page.timeout = 3000
+    await page.goto(`${urls.studio}/that-optimize/vi-xem-chat-replay`)
+    const scan = await _t.scanThreads(page, 'Bình luận của kênh', { name: 'Sample Faith Channel', handle: '@SampleFaithChannel' })
+    assert.deepEqual([scan.count, scan.match, scan.other], [2, null, null])
+    assert.equal(await _t.headerCount(page), 2, 'tieu de "2 bình luận" = so luot da tai -> khong doi sap xep')
+    assert.equal(await _t.commentIdentity(page), 'Sample Faith Channel')
+    assert.equal(await page.count({ selector: WATCH.comments }), 1)
+    assert.equal(await page.count(L.addComment) >= 1, true)
+    // menu "Sắp xếp theo" (tp-yt-iron-dropdown position: fixed, dang dong): mo ra thi thay "Mới nhất"
+    assert.equal(await page.count(WATCH.sortMenu), 1)
+    assert.equal(await page.count(WATCH.newest), 0, 'menu dang dong')
+    await page.eval(() => { document.querySelector('ytd-comments#comments #sort-menu tp-yt-iron-dropdown').style.display = 'block' })
+    assert.equal(await page.count(WATCH.newest), 1)
+  }],
+]
