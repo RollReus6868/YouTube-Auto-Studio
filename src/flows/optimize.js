@@ -114,7 +114,8 @@ const SEL = {
   // video dang tai len / xu ly: "This setting can be changed once your video is processed" thay cho cac nut chon phoi lai
   remixLocked: '#content-remixing-unavailable-msg',
   // trinh chinh man hinh ket thuc: video DA co man hinh ket thuc thi co cac thanh phan (that/man-hinh-ket-thuc.html)
-  esItems: 'ytve-options-panel-entity-item, ytve-endscreen-editor-preview-overlay-item',
+  // thanh phan da co: dong trong khung tuy chon, o tren khung xem truoc, nhan tren dong thoi gian ("Đăng ký: Ten kenh", "Video: ...")
+  esItems: 'ytve-options-panel-entity-item, ytve-endscreen-editor-preview-overlay-item, ytve-endscreen-marker[aria-label]:not([aria-label=""])',
   esLink: 'ytcp-text-dropdown-trigger#endscreen-editor-link',
 }
 const sec = (name) => `[data-ya-sec="${name}"]`
@@ -294,7 +295,16 @@ async function openPlaylistDialog(page, plWithin, o = {}) {
   await page.click({ selector: SEL.trigger, within: sec('pl') })
   let within = plWithin
   if (!within) {
-    await page.until((d, b) => window.__ya.count({ selector: d }) || window.__ya.count(b), [SEL.plDialog, { selector: SEL.plBox, within: SEL.dialogs }], { what: 'hộp thoại "Danh sách phát"', ...o })
+    const shown = (x) => page.until((d, b) => window.__ya.count({ selector: d }) || window.__ya.count(b), [SEL.plDialog, { selector: SEL.plBox, within: SEL.dialogs }], { what: 'hộp thoại "Danh sách phát"', ...x })
+    // bam bi mat / trang chua ve kip: ep ve roi bam lai mot lan
+    if (!(await shown({ timeout: 8000 }).then(() => true, () => false))) {
+      if (page.nudge) await page.nudge()
+      await page.click({ selector: SEL.trigger, within: sec('pl') })
+      try { await shown(o) } catch (e) {
+        const r = page.renderState ? await page.renderState().catch(() => '') : ''
+        throw r ? new StepError(`${e.message} (${r})`, page.step) : e
+      }
+    }
     within = (await page.has({ selector: SEL.plDialog })) ? SEL.plDialog : SEL.dialogs
   }
   const box = { selector: SEL.plBox, within }
@@ -654,8 +664,9 @@ const FIELDS = {
         if (c.openEndScreen) await c.openEndScreen()
         else await openEndScreenEditor(page)
         await markDialog(page, LABELS.esEditor, 'es', { timeout: Math.max(page.timeout, 20000) })
-        // trinh chinh tai cham: cho nut "Thanh phan" roi cho o mau (chua co) hoac cac thanh phan (da co)
-        await page.waitFor({ ...LABELS.esElements, within: sec('es') }, { timeout: Math.max(page.timeout, 30000) })
+        // trinh chinh tai cham: cho nut "Thanh phan" roi cho o mau (chua co) hoac cac thanh phan (da co).
+        // Khong thay nut (video dai, trinh chinh con xoay) van xem tiep: da co thanh phan = xong
+        await page.waitFor({ ...LABELS.esElements, within: sec('es') }, { timeout: Math.max(page.timeout, 30000) }).catch(() => {})
         const tile = { ...LABELS.esLatest, within: sec('es') }
         if ((await endScreenState(page)) === 'has') {
           // khong co o mau = video da co man hinh ket thuc: coi nhu xong
@@ -839,7 +850,7 @@ const READ = {
     await openEndScreenEditor(page)
     await markDialog(page, LABELS.esEditor, 'es', { timeout: Math.max(o.timeout || 0, 20000) })
     try {
-      await page.waitFor({ ...LABELS.esElements, within: sec('es') }, { timeout: Math.max(o.timeout || 0, 30000) })
+      await page.waitFor({ ...LABELS.esElements, within: sec('es') }, { timeout: Math.max(o.timeout || 0, 30000) }).catch(() => {})
       return (await endScreenState(page)) === 'has'
     } finally {
       await page.click({ ...LABELS.esCancel, within: sec('es') }).catch(() => {})

@@ -204,11 +204,53 @@ async function listChannels(page, { urls, log = () => {} } = {}) {
 }
 
 // Chuyen Studio sang kenh `target` ({ name, handle, ucId }); tra ve { ucId, name } sau khi da kiem.
+// Menu avatar khong mo / khong co kenh: tai lai Studio thu lai mot lan, roi chuyen qua trang chon kenh cua YouTube.
 async function switchChannel(page, target, { urls, log = () => {}, timeout = 20000 } = {}) {
   const st = await openStudio(page, { urls })
   if (st.signedOut) throw new StepError('Tài khoản Google này chưa đăng nhập (Studio chuyển sang trang đăng nhập).', page.step)
-  const before = st.ucId
-  if (target.ucId && before === target.ucId) return verify(page, target)
+  if (target.ucId && st.ucId === target.ucId) return verify(page, target)
+  let first = null
+  for (let i = 0; i < 2; i++) {
+    try {
+      return await viaMenu(page, target, { urls, log, timeout })
+    } catch (e) {
+      if (page.shouldStop()) throw e
+      first = first || e
+      const why = await menuDiag(page)
+      // menu mo duoc nhung khong co kenh: tai lai cung vay, sang thang trang chon kenh cua YouTube
+      const last = i || /^Không thấy kênh/.test(e.message)
+      log('warn', `Chuyển sang kênh "${target.name}" bằng menu tài khoản chưa được: ${e.message}${why ? ` (${why})` : ''}. ${last ? 'Thử trang chọn kênh của YouTube.' : 'Tải lại Studio rồi thử lại.'}`)
+      await closeMenu(page)
+      if (last) break
+      await page.goto(`${urls.studio}/`)
+      const s2 = await openStudio(page, { urls })
+      if (s2.signedOut) throw first
+      if (target.ucId && s2.ucId === target.ucId) return verify(page, target)
+    }
+  }
+  try {
+    return await viaYouTube(page, target, { urls, log, timeout })
+  } catch (e) {
+    if (page.shouldStop()) throw e
+    log('warn', `Trang chọn kênh của YouTube cũng không chuyển được: ${e.message}`)
+    throw first
+  }
+}
+
+// Cac muc dang hien trong menu tai khoan + trang co duoc ve khong: ghi vao nhat ky khi khong chuyen duoc kenh
+async function menuDiag(page) {
+  const items = await page.eval((sel) => {
+    const ya = window.__ya
+    const menu = ya.all(document, sel.menu).filter(ya.visible)
+    const ls = menu.flatMap((m) => String(m.innerText || '').split('\n')).map((s) => s.trim()).filter(Boolean)
+    return [...new Set(ls)].slice(0, 8)
+  }, SEL).catch(() => null)
+  const r = page.renderState ? await page.renderState().catch(() => '') : ''
+  return [items ? (items.length ? `menu đang hiện: ${items.join(' | ')}` : 'menu tài khoản không mở') : '', r].filter(Boolean).join('; ')
+}
+
+async function viaMenu(page, target, { urls, log, timeout }) {
+  const before = ucOf(page.url())
   await openSwitcher(page)
   // danh dau dong can bam (theo @handle neu co, khong thi theo ten)
   const want = { name: String(target.name || '').trim().toLowerCase(), handle: String(target.handle || '').toLowerCase() }
@@ -240,6 +282,38 @@ async function switchChannel(page, target, { urls, log = () => {}, timeout = 200
     const m = /\/channel\/(UC[\w-]{22})(?:[/?#]|$)/.exec(location.href)
     return !!(m && (t ? m[1] === t : m[1] !== b))
   }, [before, target.ucId || ''], { timeout, what: `Studio chuyển sang kênh "${target.name}"` }))
+  return verify(page, target)
+}
+
+// Trang chon kenh cua YouTube (www.youtube.com/channel_switcher): danh sach kenh la trang thuong, khong can mo menu.
+// Bam kenh -> YouTube doi kenh cua phien dang nhap; mo lai Studio va kiem.
+async function viaYouTube(page, target, { urls, log, timeout }) {
+  await page.run('Mở trang chọn kênh của YouTube', () => page.goto(`${urls.youtube}/channel_switcher?next=%2F`))
+  const want = { name: String(target.name || '').replace(/\s+/g, ' ').trim().toLowerCase(), handle: String(target.handle || '').toLowerCase() }
+  const found = await page.run('Tìm kênh trong trang chọn kênh', () => page.until((sel, w) => {
+    const ya = window.__ya
+    for (const el of ya.all(document, '[data-ya-pick]')) el.removeAttribute('data-ya-pick')
+    const n = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase()
+    const rows = ya.all(document, sel.row).filter(ya.visible)
+    if (!rows.length) return ''
+    const hit = rows.find((row) => {
+      const t = row.querySelector(sel.rowName)
+      const ls = String(row.innerText || '').split('\n').map(n)
+      if (w.handle && ls.includes(w.handle)) return true
+      return t ? n(t.innerText) === w.name : ls.includes(w.name)
+    })
+    if (!hit) return 'none'
+    ;(hit.querySelector('a[href]') || hit.querySelector('[role=option]') || hit).setAttribute('data-ya-pick', '1')
+    return 'ok'
+  }, [SEL, want], { timeout: 15000, what: 'danh sách kênh trong trang chọn kênh của YouTube' }))
+  if (found !== 'ok') throw new StepError(`Không thấy kênh "${target.name}" trong trang chọn kênh của YouTube.`, page.step)
+  const from = page.url()
+  await page.run(`Chọn kênh "${target.name}"`, () => page.click({ selector: '[data-ya-pick]' }))
+  await page.until((u) => location.href !== u && !/channel_switcher/.test(location.href), [from], { timeout, what: `YouTube chuyển sang kênh "${target.name}"` })
+  await page.goto(`${urls.studio}/`)
+  const st = await openStudio(page, { urls })
+  if (st.signedOut) throw new StepError('Tài khoản Google này chưa đăng nhập (Studio chuyển sang trang đăng nhập).', page.step)
+  log('info', `Đã chuyển sang kênh "${target.name}" qua trang chọn kênh của YouTube.`)
   return verify(page, target)
 }
 

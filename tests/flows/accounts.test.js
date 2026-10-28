@@ -109,4 +109,17 @@ module.exports = [
     assert.equal(flows.bigAvatar(r.channels[1].avatar.replace(/^http:\/\/[^/]+\/yt3/, 'https://yt3.ggpht.com')), 'https://yt3.ggpht.com/Niz-Imk-TW8EQvjciue1d6VtWSQKCT1wAuIsCI5adgF6VlemE0r5xsaa4pTDNR6RrGycocebxQ=s88-c-k-c0x00ffffff-no-rj')
     assert.equal(await page.eval(flows.readSidebar, flows.SEL, flows.LABELS), 'Dark Bible Movie')
   }],
+  ['menu tai khoan khong mo (cua so chay ngam khong duoc ve): thu lai roi chuyen qua trang chon kenh cua YouTube', async ({ page, urls, mock }) => {
+    await signIn(page, urls)
+    await page.eval(() => localStorage.setItem('acc-nomenu', 'true'))
+    const logs = []
+    const r = await flows.switchChannel(page, { name: 'Dark Bible Study', handle: '@DarkBibleStudy999' }, { urls, log: (l, m) => logs.push(m), timeout: 8000 })
+    assert.deepEqual(r, { ucId: ucOf('Dark Bible Study'), name: 'Dark Bible Study' })
+    assert(mock.events.some((e) => e.type === 'yt-switch' && e.name === 'Dark Bible Study'), 'chuyen qua /channel_switcher')
+    assert(logs.some((m) => /menu tài khoản không mở/.test(m)), logs.join('\n'))
+    assert(logs.some((m) => /qua trang chọn kênh của YouTube/.test(m)))
+    // khong co kenh trong trang chon kenh: bao loi dau tien (menu), khong treo
+    await assert.rejects(flows.switchChannel(page, { name: 'Kenh Khong Co' }, { urls, log: () => {}, timeout: 4000 }), /Chuyển đổi tài khoản/)
+    await page.eval(() => localStorage.removeItem('acc-nomenu'))
+  }],
 ]

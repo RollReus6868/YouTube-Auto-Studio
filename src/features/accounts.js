@@ -143,7 +143,7 @@ module.exports = (ctx) => {
     if (acc.status === 'needs-sign-in') throw new Error(`Tài khoản Google "${acc.label}" chưa đăng nhập (trang Tài khoản → Đăng nhập).`)
     return onAccount(acc.id, async (page) => {
       try {
-        const r = await flows.switchChannel(page, ch, { urls: ctx.urls })
+        const r = await flows.switchChannel(page, ch, { urls: ctx.urls, log: ctx.log })
         const learnt = m().learn(acc.id, { ucId: r.ucId, name: ch.name, handle: ch.handle })
         if (learnt && !ch.ucId) ctx.log('info', `Kênh "${ch.name}" có mã ${r.ucId}.`)
         sync()
@@ -176,7 +176,7 @@ module.exports = (ctx) => {
     try {
       const page = new Page(ctx.studio.wc(), { timeout: 20000, shotDir: ctx.logFile('loi-trang') })
       await page.until(() => document.readyState === 'complete', [], { what: 'YouTube Studio mở xong' }).catch(() => {})
-      const r = await flows.switchChannel(page, ch, { urls: ctx.urls })
+      const r = await flows.switchChannel(page, ch, { urls: ctx.urls, log: ctx.log })
       m().learn(acc.id, { ucId: r.ucId, name: ch.name, handle: ch.handle })
       S.pane.channelKey = channelKey
       ok = true

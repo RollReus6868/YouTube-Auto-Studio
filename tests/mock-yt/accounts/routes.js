@@ -87,6 +87,25 @@ module.exports = [
     res.setHeader('set-cookie', `MOCK_CH=${ch.uc}; Path=/; Max-Age=86400`)
     res.end('ok')
   }],
+  // www.youtube.com/channel_switcher: trang chon kenh cua YouTube (khong can menu): moi kenh mot ytd-account-item-renderer,
+  // bam -> /signin?action_handle_signin... (o day: /yt/__pick) doi kenh cua phien roi ve `next`
+  [/^\/yt\/channel_switcher/, (req, res) => {
+    const s = session(req)
+    if (!s) return redirect(res, '/studio/signin')
+    const esc = (t) => String(t).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`)
+    const rows = s.acc.channels.filter((c) => !c.deleted).map((c) => `<ytd-account-item-renderer><a href="/yt/__pick?uc=${c.uc}&next=%2Fyt%2F" style="display:block;padding:8px"><tp-yt-paper-icon-item role="option"><tp-yt-paper-item-body><yt-formatted-string id="channel-title">${esc(c.name)}</yt-formatted-string><yt-formatted-string respect-lang-dir secondary dir="auto">${esc(c.handle)}</yt-formatted-string><yt-formatted-string secondary>${esc(c.subs)}</yt-formatted-string></tp-yt-paper-item-body></tp-yt-paper-icon-item></a></ytd-account-item-renderer>`).join('')
+    res.setHeader('content-type', 'text/html; charset=utf-8')
+    res.end(`<!doctype html><meta charset="utf-8"><title>YouTube</title><ytd-channel-switcher-page-renderer><h2>Chọn tài khoản</h2><div id="contents">${rows}</div></ytd-channel-switcher-page-renderer>`)
+  }],
+  [/^\/yt\/__pick\?uc=([\w-]+)&next=([^&]+)/, (req, res, m, server) => {
+    const s = session(req)
+    const ch = s && s.acc.channels.find((x) => x.uc === m[1])
+    if (!ch) { res.statusCode = 403; return res.end('khong quan ly kenh nay') }
+    server.events.push({ type: 'yt-switch', email: s.email, uc: ch.uc, name: ch.name })
+    res.setHeader('set-cookie', `MOCK_CH=${ch.uc}; Path=/; Max-Age=86400`)
+    redirect(res, decodeURIComponent(m[2]))
+  }],
+  [/^\/yt\/?(\?.*)?$/, (req, res) => { res.setHeader('content-type', 'text/html; charset=utf-8'); res.end('<!doctype html><title>YouTube</title><h1>YouTube</h1>') }],
   // studio.youtube.com: chua dang nhap -> trang dang nhap; da dang nhap -> qua trang trung gian
   // "YouTube Creator Studio" (~0,7 s, khong co UC trong dia chi) roi toi kenh dang chon
   [/^\/studio\/?(\?.*)?$/, (req, res, m, server) => {

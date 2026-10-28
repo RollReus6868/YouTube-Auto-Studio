@@ -140,6 +140,8 @@ if (!P) {
 }
 document.addEventListener('click', async (e) => {
   const av = e.target.closest('.av[aria-haspopup]')
+  // acc-nomenu: menu tai khoan khong mo (nhu cua so chay ngam tren Windows khong duoc ve)
+  if (av && OPT.load('acc-nomenu', false)) return
   if (av) { menu.classList.toggle('open'); menu.querySelector('.page1').style.display = ''; menu.querySelector('.page2').style.display = 'none'; return }
   const act = e.target.closest('[data-act]')
   if (act && act.dataset.act === 'switch') { menu.querySelector('.page1').style.display = 'none'; menu.querySelector('.page2').style.display = ''; loadSections(); return }

@@ -274,12 +274,26 @@ class Page {
     try {
       fs.mkdirSync(this.shotDir, { recursive: true })
       const base = path.join(this.shotDir, `${new Date().toISOString().replace(/[:.]/g, '-')}-${name}`)
-      const img = await this.wc.capturePage()
-      fs.writeFileSync(`${base}.png`, img.toPNG())
+      // Windows khong ve cua so (bi che / an) thi capturePage loi hoac ra anh rong: van luu HTML + trang thai ve trang
+      const img = await Promise.race([this.wc.capturePage(), sleep(5000).then(() => null)]).catch(() => null)
+      const png = img && !img.isEmpty() ? img.toPNG() : null
+      if (png) fs.writeFileSync(`${base}.png`, png)
       const html = await this.wc.executeJavaScript(SNAPSHOT_HTML).catch(() => '')
-      fs.writeFileSync(`${base}.html`, `<!-- ${this.url()} -->\n${html}`)
+      const r = await this.renderState()
+      fs.writeFileSync(`${base}.html`, `<!-- ${this.url()} | ${r}${png ? '' : ' | khong chup duoc anh'} -->\n${html}`)
       return base
     } catch (_) { return '' }
+  }
+
+  // Trang co dang duoc ve khong (rAF chay? document.visibilityState) - de ghi vao nhat ky khi menu / hop thoai khong mo
+  async renderState() {
+    if (this.wc.isDestroyed()) return 'đã đóng'
+    const r = await Promise.race([
+      this.wc.executeJavaScript(`new Promise((ok) => { let f = 0; requestAnimationFrame(() => { f = 1 }); setTimeout(() => ok({ vis: document.visibilityState, raf: f }), 700) })`),
+      sleep(3000).then(() => null),
+    ]).catch(() => null)
+    if (!r) return 'trang không trả lời'
+    return `trang ${r.vis === 'visible' ? 'đang hiện' : 'bị ẩn'}, ${r.raf ? 'đang vẽ' : 'KHÔNG được vẽ'}`
   }
 
   // Dat ten buoc dang lam (hien trong loi va nhat ky).

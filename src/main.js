@@ -25,6 +25,13 @@ const URLS = {
 }
 // Phai dat TRUOC app.whenReady(): noi luu phien dang nhap, cai dat va log.
 if (process.env.YA_DATA_DIR) app.setPath('userData', process.env.YA_DATA_DIR)
+// Windows: Chromium coi cua so bi cua so khac che (cua so Studio chay ngam nam sau cua so chinh) la "an" va
+// ngung ve trang -> menu / hop thoai Studio khong mo, binh luan khong tai, khong chup duoc anh loi.
+// Tat viec do (giong cac cong cu tu dong hoa trinh duyet chay nen).
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows')
+app.commandLine.appendSwitch('disable-renderer-backgrounding')
+app.commandLine.appendSwitch('disable-background-timer-throttling')
 
 let win = null
 let studio = null // WebContentsView
@@ -171,6 +178,11 @@ function createStudioView(partition, url = STUDIO_URL) {
   studio = new WebContentsView({ webPreferences: { session: googleSession(partition), backgroundThrottling: false } })
   const wc = studio.webContents
   wc.setWindowOpenHandler(({ url: u }) => {
+    // "Xac minh danh tinh" cua Studio mo cua so dang nhap Google roi bao ket qua ve cua so mo no (window.opener).
+    // Mo de trong cung khung thi mat window.opener -> Google treo o "Dang xu ly, vui long doi". Cho mo cua so that.
+    if (/^https:\/\/accounts\.google\.com\//.test(u)) {
+      return { action: 'allow', overrideBrowserWindowOptions: { parent: win, width: 520, height: 720, autoHideMenuBar: true, title: 'Google', webPreferences: { backgroundThrottling: false } } }
+    }
     if (/^https:\/\/([\w-]+\.)*(google|youtube)\.com\//.test(u)) wc.loadURL(u)
     else if (/^https?:/.test(u)) shell.openExternal(u)
     return { action: 'deny' }
@@ -528,6 +540,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('window-all-closed', () => app.quit())
   app.whenReady().then(() => {
     store = new Store(app.getPath('userData'), safeStorage)
+    log('info', `YT Auto Studio ${app.getVersion()} đã mở.`)
     // ban cu dang qua YouTube Data API: bo OAuth client / token, kenh dang video cu thanh kenh mac dinh
     if (dropApiData(store)) log('info', 'Đã bỏ dữ liệu YouTube Data API cũ (OAuth, token): video giờ đăng bằng hộp thoại tải lên của YouTube Studio.')
     refreshSettings()
