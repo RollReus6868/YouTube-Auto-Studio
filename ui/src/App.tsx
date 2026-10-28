@@ -17,7 +17,9 @@ import { PresetOptimizeCard, defaultOptimizeTemplate } from './pages/OptimizeTem
 import { VisibilityCard } from './VisibilityCard'
 
 const PRIVACY: Record<Preset['privacy'], string> = { public: 'Công khai', unlisted: 'Không công khai', private: 'Riêng tư' }
-const MODELS: [string, string][] = [['gemini-2.5-flash', 'Gemini 2.5 Flash (nhanh, rẻ)'], ['gemini-2.5-pro', 'Gemini 2.5 Pro (kỹ hơn)'], ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash-Lite (rẻ nhất)']]
+// ban sao danh sach o src/google.js (GEMINI_MODELS), dung khi backend chua gui state.gemini
+const MODELS: [string, string][] = [['gemini-3.8-flash', 'Gemini 3.8 Flash (trợ giúp toàn diện)'], ['gemini-3.5-flash-lite', 'Gemini 3.5 Flash-Lite (nhanh nhất, rẻ nhất)'], ['gemini-3.1-pro-preview', 'Gemini 3.1 Pro (suy luận nâng cao, bản xem trước)'], ['gemini-4-argon', 'Gemini 4 Argon (nhiệm vụ phức tạp, mới)']]
+const THINKING: [string, string][] = [['low', 'Thấp – nhanh chóng và hiệu quả'], ['medium', 'Trung bình – độ sâu cân bằng'], ['high', 'Cao – cực kỳ kỹ lưỡng']]
 const VARS = ['{ten_video}', '{tieu_de}', '{so_tap}', '{ngay}', '{ten_kenh}', '{hashtag}', '{playlist}']
 
 function useBackend() {
@@ -510,9 +512,9 @@ function LogsPage({ state, send }: Backend) {
 }
 
 /* ================= Cai dat ================= */
-type Draft = Pick<SettingsT, 'channel' | 'geminiModel' | 'replyStyle' | 'replyMode' | 'replyPerHour' | 'skipWords'>
+type Draft = Pick<SettingsT, 'channel' | 'geminiModel' | 'geminiThinking' | 'replyStyle' | 'replyMode' | 'replyPerHour' | 'skipWords'>
 const pickDraft = (s: SettingsT | null): Draft => ({
-  channel: s?.channel ?? '', geminiModel: s?.geminiModel ?? 'gemini-2.5-flash', replyStyle: s?.replyStyle ?? '',
+  channel: s?.channel ?? '', geminiModel: s?.geminiModel ?? 'gemini-3.8-flash', geminiThinking: s?.geminiThinking ?? 'low', replyStyle: s?.replyStyle ?? '',
   replyMode: s?.replyMode ?? 'review', replyPerHour: s?.replyPerHour ?? 20, skipWords: s?.skipWords ?? '',
 })
 
@@ -525,7 +527,10 @@ function SettingsPage({ state, send }: Backend) {
   const [key, setKey] = useState('')
   const dirty = JSON.stringify(d) !== JSON.stringify(savedDraft)
   const set = (patch: Partial<Draft>) => setD((x) => ({ ...x, ...patch }))
-  const models = MODELS.some(([v]) => v === d.geminiModel) ? MODELS : [[d.geminiModel, d.geminiModel] as [string, string], ...MODELS]
+  const all = state.gemini?.models?.length ? state.gemini.models : MODELS
+  const models = all.some(([v]) => v === d.geminiModel) ? all : [[d.geminiModel, d.geminiModel] as [string, string], ...all]
+  // Gemini 1.x / 2.x khong co cap do tu duy
+  const thinks = !/^gemini-(1|2)\./.test(d.geminiModel)
   return (
     <>
       <PageHeader icon={Settings} title="Cài đặt" description="Thư mục làm việc, Gemini API, cách trả lời bình luận. Kênh YouTube đăng nhập ở trang Tài khoản." actions={dirty ? <Pill tone="warning">Chưa lưu</Pill> : undefined} />
@@ -557,6 +562,12 @@ function SettingsPage({ state, send }: Backend) {
                   <Button variant="outline" className="h-9 shrink-0 px-3" disabled={!key.trim()} onClick={() => { send('gemini_set', key); setKey('') }}><Save /> Lưu key</Button>
                 </div>
                 <Field label="Model"><Select label="Model" value={d.geminiModel} onChange={(v) => set({ geminiModel: v })} options={models} /></Field>
+                {thinks && <Field label="Cấp độ tư duy" hint="Cao thì kỹ hơn nhưng chậm và tốn hạn mức hơn."><Select label="Cấp độ tư duy" value={d.geminiThinking ?? 'low'} onChange={(v) => set({ geminiThinking: v as Draft['geminiThinking'] })} options={THINKING} /></Field>}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button variant="outline" className="h-8 px-3 text-xs" disabled={!state.secrets.gemini || state.gemini?.loading} onClick={() => send('gemini_models')}><RefreshCw /> {state.gemini?.loading ? 'Đang tải…' : 'Tải danh sách model mới nhất'}</Button>
+                  {state.gemini?.at && !state.gemini.error && <span className="text-xs text-muted-foreground">{state.gemini.models.length} model</span>}
+                  {state.gemini?.error && <span className="text-xs text-red-600 dark:text-red-400">{state.gemini.error}</span>}
+                </div>
                 <Button variant="subtle" className="h-8 px-3 text-xs" onClick={() => send('open_url', 'https://aistudio.google.com/apikey')}><ExternalLink /> Lấy key ở Google AI Studio</Button>
               </div>
             </Card>

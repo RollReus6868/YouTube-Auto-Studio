@@ -31,7 +31,7 @@ Chọn **một thư mục** ở trang Đăng video. Mỗi video là một file, 
 ```
 Video cần đăng/
   Bí ẩn rừng sâu tập 1.mp4       video; tiêu đề = tên file
-  Bí ẩn rừng sâu tập 1.jpg       thumbnail cùng tên (.jpg .jpeg .png .webp), dưới 2 MB
+  Bí ẩn rừng sâu tập 1.jpg       thumbnail cùng tên (.jpg .jpeg .png .webp)
   Bí ẩn rừng sâu tập 1.vi.srt    tùy chọn: phụ đề (.srt / .vi.srt / .en.srt ...)
   Bí ẩn rừng sâu tập 1.txt       tùy chọn: mô tả riêng (nút "Gemini viết mô tả" lưu vào đây)
   Hậu trường.mov

@@ -30,9 +30,25 @@ function explain(status, body) {
 }
 
 // ---- Gemini -----------------------------------------------------------------
-async function gemini({ key, model, prompt, system, json = false, fetchFn = fetch, ep = endpoints() }) {
+// Model Gemini API (ai.google.dev/gemini-api/docs/models, 28/10/2026); model dau tien la mac dinh.
+const GEMINI_MODELS = [
+  ['gemini-3.8-flash', 'Gemini 3.8 Flash (trợ giúp toàn diện)'],
+  ['gemini-3.5-flash-lite', 'Gemini 3.5 Flash-Lite (nhanh nhất, rẻ nhất)'],
+  ['gemini-3.1-pro-preview', 'Gemini 3.1 Pro (suy luận nâng cao, bản xem trước)'],
+  ['gemini-4-argon', 'Gemini 4 Argon (nhiệm vụ phức tạp, mới)'],
+]
+const GEMINI_DEFAULT = GEMINI_MODELS[0][0]
+// Cai dat cu (Gemini 2.5) -> model moi cung loai
+const GEMINI_UPGRADE = { 'gemini-2.5-flash': 'gemini-3.8-flash', 'gemini-2.5-flash-lite': 'gemini-3.5-flash-lite', 'gemini-2.5-pro': 'gemini-3.1-pro-preview' }
+// Cap do tu duy (thinkingLevel): cac model 3.x / 4 deu nhan low | medium | high
+const THINKING = ['low', 'medium', 'high']
+const modern = (model) => !/^gemini-(1|2)\./.test(String(model || ''))
+
+async function gemini({ key, model, prompt, system, json = false, thinking = '', fetchFn = fetch, ep = endpoints() }) {
   if (!key) throw new ApiError('Chưa nhập Gemini API key (Cài đặt).')
-  const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.8 } }
+  // model 3.6 tro len bo qua (va se bao loi) temperature / topP / topK: chi gui cho model cu
+  const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: modern(model) ? {} : { temperature: 0.8 } }
+  if (modern(model) && THINKING.includes(thinking)) body.generationConfig.thinkingConfig = { thinkingLevel: thinking }
   if (json) body.generationConfig.responseMimeType = 'application/json'
   if (system) body.systemInstruction = { parts: [{ text: system }] }
   let res
@@ -90,4 +106,23 @@ function parseReply(out) {
   return { kind, reply: String(j.tra_loi || '').trim().replace(/<3/g, '❤️').replace(/[<>]/g, '') }
 }
 
-module.exports = { ApiError, endpoints, explain, gemini, descriptionPrompt, replyPrompt, parseReply, KINDS }
+// Danh sach model Gemini ma API key nay dung duoc (viet chu): [[id, ten]]. Bo model nhung / giong noi / anh / truc tiep.
+async function geminiModels({ key, fetchFn = fetch, ep = endpoints() }) {
+  if (!key) throw new ApiError('Chưa nhập Gemini API key (Cài đặt).')
+  let res
+  try {
+    res = await fetchFn(`${ep.gemini}/models?pageSize=1000`, { headers: { 'x-goog-api-key': key } })
+  } catch (e) { throw new ApiError(`Không gọi được Gemini: ${e.message}`) }
+  const text = await res.text()
+  if (!res.ok) {
+    if (res.status === 400 && /API key not valid|API_KEY_INVALID/.test(text)) throw new ApiError('Gemini API key không đúng.', 400, 'badKey')
+    throw explain(res.status, text)
+  }
+  const list = (JSON.parse(text).models || [])
+    .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+    .map((m) => [String(m.name || '').replace(/^models\//, ''), m.displayName || ''])
+    .filter(([id]) => /^gemini-/.test(id) && !/(embedding|tts|image|live|audio|robotics|computer-use|native)/.test(id))
+  return list.map(([id, name]) => [id, name && name !== id ? `${name} (${id})` : id])
+}
+
+module.exports = { ApiError, endpoints, explain, gemini, geminiModels, GEMINI_MODELS, GEMINI_DEFAULT, GEMINI_UPGRADE, THINKING, descriptionPrompt, replyPrompt, parseReply, KINDS }

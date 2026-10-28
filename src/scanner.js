@@ -8,7 +8,6 @@ const path = require('path')
 const VIDEO_EXT = ['.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v', '.wmv', '.flv', '.mpeg', '.mpg', '.3gp']
 const IMAGE_EXT = ['.jpg', '.jpeg', '.png']
 const SUB_EXT = ['.srt', '.vtt']
-const THUMB_MAX = 2 * 1024 * 1024 // YouTube: thumbnail toi da 2 MB
 const POST_IMAGES_MAX = 10
 const DIRS = { videos: 'videos', posts: 'posts', done: 'da-dang' }
 
@@ -110,7 +109,6 @@ function scanVideo(root, dir) {
   const thumb = images.find((f) => /^(thumbnail|thumb|anh[-_ ]?bia|bia|cover)\./i.test(f)) || (images.length === 1 ? images[0] : null)
   if (thumb) {
     item.thumbnail = path.join(folder, thumb)
-    if (fs.statSync(item.thumbnail).size > THUMB_MAX) item.errors.push(`Ảnh thumbnail "${thumb}" lớn hơn 2 MB, YouTube sẽ từ chối.`)
   } else if (images.length > 1) item.warnings.push('Có nhiều ảnh nhưng không có ảnh tên "thumbnail", nên chưa chọn thumbnail.')
 
   for (const f of files.filter((x) => SUB_EXT.includes(ext(x)))) {
@@ -156,7 +154,6 @@ function scanFlat(dir, files) {
     if (thumbs.length) {
       item.thumbnail = path.join(dir, thumbs[0])
       item.files.push(item.thumbnail)
-      if (fs.statSync(item.thumbnail).size > THUMB_MAX) item.errors.push(`Ảnh thumbnail "${thumbs[0]}" lớn hơn 2 MB, YouTube sẽ từ chối.`)
       if (thumbs.length > 1) item.warnings.push(`Có ${thumbs.length} ảnh cùng tên, tool dùng "${thumbs[0]}".`)
     } else item.warnings.push(`Chưa có ảnh thumbnail cùng tên ("${base}.jpg", .jpeg, .png hoặc .webp): YouTube tự chọn ảnh từ video.`)
     for (const s of files.filter((x) => SUB_EXT.includes(ext(x)))) {
@@ -458,7 +455,7 @@ function createSkeleton(root) {
       'Video: chọn thư mục video ở trang Đăng video (hoặc bỏ video vào thư mục "videos" này).',
       'Mỗi video là một file, ảnh thumbnail CÙNG TÊN nằm cạnh, ví dụ:',
       '  Bí ẩn rừng sâu tập 1.mp4',
-      '  Bí ẩn rừng sâu tập 1.jpg      (hoặc .jpeg / .png / .webp, dưới 2 MB)',
+      '  Bí ẩn rừng sâu tập 1.jpg      (hoặc .jpeg / .png / .webp)',
       '  Bí ẩn rừng sâu tập 1.vi.srt   (tùy chọn: phụ đề)',
       '  Bí ẩn rừng sâu tập 1.txt      (tùy chọn: mô tả riêng, viết như info.txt bên dưới)',
       'Tiêu đề = tên file. Mô tả, thẻ, danh sách phát, chế độ hiển thị, lịch đăng: theo mẫu mặc định.',

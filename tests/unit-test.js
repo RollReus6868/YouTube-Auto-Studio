@@ -69,7 +69,7 @@ test('quet thu muc', () => {
   assert.deepEqual(ok.subtitles.map((s) => s.lang), ['', 'vi'])
   assert.equal(path.basename(hai.video), 'a.mov')
   assert.match(hai.warnings[0], /2 file video/)
-  assert.match(hai.errors[0], /lớn hơn 2 MB/)
+  assert.deepEqual(hai.errors, []) // anh to khong con bi chan (YouTube bo gioi han 2 MB)
   assert.deepEqual(r.posts.map((p) => [p.name, p.text, p.images.length, p.errors.length]), [['bai', 'Xin chào mọi người', 1, 0], ['trong', '', 0, 1]])
 })
 
@@ -280,7 +280,7 @@ test('thu muc video phang: video + thumbnail cung ten, phu de, .txt, trung ten, 
   assert.equal(h.info.mo_ta, 'Mô tả riêng')
   assert(h.files.includes(path.join(d, 'Hậu trường.txt')))
   assert.match(by['Không ảnh'].warnings[0], /Chưa có ảnh thumbnail cùng tên/)
-  assert.match(by['Ảnh to'].errors[0], /lớn hơn 2 MB/)
+  assert.deepEqual(by['Ảnh to'].errors, []) // khong con gioi han 2 MB
   // trung ten (khac duoi): loi
   write(path.join(d, 'Không ảnh.mp4'))
   const dup = sc.scanVideos(d).videos.filter((v) => v.name === 'Không ảnh')

@@ -5,6 +5,7 @@ const fs = require('fs')
 const path = require('path')
 const { defaultPreset, normalizePreset } = require('./metadata')
 const { presetSeed } = require('./optimize-template')
+const { GEMINI_DEFAULT, GEMINI_UPGRADE } = require('./google')
 
 const DEFAULTS = {
   root: '', // thu muc goc (posts/ cho trang Dang bai; ban cu: ca videos/)
@@ -12,7 +13,8 @@ const DEFAULTS = {
   channel: '',
   presets: [defaultPreset()],
   defaultPreset: 'mac-dinh',
-  geminiModel: 'gemini-2.5-flash',
+  geminiModel: GEMINI_DEFAULT,
+  geminiThinking: 'low', // cap do tu duy: low | medium | high
   replyStyle: 'Trả lời thân thiện, ngắn gọn (1–2 câu), xưng "mình", gọi khán giả là "bạn". Cảm ơn khi được khen, trả lời đúng trọng tâm câu hỏi. Không hứa hẹn điều kênh không làm.',
   replyMode: 'review', // review | auto | off
   replyPerHour: 20,
@@ -35,6 +37,8 @@ class Store {
     const out = { ...DEFAULTS, ...s }
     out.presets = (Array.isArray(s.presets) && s.presets.length ? s.presets : DEFAULTS.presets).map((p) => normalizePreset(p, presetSeed(p, s.optimizeTemplates)))
     if (!out.presets.some((p) => p.id === out.defaultPreset)) out.defaultPreset = out.presets[0].id
+    // ban cu chon Gemini 2.5: doi sang model moi cung loai
+    if (GEMINI_UPGRADE[out.geminiModel]) out.geminiModel = GEMINI_UPGRADE[out.geminiModel]
     return out
   }
 

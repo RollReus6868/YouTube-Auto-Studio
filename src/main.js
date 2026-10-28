@@ -10,7 +10,7 @@ const updater = require('./updater')
 const scanner = require('./scanner')
 const { buildVideoMeta, validateMeta, planSchedule, CATEGORIES } = require('./metadata')
 const { Store, dropApiData } = require('./store')
-const { endpoints, gemini, descriptionPrompt } = require('./google')
+const { endpoints, gemini, geminiModels, GEMINI_MODELS, descriptionPrompt } = require('./google')
 const { CommentDesk } = require('./comments')
 const { uploadOne } = require('./uploader')
 const { googleSession, REJECTED, REJECTED_TEXT } = require('./studio/session')
@@ -48,6 +48,8 @@ const state = {
   update: { status: 'idle', latest: '', notes: '', progress: 0, error: '', manual: kind === 'manual' },
   settings: null,
   secrets: { gemini: false, geminiEncrypted: false },
+  // model Gemini de chon trong Cai dat: danh sach co san, "Tai danh sach model" thay bang danh sach cua API key
+  gemini: { models: GEMINI_MODELS, loading: false, error: '', at: '' },
   scan: { root: '', videoDir: '', videos: [], posts: [], errors: [], at: '' }, // root: thu muc goc (bai dang); videoDir: thu muc video
   studio: { channelId: '', channelName: '', url: '', visible: false },
   upload: { channelKey: '', channels: [] }, // kenh dang video (trang Dang video) + cac kenh da tick o trang Tai khoan
@@ -367,7 +369,7 @@ async function describe(id) {
   push()
   try {
     const text = await gemini({
-      key: store.getSecret('gemini'), model: store.settings.geminiModel, fetchFn: net.fetch, ep: endpoints(),
+      key: store.getSecret('gemini'), model: store.settings.geminiModel, thinking: store.settings.geminiThinking, fetchFn: net.fetch, ep: endpoints(),
       prompt: descriptionPrompt({ title: item.meta.title, name: item.name, notes: item.info.ghi_chu, channel: store.settings.channel, language: (store.presetFor({ info: item.info }).optimize || {}).language || '', current: item.info.mo_ta }),
     })
     state.draft = { id, text: text.replace(/[<>]/g, ''), loading: false, error: '' }
@@ -456,7 +458,7 @@ const commands = {
   open_url: (u) => /^https:\/\//.test(u) && shell.openExternal(u),
   settings_save: (patch) => {
     // chi nhan cac truong cai dat thuong; khoa bi mat di lenh rieng
-    const allowed = ['channel', 'presets', 'defaultPreset', 'geminiModel', 'replyStyle', 'replyMode', 'replyPerHour', 'skipWords']
+    const allowed = ['channel', 'presets', 'defaultPreset', 'geminiModel', 'geminiThinking', 'replyStyle', 'replyMode', 'replyPerHour', 'skipWords']
     const clean = {}
     for (const k of allowed) if (patch && patch[k] !== undefined) clean[k] = patch[k]
     store.save(clean)
@@ -471,6 +473,26 @@ const commands = {
     log('ok', state.secrets.geminiEncrypted ? 'Đã lưu Gemini API key (mã hóa bằng kho khóa của hệ điều hành).' : 'Đã lưu Gemini API key (hệ điều hành không có kho khóa, lưu dạng mã hóa đơn giản).')
   },
   gemini_clear: () => { store.setSecret('gemini', ''); refreshSettings(); log('info', 'Đã xóa Gemini API key.') },
+  // hoi Google cac model Gemini ma key nay dung duoc (model moi ra them sau ban nay van chon duoc)
+  gemini_models: async () => {
+    if (state.gemini.loading) return
+    Object.assign(state.gemini, { loading: true, error: '' })
+    push()
+    try {
+      const list = await geminiModels({ key: store.getSecret('gemini'), fetchFn: net.fetch, ep: endpoints() })
+      // model goi y len dau, sau do cac model khac cua API
+      const known = GEMINI_MODELS.filter(([id]) => list.some(([x]) => x === id))
+      const rest = list.filter(([id]) => !GEMINI_MODELS.some(([x]) => x === id)).sort((a, b) => b[0].localeCompare(a[0]))
+      Object.assign(state.gemini, { models: [...(known.length ? known : GEMINI_MODELS), ...rest], at: new Date().toISOString() })
+      log('ok', `Gemini: key này dùng được ${list.length} model viết chữ.`)
+    } catch (e) {
+      state.gemini.error = e.message
+      log('error', `Không lấy được danh sách model Gemini: ${e.message}`)
+    } finally {
+      state.gemini.loading = false
+      push()
+    }
+  },
   studio_home: () => { rejectedAt = ''; studio.webContents.loadURL(STUDIO_URL).catch(() => {}) },
   update_open: () => shell.openExternal(release ? release.url : updater.RELEASES_PAGE),
   update_check: () => !busy && updateCheck(),
@@ -488,7 +510,7 @@ const ctx = {
   resetStop: () => { stop = false },
   isBusy: () => busy,
   setBusy: (b) => { busy = b; state.status = b ? 'run' : 'idle'; push() },
-  gemini: (opts) => gemini({ key: store.getSecret('gemini'), model: store.settings.geminiModel, ...opts }),
+  gemini: (opts) => gemini({ key: store.getSecret('gemini'), model: store.settings.geminiModel, thinking: store.settings.geminiThinking, ...opts }),
   // dat boi tinh nang accounts: chay fn(page) tren kenh da chon (tu chuyen kenh, kiem UC ID)
   withChannel: null,
   accounts: null,

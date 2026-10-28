@@ -3,7 +3,7 @@ const assert = require('assert')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { endpoints, gemini, descriptionPrompt } = require('../src/google')
+const { endpoints, gemini, geminiModels, GEMINI_MODELS, GEMINI_UPGRADE, descriptionPrompt } = require('../src/google')
 const { startMock } = require('./google-mock')
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ya-gt-'))
@@ -34,6 +34,34 @@ test('gemini', async () => {
     const p = descriptionPrompt({ title: 'Bí ẩn', notes: 'rừng Amazon', channel: 'Kênh A', language: 'vi' })
     assert(p.includes('Bí ẩn') && p.includes('rừng Amazon') && p.includes('Kênh A') && p.includes('tiếng Việt'))
   } finally { await m.close() }
+})
+
+test('gemini moi: cap do tu duy, khong gui temperature; model cu giu nhu truoc; danh sach model cua key', async () => {
+  const m = await startMock()
+  try {
+    await gemini({ key: 'gemini-ok', model: 'gemini-3.8-flash', prompt: 'a', thinking: 'high', ep: endpoints(m.url) })
+    assert.deepEqual(m.lastGemini.generationConfig, { thinkingConfig: { thinkingLevel: 'high' } })
+    await gemini({ key: 'gemini-ok', model: 'gemini-4-argon', prompt: 'a', thinking: 'xx', json: true, ep: endpoints(m.url) })
+    assert.deepEqual(m.lastGemini.generationConfig, { responseMimeType: 'application/json' })
+    await gemini({ key: 'gemini-ok', model: 'gemini-2.5-flash', prompt: 'a', thinking: 'low', ep: endpoints(m.url) })
+    assert.deepEqual(m.lastGemini.generationConfig, { temperature: 0.8 }, '2.5 khong nhan thinkingLevel')
+    const list = await geminiModels({ key: 'gemini-ok', ep: endpoints(m.url) })
+    assert.deepEqual(list.map(([id]) => id), ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-4-argon', 'gemini-5-flash'])
+    assert.equal(list[3][1], 'Gemini 5 Flash (gemini-5-flash)')
+    await assert.rejects(geminiModels({ key: 'sai', ep: endpoints(m.url) }), /không đúng/)
+    assert.equal(GEMINI_MODELS[0][0], 'gemini-3.8-flash')
+    assert(Object.values(GEMINI_UPGRADE).every((id) => GEMINI_MODELS.some(([x]) => x === id)))
+  } finally { await m.close() }
+})
+
+test('cai dat cu chon Gemini 2.5 -> model moi cung loai', () => {
+  const { Store } = require('../src/store')
+  const dir = tmp()
+  fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ geminiModel: 'gemini-2.5-pro' }))
+  const st = new Store(dir)
+  assert.equal(st.settings.geminiModel, 'gemini-3.1-pro-preview')
+  assert.equal(st.settings.geminiThinking, 'low')
+  assert.equal(new Store(tmp()).settings.geminiModel, 'gemini-3.8-flash')
 })
 
 test('binh luan: loc, soan, gioi han, tu gui', async () => {

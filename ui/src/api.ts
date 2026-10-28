@@ -62,6 +62,7 @@ export type Settings = {
   presets: Preset[]
   defaultPreset: string
   geminiModel: string
+  geminiThinking?: 'low' | 'medium' | 'high' // cap do tu duy (model Gemini 3.x / 4)
   replyStyle: string
   replyMode: 'review' | 'auto' | 'off'
   replyPerHour: number
@@ -126,6 +127,7 @@ export type State = {
   update: Update
   settings: Settings | null
   secrets: { gemini: boolean; geminiEncrypted: boolean }
+  gemini?: { models: [string, string][]; loading: boolean; error: string; at: string } // model Gemini de chon
   scan: { root: string; videoDir?: string; videos: VideoItem[]; posts: PostItem[]; errors: string[]; at: string }
   studio: { channelId: string; channelName?: string; url: string; visible: boolean }
   upload: { channelKey: string; channels: UploadChannel[] } // kenh dang video = cac kenh da tick o trang Tai khoan
@@ -173,7 +175,7 @@ const demoSettings: Settings = {
     { ...newPreset('mac-dinh', 'Video dài'), title: '{ten_video} | Tập {so_tap}', description: '{tieu_de}\n\nĐăng ngày {ngay} trên {ten_kenh}.\n\n{hashtag}', tags: ['phim hay', 'review phim', 'tóm tắt phim'], privacy: 'public', schedule: { mode: 'date', times: ['19:00'], intervalHours: 24, date: dayAfter(2), time: '09:00' }, schedulePremiere: true, optimizeAfterUpload: true },
     { ...newPreset('shorts', 'Shorts'), title: '{ten_video} #shorts', tags: ['shorts'], privacy: 'public' },
   ],
-  defaultPreset: 'mac-dinh', geminiModel: 'gemini-2.5-flash',
+  defaultPreset: 'mac-dinh', geminiModel: 'gemini-3.8-flash', geminiThinking: 'low',
   replyStyle: 'Trả lời thân thiện, ngắn gọn (1–2 câu), xưng "mình", gọi khán giả là "bạn".',
   replyMode: 'review', replyPerHour: 20, skipWords: '', uploadChannel: 'UCxxxxxxxxxxxxxxxxxxxxxx',
 }
@@ -195,7 +197,7 @@ export const demoState: State = {
     videos: [
       { id: 'v1', layout: 'flat', thumb: 'Bí ẩn rừng sâu tập 1.jpg', infoFile: 'Bí ẩn rừng sâu tập 1.txt', dir: 'Bí ẩn rừng sâu tập 1', folder: '', name: 'Bí ẩn rừng sâu tập 1', size: 734003200, video: 'Bí ẩn rừng sâu tập 1.mp4', thumbUrl: '', subtitles: [{ file: 'Bí ẩn rừng sâu tập 1.vi.srt', lang: 'vi' }], preset: 'Video dài', meta: meta('Bí ẩn rừng sâu tập 1', '2026-10-30T02:00:00.000Z', true), errors: [], warnings: [] },
       { id: 'v2', layout: 'flat', thumb: '', infoFile: 'Bí ẩn rừng sâu tập 2.txt', dir: 'Bí ẩn rừng sâu tập 2', folder: '', name: 'Bí ẩn rừng sâu tập 2', size: 812003200, video: 'Bí ẩn rừng sâu tập 2.mp4', thumbUrl: '', subtitles: [], preset: 'Video dài', meta: meta('Bí ẩn rừng sâu tập 2', '2026-10-31T02:00:00.000Z', true), errors: [], warnings: ['Chưa có ảnh thumbnail cùng tên ("Bí ẩn rừng sâu tập 2.jpg", .jpeg, .png hoặc .webp): YouTube tự chọn ảnh từ video.'] },
-      { id: 'v3', layout: 'flat', thumb: 'Hậu trường.png', infoFile: 'Hậu trường.txt', dir: 'Hậu trường', folder: '', name: 'Hậu trường', size: 3221225472, video: 'Hậu trường.mov', thumbUrl: '', subtitles: [], preset: 'Video dài', meta: meta('Hậu trường', null), errors: ['Ảnh thumbnail "Hậu trường.png" lớn hơn 2 MB, YouTube sẽ từ chối.'], warnings: [] },
+      { id: 'v3', layout: 'flat', thumb: 'Hậu trường.png', infoFile: 'Hậu trường.txt', dir: 'Hậu trường', folder: '', name: 'Hậu trường', size: 3221225472, video: 'Hậu trường.mov', thumbUrl: '', subtitles: [], preset: 'Video dài', meta: meta('Hậu trường', null), errors: [], warnings: [] },
     ],
     posts: [
       { id: 'p1', dir: '2026-10-29_bai-hoi-y-kien', folder: '', name: 'bai hoi y kien', date: '2026-10-29', time: null, text: 'Các bạn muốn xem tập tiếp theo về chủ đề gì? Bình luận cho mình biết nhé!', images: [], errors: [], warnings: [] },
