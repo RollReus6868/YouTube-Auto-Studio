@@ -230,20 +230,22 @@ module.exports = [
     assert.equal(ctx.mock.events.filter((e) => e.type === 'trust-closed').length, 2, 'bam "Đã hiểu" moi lan')
     assert.equal(ctx.mock.hits.slice(h0).filter((h) => h === `GET /studio/channel/${uc}`).length, 3, 'mo trang tong quan 1 lan + lam moi 2 lan')
     assert.equal(ctx.mock.events.filter((e) => e.type === 'upload-open').length, 3)
-    assert.match(ctx.logs.join('\n'), /bấm "Đã hiểu", làm mới Studio rồi chọn lại file \(lần 2\/2\)/)
+    assert.match(ctx.logs.join('\n'), /bấm "Đã hiểu", tải lại Studio rồi chọn lại file \(lần 1\/3\)/)
+    assert.match(ctx.logs.join('\n'), /bấm "Đã hiểu", xoá bộ nhớ đệm của Studio \(giữ đăng nhập\) rồi chọn lại file \(lần 2\/3\)/)
     assert(shots().some((x) => /dang-video-ban-da-hoan-tat/.test(x)), 'luu anh trang khi gap hop thoai')
   }],
 
-  ['Studio tieng Anh: van "You\'re all set ... refresh" sau 2 lan lam moi -> dung, bao ro, khong noi ban nhap', async (ctx) => {
+  ['Studio tieng Anh: van "You\'re all set ... refresh" sau 3 lan lam moi -> dung, bao ro, khong noi ban nhap', async (ctx) => {
     const f = files(ctx.tmp)
-    await flags(ctx, { trust: 3, en: true })
+    await flags(ctx, { trust: 4, en: true })
     const uc = await login(ctx)
     await assert.rejects(run(ctx, JOB(f, { uc, thumbnail: null })).p, (e) => {
-      assert.match(e.message, /sau 2 lần làm mới Studio/)
+      assert.match(e.message, /sau 3 lần làm mới Studio/)
       assert.doesNotMatch(e.message, /bản nháp/)
       return true
     })
-    assert.equal(ctx.mock.events.filter((e) => e.type === 'trust-closed').length, 2)
+    assert.equal(ctx.mock.events.filter((e) => e.type === 'trust-closed').length, 3)
+    assert(ctx.mock.hits.some((h) => /^GET \/yt\/features/.test(h)), 'lan 3: mo trang Tinh nang cua kenh')
     assert.equal((await uploads(ctx.mock)).length, 0)
   }],
 

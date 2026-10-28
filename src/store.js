@@ -13,6 +13,7 @@ const DEFAULTS = {
   channel: '',
   presets: [defaultPreset()],
   defaultPreset: 'mac-dinh',
+  runInPane: true, // chay viec tu dong trong khung trinh duyet cua tool (nguoi dung xem duoc); false = cua so chay ngam
   geminiModel: GEMINI_DEFAULT,
   geminiThinking: 'low', // cap do tu duy: low | medium | high
   replyStyle: 'Trả lời thân thiện, ngắn gọn (1–2 câu), xưng "mình", gọi khán giả là "bạn". Cảm ơn khi được khen, trả lời đúng trọng tâm câu hỏi. Không hứa hẹn điều kênh không làm.',

@@ -479,11 +479,19 @@ function Browser({ state, send }: Backend) {
           YouTube Studio{state.studio.channelName ? ` · ${state.studio.channelName}` : state.studio.channelId ? ` · ${state.studio.channelId}` : ' · chưa vào kênh'}
           {state.studio.channelId && !state.studio.channelName && (state.f.accounts as AccountsState | undefined)?.list.some((a) => a.channels.length) && <span className="font-normal text-muted-foreground"> (kênh chưa có trong danh sách)</span>}
         </span>
-        <StudioPicker state={state} send={send} />
-        <Button variant="subtle" className="h-7 rounded-md px-2 text-xs" onClick={() => send('studio_home')} title="Về trang chủ YouTube Studio">
-          <Home /> Về Studio
-        </Button>
+        {!state.studio.job && <StudioPicker state={state} send={send} />}
+        {!state.studio.job && (
+          <Button variant="subtle" className="h-7 rounded-md px-2 text-xs" onClick={() => send('studio_home')} title="Về trang chủ YouTube Studio">
+            <Home /> Về Studio
+          </Button>
+        )}
       </header>
+      {state.studio.job && (
+        <div className="mx-3 mb-2 flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-1.5 text-xs">
+          <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-primary" />
+          <span className="min-w-0 flex-1 truncate"><b>Tool đang chạy:</b> {state.studio.job}. Chỉ xem, đừng bấm vào khung lúc này.</span>
+        </div>
+      )}
       <BrowserPane onRect={onRect} />
     </>
   )
@@ -512,9 +520,9 @@ function LogsPage({ state, send }: Backend) {
 }
 
 /* ================= Cai dat ================= */
-type Draft = Pick<SettingsT, 'channel' | 'geminiModel' | 'geminiThinking' | 'replyStyle' | 'replyMode' | 'replyPerHour' | 'skipWords'>
+type Draft = Pick<SettingsT, 'channel' | 'runInPane' | 'geminiModel' | 'geminiThinking' | 'replyStyle' | 'replyMode' | 'replyPerHour' | 'skipWords'>
 const pickDraft = (s: SettingsT | null): Draft => ({
-  channel: s?.channel ?? '', geminiModel: s?.geminiModel ?? 'gemini-3.8-flash', geminiThinking: s?.geminiThinking ?? 'low', replyStyle: s?.replyStyle ?? '',
+  channel: s?.channel ?? '', runInPane: s?.runInPane ?? true, geminiModel: s?.geminiModel ?? 'gemini-3.8-flash', geminiThinking: s?.geminiThinking ?? 'low', replyStyle: s?.replyStyle ?? '',
   replyMode: s?.replyMode ?? 'review', replyPerHour: s?.replyPerHour ?? 20, skipWords: s?.skipWords ?? '',
 })
 
@@ -546,6 +554,7 @@ function SettingsPage({ state, send }: Backend) {
                   <Button variant="outline" className="h-8 px-3" disabled={!state.scan.root} onClick={() => send('create_skeleton')}><FolderPlus /> Tạo thư mục mẫu</Button>
                   <Button variant="outline" className="h-8 px-3" disabled={!state.scan.root} onClick={() => send('open_path', state.scan.root)}><FolderOpen /> Mở thư mục</Button>
                 </div>
+                <ToggleRow title="Chạy trong khung trình duyệt của tool" hint="Bật: mọi thao tác tự động (đăng video, tối ưu, đăng bài…) hiện ở khung trình duyệt bên phải để bạn theo dõi, chạy lần lượt từng việc. Tắt: chạy ngầm trong cửa sổ ẩn, nhiều tài khoản chạy cùng lúc." checked={d.runInPane !== false} onChange={(v) => set({ runInPane: v })} />
                 <Field label="Tên kênh" hint="Dùng cho biến {ten_kenh} trong mẫu mô tả.">
                   <TextInput value={d.channel} onChange={(e) => set({ channel: e.target.value })} placeholder="Kênh của tôi" />
                 </Field>
@@ -683,7 +692,7 @@ export default function App() {
     : <SettingsPage {...backend} />
   return (
     <AppShell
-      browser={WITH_BROWSER.has(page) || feature?.browser ? <Browser {...backend} /> : undefined}
+      browser={WITH_BROWSER.has(page) || feature?.browser || backend.state.studio.job ? <Browser {...backend} /> : undefined}
       dock={page === 'logs' ? undefined : <LogDock logs={backend.state.logs} onOpen={() => go('logs')} />}
       sidebar={
         <Sidebar

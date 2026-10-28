@@ -85,6 +85,32 @@ module.exports = (ctx) => {
     return run
   }
 
+  // ---- chay trong khung trinh duyet cua tool (Cai dat "runInPane", mac dinh bat) -----------
+  // Nguoi dung xem duoc tool lam gi; khung nam trong cua so chinh nen luon duoc ve (khong bi Windows coi la an).
+  // Chi co mot khung: moi viec (moi tai khoan) chay lan luot.
+  let paneChain = Promise.resolve()
+  const inPane = () => ctx.store.settings.runInPane !== false && !!(ctx.studio && ctx.studio.claim)
+  function onPane(acc, fn, what) {
+    const run = paneChain.then(async () => {
+      ctx.studio.claim(what)
+      try {
+        ctx.studio.use(acc.partition, undefined, { force: true })
+        const wc = ctx.studio.wc()
+        if (!wc || wc.isDestroyed()) throw new Error('Khung trình duyệt chưa mở.')
+        wc.setAudioMuted(true) // trang xem video tu phat tieng
+        try {
+          return await fn(new Page(wc, { timeout: 20000, shotDir: ctx.logFile('loi-trang'), shouldStop: ctx.stopped }))
+        } finally {
+          if (!wc.isDestroyed()) wc.setAudioMuted(false)
+        }
+      } finally {
+        ctx.studio.release()
+      }
+    })
+    paneChain = run.catch(() => {})
+    return run
+  }
+
   // ---- kiem tra dang nhap ------------------------------------------------------------
   async function hasGoogleCookie(acc) {
     const ses = googleSession(acc.partition)
@@ -141,7 +167,9 @@ module.exports = (ctx) => {
     if (!ch) throw new Error(`Không có kênh "${key}" ở trang Tài khoản. Bấm "Làm mới kênh" rồi tick kênh cần dùng.`)
     const acc = m().get(ch.accountId)
     if (acc.status === 'needs-sign-in') throw new Error(`Tài khoản Google "${acc.label}" chưa đăng nhập (trang Tài khoản → Đăng nhập).`)
-    return onAccount(acc.id, async (page) => {
+    const job = `${what || 'Việc tự động'} · ${ch.name}`
+    const runner = inPane() ? (fn) => onPane(acc, fn, job) : (fn) => onAccount(acc.id, fn)
+    return runner(async (page) => {
       try {
         const r = await flows.switchChannel(page, ch, { urls: ctx.urls, log: ctx.log })
         const learnt = m().learn(acc.id, { ucId: r.ucId, name: ch.name, handle: ch.handle })
@@ -165,6 +193,7 @@ module.exports = (ctx) => {
   async function pane({ accountId, channelKey = '' } = {}) {
     const acc = m().get(accountId)
     if (!acc || S.paneBusy) return false
+    if (ctx.state.studio.job) { ctx.log('warn', `Khung trình duyệt đang chạy "${ctx.state.studio.job}". Đợi xong rồi thử lại.`); return false }
     S.pane = { accountId, channelKey }
     savePane()
     ctx.studio.use(acc.partition)

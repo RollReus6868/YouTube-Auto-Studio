@@ -51,7 +51,8 @@ const state = {
   // model Gemini de chon trong Cai dat: danh sach co san, "Tai danh sach model" thay bang danh sach cua API key
   gemini: { models: GEMINI_MODELS, loading: false, error: '', at: '' },
   scan: { root: '', videoDir: '', videos: [], posts: [], errors: [], at: '' }, // root: thu muc goc (bai dang); videoDir: thu muc video
-  studio: { channelId: '', channelName: '', url: '', visible: false },
+  // job: viec tool dang chay trong khung (nguoi dung xem; khong doi tai khoan / kenh cua khung luc do)
+  studio: { channelId: '', channelName: '', url: '', visible: false, job: '' },
   upload: { channelKey: '', channels: [] }, // kenh dang video (trang Dang video) + cac kenh da tick o trang Tai khoan
   jobs: {}, // id video -> { status: queued|run|done|error|stopped, step, progress, error, url }
   draft: null, // { id, text, loading, error } mo ta Gemini dang soan
@@ -179,6 +180,8 @@ function createStudioView(partition, url = STUDIO_URL) {
   studioPartition = partition
   studio = new WebContentsView({ webPreferences: { session: googleSession(partition), backgroundThrottling: false } })
   const wc = studio.webContents
+  // tool dang chay trong khung: Studio chan roi trang khi con thay doi chua luu -> khong ai bam "Roi trang", bo qua
+  wc.on('will-prevent-unload', (e) => { if (state.studio.job) e.preventDefault() })
   wc.setWindowOpenHandler(({ url: u }) => {
     // "Xac minh danh tinh" cua Studio mo cua so dang nhap Google roi bao ket qua ve cua so mo no (window.opener).
     // Mo de trong cung khung thi mat window.opener -> Google treo o "Dang xu ly, vui long doi". Cho mo cua so that.
@@ -195,8 +198,10 @@ function createStudioView(partition, url = STUDIO_URL) {
   wc.loadURL(url).catch(() => {})
 }
 
-function useStudio(partition, url) {
+function useStudio(partition, url, { force = false } = {}) {
   if (!win) return
+  // tool dang chay trong khung: nguoi dung khong doi duoc tai khoan / trang cua khung
+  if (state.studio.job && !force) return log('warn', `Khung trình duyệt đang chạy "${state.studio.job}". Đợi xong (hoặc bấm Dừng) rồi thử lại.`)
   if (studio && studioPartition === partition) {
     if (url) studio.webContents.loadURL(url).catch(() => {})
     return
@@ -236,7 +241,7 @@ async function refreshStudio() {
     state.studio.channelId = channelId
     state.studio.channelName = ''
     if (channelId) {
-      log('ok', `Đã vào YouTube Studio của kênh ${channelId}.`)
+      if (!state.studio.job) log('ok', `Đã vào YouTube Studio của kênh ${channelId}.`)
       if (ctx.onStudioChannel) await ctx.onStudioChannel(channelId, wc).catch(() => {})
     }
   }
@@ -458,7 +463,7 @@ const commands = {
   open_url: (u) => /^https:\/\//.test(u) && shell.openExternal(u),
   settings_save: (patch) => {
     // chi nhan cac truong cai dat thuong; khoa bi mat di lenh rieng
-    const allowed = ['channel', 'presets', 'defaultPreset', 'geminiModel', 'geminiThinking', 'replyStyle', 'replyMode', 'replyPerHour', 'skipWords']
+    const allowed = ['channel', 'presets', 'defaultPreset', 'runInPane', 'geminiModel', 'geminiThinking', 'replyStyle', 'replyMode', 'replyPerHour', 'skipWords']
     const clean = {}
     for (const k of allowed) if (patch && patch[k] !== undefined) clean[k] = patch[k]
     store.save(clean)
@@ -493,7 +498,7 @@ const commands = {
       push()
     }
   },
-  studio_home: () => { rejectedAt = ''; studio.webContents.loadURL(STUDIO_URL).catch(() => {}) },
+  studio_home: () => { if (state.studio.job) return log('warn', `Khung trình duyệt đang chạy "${state.studio.job}". Đợi xong rồi thử lại.`); rejectedAt = ''; studio.webContents.loadURL(STUDIO_URL).catch(() => {}) },
   update_open: () => shell.openExternal(release ? release.url : updater.RELEASES_PAGE),
   update_check: () => !busy && updateCheck(),
   update_install: () => !busy && updateInstall(),
@@ -515,7 +520,12 @@ const ctx = {
   withChannel: null,
   accounts: null,
   // khung Studio hien ben phai: doi sang phien cua tai khoan khac
-  studio: { use: (partition, url) => useStudio(partition, url), wc: () => studio && studio.webContents, home: STUDIO_URL },
+  studio: {
+    use: (partition, url, o) => useStudio(partition, url, o), wc: () => studio && studio.webContents, home: STUDIO_URL,
+    // viec tu dong chay trong khung (de nguoi dung theo doi): giao dien hien khung o moi trang khi job != ''
+    claim: (job) => { state.studio.job = job || 'Tool đang chạy'; push() },
+    release: () => { state.studio.job = ''; push() },
+  },
   get desk() { return desk }, // CommentDesk chung (binh luan API + hop thu Studio), co sau app.whenReady
 }
 const FEATURES = ['accounts', 'inbox', 'optimize', 'posts', 'hometab']

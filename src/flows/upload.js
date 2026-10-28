@@ -43,6 +43,9 @@ const L = (text, regex, any) => (any ? { text, regex, any } : { text, regex })
 const DLG = { selector: 'ytcp-uploads-dialog', hidden: true }
 const inD = (t) => ({ ...t, within: DLG })
 const TRUST = 'yt-trust-tiers-wizard-dialog'
+// "Ban da hoan tat - hay thu lam moi trang": so lan lam moi Studio, moi lan manh tay hon
+const STALE_TRIES = 3
+const STALE_FIX = ['tải lại Studio', 'xoá bộ nhớ đệm của Studio (giữ đăng nhập)', 'mở trang Tính năng của kênh để YouTube cập nhật quyền']
 const LABELS = {
   // trang tong quan kenh: nut tai len (that: ytcp-quick-actions ytcp-icon-button#upload-icon aria-label "Tải video lên")
   uploadIcon: L('Tải video lên', '^(tải video lên|upload videos?)$', 'ytcp-icon-button#upload-icon, ytcp-upload-video-button #upload-button'),
@@ -358,10 +361,10 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
         await shot('xac-minh')
         throw noDraft(new StepError(`${VERIFY_MSG}${kind === 'trust' ? ` (Studio hiện: "${text.slice(0, 200)}")` : ''}`, page.step))
       }
-      // stale: Studio da nhan file nhung trang cu chua biet tai khoan da co quyen (video dai hon 15 phut)
+      // stale: Studio da nhan file nhung trang cu chua biet tai khoan da co quyen (video dai hon 15 phut, vua xac minh xong)
       await shot('ban-da-hoan-tat')
-      if (attempt >= 2) throw noDraft(new StepError('YouTube vẫn báo "Bạn đã có quyền sử dụng tính năng này rồi. Hãy thử làm mới trang" sau 2 lần làm mới Studio. Hãy mở YouTube Studio của kênh ở trang Tài khoản, làm mới trang (F5) và thử tải video lên bằng tay một lần, rồi chạy lại.', page.step))
-      log('warn', `Studio báo "${text.slice(0, 120)}": bấm "Đã hiểu", làm mới Studio rồi chọn lại file (lần ${attempt + 1}/2).`)
+      if (attempt >= STALE_TRIES) throw noDraft(new StepError(`YouTube vẫn báo "Bạn đã có quyền sử dụng tính năng này rồi. Hãy thử làm mới trang" sau ${STALE_TRIES} lần làm mới Studio (đã xoá bộ nhớ đệm của Studio, giữ đăng nhập). Google thường cần vài giờ sau khi xác minh để cập nhật quyền đăng video dài: hãy thử lại sau, hoặc tải video lên bằng tay một lần trong khung Studio ở trang Tài khoản.`, page.step))
+      log('warn', `Studio báo "${text.slice(0, 120)}": bấm "Đã hiểu", ${STALE_FIX[attempt]} rồi chọn lại file (lần ${attempt + 1}/${STALE_TRIES}).`)
       await step('file', 'Đóng hộp thoại "Bạn đã hoàn tất"', async () => {
         const close = { ...LABELS.trustClose, any: undefined, selector: 'ytcp-button, button', within: { selector: SEL.trust, hidden: true } }
         if (await page.has({ selector: LABELS.trustClose.any })) await page.click({ selector: LABELS.trustClose.any })
@@ -369,7 +372,18 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
         else await page.press('Escape')
         await poll(page, async () => !(await blocker(page)), 5000)
       })
-      await openDialog(`Làm mới Studio và mở lại hộp thoại tải lên (lần ${attempt + 1}/2)`)
+      // lan 1: chi tai lai (bo bo nho dem HTTP); lan 2: xoa service worker / IndexedDB cua Studio + YouTube (giu cookie);
+      // lan 3: mo trang "Tinh nang cua kenh" de YouTube doc lai quyen cua kenh
+      await step('open', `Làm mới Studio: ${STALE_FIX[attempt]}`, async () => {
+        const origins = [...new Set([urls.studio, urls.youtube].filter(Boolean).map((u) => new URL(u).origin))]
+        if (page.clearSiteData) await page.clearSiteData(origins, attempt === 0 ? [] : undefined)
+        if (attempt === 2) {
+          await page.goto(`${urls.youtube}/features`).catch(() => {})
+          await sleep(5000)
+        }
+        await sleep(attempt ? 3000 : 1500)
+      })
+      await openDialog(`Mở lại hộp thoại tải lên (lần ${attempt + 1}/${STALE_TRIES})`)
     }
 
     // tieu de: Studio dien san ten tep (hoi tre) -> chon het roi thay

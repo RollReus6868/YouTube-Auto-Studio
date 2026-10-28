@@ -262,6 +262,16 @@ class Page {
     await sleep(300)
   }
 
+  // Xoa du lieu trang luu trong phien (giu cookie = giu dang nhap): bo nho dem HTTP + service worker / cache / IndexedDB
+  // cua cac origin. Studio luu trang thai cu o day thi "lam moi trang" thuong khong het.
+  async clearSiteData(origins, storages = ['serviceworkers', 'cachestorage', 'indexdb', 'shadercache']) {
+    if (this.wc.isDestroyed()) return
+    const ses = this.wc.session
+    await ses.clearCache().catch(() => {})
+    // storages rong = chi bo nho dem HTTP (clearStorageData voi [] co the xoa het, ca cookie)
+    if (storages.length) for (const origin of origins) await ses.clearStorageData({ origin, storages }).catch(() => {})
+  }
+
   // Ep Chromium ve mot khung (capturePage tam coi trang la dang hien): IntersectionObserver / rAF chay duoc.
   async nudge() {
     if (this.wc.isDestroyed()) return

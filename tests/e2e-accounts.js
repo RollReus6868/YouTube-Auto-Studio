@@ -93,7 +93,9 @@ const waitFor = async (fn, what, ms = 30000) => {
     await ui.getByLabel('Dùng kênh Simple Bible Animation').click()
     await waitFor(async () => (await acc('nick-thang')).channels.filter((c) => c.enabled).length === 2, 'tick kenh')
 
-    // 5) ctx.withChannel qua lenh thu: cua so an, chuyen kenh, hoc UC; hai viec cung tai khoan chay lan luot
+    // 5) ctx.withChannel qua lenh thu: cua so an (Cai dat tat "Chay trong khung trinh duyet"), chuyen kenh, hoc UC;
+    //    hai viec cung tai khoan chay lan luot
+    await call('settings_save', { runInPane: false })
     await Promise.all([call('accounts_try', 'nick-thang:Dark Bible Stories'), call('accounts_try', 'nick-thang:Simple Bible Animation')])
     st = await call('hello')
     const L = st.logs.map((l) => l.msg)
@@ -107,6 +109,19 @@ const waitFor = async (fn, what, ms = 30000) => {
     assert.equal((await call('hello')).f.accounts.debug.ucId, 'UCmock000000000000000000')
     assert.equal(pages().filter((p) => /\/studio\/channel\//.test(p.url())).length, 2, 'khung Studio + 1 cua so an')
     await waitFor(() => pages().filter((p) => /\/studio\/channel\//.test(p.url())).length === 1, 'dong cua so an khi ranh', 15000)
+
+    // 5b) mac dinh: chay ngay trong khung trinh duyet cua tool (nguoi dung xem), khong mo cua so an;
+    //     luc dang chay giao dien hien khung + dong "Tool dang chay", xong thi tra khung lai
+    await call('settings_save', { runInPane: true })
+    const tryPane = call('accounts_try', 'nick-thang:Simple Bible Animation')
+    await ui.getByText('Tool đang chạy:').waitFor({ timeout: 15000 })
+    await tryPane
+    st = await call('hello')
+    assert.equal(st.studio.job, '', 'xong viec: khung tro lai binh thuong')
+    assert(st.logs.some((l) => l.msg === 'Thử kênh: Studio đang ở "Simple Bible Animation" (UCBibleSimpleAnimation68).'))
+    assert.equal(pages().filter((p) => /\/studio\/channel\//.test(p.url())).length, 1, 'khong mo cua so an')
+    await waitFor(async () => /\/studio\/channel\/UCBibleSimpleAnimation68/.test((await call('hello')).studio.url), 'khung Studio o kenh vua chay')
+    await call('settings_save', { runInPane: false })
 
     // 6) khung Studio theo kenh chon o tren dau khung
     await ui.getByLabel('Tài khoản / kênh trong khung Studio').selectOption('c:UCmock000000000000000000')

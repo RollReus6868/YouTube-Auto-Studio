@@ -61,6 +61,7 @@ export type Settings = {
   channel: string
   presets: Preset[]
   defaultPreset: string
+  runInPane?: boolean // chay viec tu dong trong khung trinh duyet cua tool (mac dinh bat)
   geminiModel: string
   geminiThinking?: 'low' | 'medium' | 'high' // cap do tu duy (model Gemini 3.x / 4)
   replyStyle: string
@@ -129,7 +130,7 @@ export type State = {
   secrets: { gemini: boolean; geminiEncrypted: boolean }
   gemini?: { models: [string, string][]; loading: boolean; error: string; at: string } // model Gemini de chon
   scan: { root: string; videoDir?: string; videos: VideoItem[]; posts: PostItem[]; errors: string[]; at: string }
-  studio: { channelId: string; channelName?: string; url: string; visible: boolean }
+  studio: { channelId: string; channelName?: string; url: string; visible: boolean; job?: string } // job: viec tool dang chay trong khung
   upload: { channelKey: string; channels: UploadChannel[] } // kenh dang video = cac kenh da tick o trang Tai khoan
   jobs: Record<string, Job>
   draft: Draft | null
