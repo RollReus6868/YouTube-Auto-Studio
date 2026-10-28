@@ -10,6 +10,9 @@ Sửa tiếp lỗi đăng video "Bạn đã có quyền sử dụng tính năng 
 - Trước khi chọn file, tool kiểm tra trang Studio có đang được vẽ không. Nếu cửa sổ tool đang thu nhỏ, tool tự mở lại cửa sổ (không cướp bàn phím) và ghi vào nhật ký.
 - Nếu bạn thu nhỏ cửa sổ khi tool đang chạy, nhật ký sẽ nhắc. Để cửa sổ khác che lên thì vẫn được, chỉ đừng thu nhỏ.
 
+### Cài đặt
+- Sửa lỗi chữ vừa gõ trong Cài đặt (ví dụ phần mô tả mặc định) đôi khi bị xoá mất nếu gõ ngay sau khi bấm "Lưu cài đặt".
+
 ## YT Auto Studio 0.5.5
 
 Theo dõi tool chạy ngay trong khung trình duyệt, mô tả mặc định cho mọi video, Gemini viết mô tả theo kịch bản, và sửa lỗi đăng video dài.

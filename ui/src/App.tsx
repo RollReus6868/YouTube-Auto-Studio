@@ -3,7 +3,7 @@ import {
   ImageIcon, LayoutTemplate, Palette, Paperclip, Plus, RefreshCw, Save, ScrollText, Settings, Sparkles,
   Square, Subtitles, Trash2, Upload, X,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { call, demoState, emptyState, isDemo, newPreset, type Job, type Preset, type Settings as SettingsT, type State, type VideoItem } from './api'
 import {
   ActionBar, AppShell, BrowserPane, Button, Card, Choice, Dialog, EmptyState, Field, GradientProgress, PageBody, PageHeader, Pill, Select,
@@ -557,7 +557,19 @@ function SettingsPage({ state, send }: Backend) {
   const savedKey = JSON.stringify(pickDraft(state.settings))
   const savedDraft = useMemo(() => JSON.parse(savedKey) as Draft, [savedKey])
   const [d, setD] = useState<Draft>(savedDraft)
-  useEffect(() => setD(savedDraft), [savedDraft])
+  // cai dat da luu doi (vd vua bam Luu): chi cap nhat o nguoi dung chua sua, giu chu dang go o khac
+  const lastSaved = useRef(savedDraft)
+  useEffect(() => {
+    const prev = lastSaved.current
+    lastSaved.current = savedDraft
+    setD((cur) => {
+      const next = { ...cur } as Record<string, unknown>
+      for (const k of Object.keys(savedDraft) as (keyof Draft)[]) {
+        if (JSON.stringify(cur[k]) === JSON.stringify(prev[k])) next[k] = savedDraft[k]
+      }
+      return next as Draft
+    })
+  }, [savedDraft])
   const [key, setKey] = useState('')
   const dirty = JSON.stringify(d) !== JSON.stringify(savedDraft)
   const set = (patch: Partial<Draft>) => setD((x) => ({ ...x, ...patch }))
