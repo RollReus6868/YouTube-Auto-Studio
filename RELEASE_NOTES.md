@@ -1,3 +1,8 @@
+## YT Auto Studio 0.5.9
+
+### Đăng video
+- **Sửa lỗi "Đã bấm Lưu nhưng hộp thoại tải lên không đóng" khi lên lịch.** Khi bạn lên lịch lúc Studio còn đang kiểm tra video, Studio hiện bảng "Chúng tôi vẫn đang kiểm tra nội dung của bạn" chỉ có nút "Đã hiểu". Giờ tool tự bấm "Đã hiểu" rồi chờ hộp thoại tải lên đóng.
+
 ## YT Auto Studio 0.5.8
 
 ### Cộng đồng

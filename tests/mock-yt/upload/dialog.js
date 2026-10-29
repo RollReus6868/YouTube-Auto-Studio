@@ -16,7 +16,8 @@
 // Bien the (localStorage 'up-<ten>' = true): en (Studio tieng Anh), slow (tai len cham), noid (khong co duong lien ket
 // trong hop thoai), limit (gioi han tai len hang ngay), failmid (loi giua chung), nothumb (kenh chua xac minh), nosubs
 // (khong co muc phu de), monet (them buoc Kiem tien), checkswait (buoc Kiem tra khoa nut Tiep 2,5 giay), noshare (khong
-// hien hop thoai chia se), nocheckwarn (kiem tra xong ngay: khong hoi "Van xuat ban"), hidelabel (khong co chu tien do
+// hien hop thoai chia se), nocheckwarn (kiem tra xong ngay: khong hoi "Van xuat ban"), checkinfo (len lich khi chua kiem tra xong: hop thoai
+// kiem tra chi co [Da hieu]; bam moi luu), hidelabel (khong co chu tien do
 // trong hop thoai; sau khi dong chi con o tien do goc trang), morepl (kenh co them 2 danh sach phat),
 // trust (= N: N lan dau chon file hien "Ban da hoan tat ... Hay thu lam moi trang", hop thoai tai len dung o buoc chon tep;
 // dem giam trong localStorage), trustfast (chon file < 2 giay sau khi hop thoai mo / trang an -> "Ban da hoan tat"), verify (Google doi "Xac minh danh tinh cua ban"), notypedate (o nhap ngay trong lich khong nhan
@@ -766,6 +767,7 @@
   }
   // "Chung toi van dang kiem tra noi dung cua ban" [Quay lai] [Van xuat ban]
   function checksWarning() {
+    if (F('checkinfo') && W.vis === 'SCHEDULE') return checksInfo()
     const w = document.createElement('ytcp-prechecks-warning-dialog')
     w.innerHTML = `<tp-yt-paper-dialog role="dialog"><h2>${T('Chúng tôi vẫn đang kiểm tra nội dung của bạn', "We're still checking your content")}</h2>
       <p class="description">${T('Nếu phát hiện thấy vấn đề, bạn có thể cần phải thay đổi để video không bị hạn chế.', 'If we find issues, you may need to make changes to avoid restrictions.')}</p>
@@ -773,6 +775,17 @@
     document.body.appendChild(w)
     log({ type: 'checks-warning' })
     $('#secondary-action-button', w).onclick = () => w.remove()
+    $('#primary-action-button', w).onclick = () => { w.remove(); W.anyway = true; publish() }
+  }
+
+  // len lich: "Chung toi van dang kiem tra noi dung cua ban ... Quay lai truoc khi video cua ban duoc xuat ban" [Da hieu]
+  function checksInfo() {
+    const w = document.createElement('ytcp-prechecks-warning-dialog')
+    w.innerHTML = `<tp-yt-paper-dialog role="dialog"><h2>${T('Chúng tôi vẫn đang kiểm tra nội dung của bạn', "We're still checking your content")}</h2>
+      <p class="description">${T('Quay lại trước khi video của bạn được xuất bản để đảm bảo video không gặp vấn đề nào.', 'Come back before your video is published to make sure it has no issues.')}</p>
+      <div style="display:flex;justify-content:flex-end;gap:8px">${OPT.button('primary-action-button', T('Đã hiểu', 'Got it'))}</div></tp-yt-paper-dialog>`
+    document.body.appendChild(w)
+    log({ type: 'checks-info' })
     $('#primary-action-button', w).onclick = () => { w.remove(); W.anyway = true; publish() }
   }
 

@@ -96,6 +96,8 @@ const LABELS = {
   plCreate: L('Tạo', '^(tạo|create)$', '#create-button'),
   // sau khi bam Luu: "Chung toi van dang kiem tra noi dung cua ban" [Quay lai] [Van xuat ban], roi hop thoai chia se
   publishAnyway: L('Vẫn xuất bản', '^(vẫn xuất bản|publish anyway)$'),
+  // video len lich: cung hop thoai "Chung toi van dang kiem tra noi dung cua ban" nhung chi co nut [Da hieu]
+  checksOk: L('Đã hiểu', '^(đã hiểu|got it|ok)$'),
   shareClose: L('Đóng', '^(đóng|close|đã hiểu|got it)$', 'ytcp-video-share-dialog #close-button, ytcp-uploads-still-processing-dialog #close-button'),
 }
 const SEL = {
@@ -106,6 +108,7 @@ const SEL = {
   // (bo chinh hop thoai tai len: xem blocker())
   blockers: `${TRUST} tp-yt-paper-dialog, tp-yt-paper-dialog[role=dialog], [role=alertdialog]`,
   trust: TRUST,
+  checks: 'ytcp-prechecks-warning-dialog',
   dateInput: 'ytcp-date-picker #textbox input, ytcp-date-picker input',
   calMonth: 'ytcp-date-picker [role=listitem][aria-label]',
   calPrev: 'ytcp-date-picker #prev-month',
@@ -632,12 +635,17 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
       await page.waitFor(done)
       if (!(await poll(page, () => isEnabled(page, done), 60000, 500))) throw new StepError(`Nút "${(await page.text(done)) || 'Lưu'}" bị khóa.`, page.step)
       await page.click(done)
-      let anyway = false
-      const btn = { ...LABELS.publishAnyway, selector: 'button, ytcp-button, [role=button]' }
+      // "Chung toi van dang kiem tra noi dung cua ban": [Quay lai] [Van xuat ban], hoac chi [Da hieu] khi len lich
+      const checks = [
+        [{ ...LABELS.publishAnyway, selector: 'button, ytcp-button, [role=button]' }, 'Vẫn xuất bản'],
+        [{ ...LABELS.checksOk, selector: `${SEL.checks} button, ${SEL.checks} ytcp-button` }, 'Đã hiểu'],
+      ]
+      const clicked = {}
       const r = await poll(page, async () => {
-        if (!anyway && (await page.has(btn))) {
-          anyway = true
-          log('info', 'Studio vẫn đang kiểm tra video: bấm "Vẫn xuất bản".')
+        for (const [btn, name] of checks) {
+          if ((clicked[name] && Date.now() - clicked[name] < 5000) || !(await page.has(btn))) continue
+          if (!clicked[name]) log('info', `Studio vẫn đang kiểm tra video: bấm "${name}".`)
+          clicked[name] = Date.now()
           await page.click(btn)
           return null
         }

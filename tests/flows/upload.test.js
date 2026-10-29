@@ -330,6 +330,20 @@ module.exports = [
     assert.deepEqual(r.warnings, [], ctx.logs.join('\n'))
   }],
 
+  ['len lich khi Studio chua kiem tra xong: hop thoai "Chung toi van dang kiem tra..." chi co [Da hieu] -> bam roi moi luu', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { checkinfo: true })
+    const at = inDays(1, 8, 0)
+    const r = await run(ctx, JOB(f, { thumbnail: null, publishAt: at.toISOString(), schedulePremiere: true })).p
+    const [u] = await uploads(ctx.mock)
+    assert.deepEqual([u.visibility, u.anyway, u.schedulePremiere], ['SCHEDULE', true, true])
+    assert(ctx.mock.events.some((e) => e.type === 'checks-info'), 'co hop thoai [Da hieu]')
+    assert(!ctx.mock.events.some((e) => e.type === 'checks-warning'), 'khong phai hop thoai Van xuat ban')
+    assert.match(ctx.logs.join('\n'), /bấm "Đã hiểu"/)
+    assert.deepEqual([r.visibility, r.schedule], ['schedule', at.toISOString()])
+    assert.deepEqual(r.warnings, [], ctx.logs.join('\n'))
+  }],
+
   ['Studio tieng Anh: len lich bang lich + danh sach gio (9:45 PM), kenh khong co Cong chieu -> canh bao, van len lich', async (ctx) => {
     const f = files(ctx.tmp)
     await flags(ctx, { nocheckwarn: true, notypedate: true, timepick: true, nopremiere: true, en: true })
