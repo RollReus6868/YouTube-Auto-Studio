@@ -1,7 +1,7 @@
 // Trang "Cộng đồng": tra loi binh luan cua nguoi xem qua hop thu YouTube Studio (Cong dong → Binh luan),
 // gom binh luan duoi video, Shorts va bai dang cua cac kenh da chon. Trang thai: state.f.inbox (src/features/inbox.js).
-import { Check, MessagesSquare, RefreshCw, Square, Users } from 'lucide-react'
-import { useState } from 'react'
+import { Check, MessagesSquare, Play, RefreshCw, Send, Square, Users } from 'lucide-react'
+import { useRef, useState } from 'react'
 import { CommentCard, FILTERS, isPending, type CommentItem } from '../CommentCard'
 import { ActionBar, Button, EmptyState, PageBody, PageHeader, Pill, Select, cn } from '../kit'
 import type { PageProps } from './index'
@@ -15,6 +15,8 @@ export type InboxState = {
   at: string
   items: (CommentItem & { channelKey?: string })[]
   sentLastHour: number
+  sending?: number // tra loi dang gui / xep hang gui
+  paused?: boolean // da bam Dung: khong tu lay binh luan moi 10 phut
 }
 
 const MODE: Record<string, string> = { auto: 'Tự gửi lời khen ngắn', off: 'Tắt tự động', review: 'Duyệt tay' }
@@ -35,6 +37,10 @@ export function CommunityRepliesPage({ state, send, go }: PageProps) {
   const pending = s.items.filter((c) => (!only || c.channelKey === only) && isPending(c)).length
   const mode = state.settings?.replyMode ?? 'review'
   const named = s.options.filter((o) => sel.has(o.key))
+  // chu dang sua tren tung the (gui het = gui dung chu dang hien)
+  const edits = useRef<Record<string, string>>({})
+  const ready = items.filter((c) => c.status === 'ready' && (edits.current[c.id] ?? c.draft).trim())
+  const working = s.busy || (s.sending ?? 0) > 0
   return (
     <>
       <PageHeader
@@ -78,21 +84,34 @@ export function CommunityRepliesPage({ state, send, go }: PageProps) {
           <EmptyState icon={MessagesSquare} text={!s.channels.length ? 'Tick kênh ở trên rồi bấm "Lấy bình luận mới". Tool mở Studio → Cộng đồng → Bình luận (lọc "Chưa phản hồi") của từng kênh.'
             : filter === 'pending' ? 'Không có bình luận nào chờ trả lời. Bấm "Lấy bình luận mới" để kiểm tra.' : 'Chưa có bình luận nào ở mục này.'} />
         ) : items.map((c) => (
-          <CommentCard key={c.id} c={c} canReply={state.secrets.gemini}
+          <CommentCard key={c.id} c={c} canReply={state.secrets.gemini} onEdit={(t) => { edits.current[c.id] = t }}
             on={{ send: (text) => send('inbox_send', { id: c.id, text }), skip: () => send('inbox_skip', c.id), redraft: () => send('inbox_redraft', c.id) }} />
         ))}
         <p className="text-[11px] text-muted-foreground">
           Tool tìm lại đúng bình luận theo mã của YouTube trước khi gửi và bỏ qua bình luận kênh đã trả lời, nên không trả lời trùng (kể cả với trang Bình luận).
-          {mode !== 'off' && ' Tự kiểm tra bình luận mới mỗi 10 phút khi tool đang mở.'} Khung bên phải là Studio để bạn xem trực tiếp.
+          {mode !== 'off' && (s.paused ? ' Đã dừng tự kiểm tra bình luận mới (bấm "Lấy bình luận mới" hoặc "Bật lại tự động").' : ' Tự kiểm tra bình luận mới mỗi 10 phút khi tool đang mở.')} Khung bên phải là Studio để bạn xem trực tiếp.
         </p>
       </PageBody>
       <ActionBar>
-        {s.busy ? (
-          <Button variant="danger" size="sm" className="max-w-full" onClick={() => send('inbox_stop')}><Square /> <span className="truncate">Dừng{s.current ? ` (đang đọc "${s.current}")` : ''}</span></Button>
-        ) : (
-          <Button variant="gradient" size="sm" disabled={!s.channels.length} onClick={() => send('inbox_fetch')}>
-            <RefreshCw /> {s.channels.length > 1 ? `Lấy bình luận mới (${s.channels.length} kênh)` : 'Lấy bình luận mới'}
+        {s.paused && !working && (
+          <Button variant="outline" size="sm" onClick={() => send('inbox_resume')} title="Đã bấm Dừng: tool không tự lấy bình luận mỗi 10 phút"><Play /> Bật lại tự động</Button>
+        )}
+        {working ? (
+          <Button variant="danger" size="sm" className="max-w-full" onClick={() => send('inbox_stop')}>
+            <Square /> <span className="truncate">Dừng{s.current ? ` (đang đọc "${s.current}")` : (s.sending ?? 0) > 0 ? ` (còn ${s.sending} trả lời)` : ''}</span>
           </Button>
+        ) : (
+          <>
+            {ready.length > 1 && (
+              <Button variant="outline" size="sm" onClick={() => send('inbox_send_all', { ids: ready.map((c) => c.id), texts: Object.fromEntries(ready.map((c) => [c.id, edits.current[c.id] ?? c.draft])) })}
+                title="Gửi tất cả trả lời đang hiện (đúng chữ trên từng thẻ), mỗi kênh mở hộp thư một lần">
+                <Send /> Gửi hết ({ready.length})
+              </Button>
+            )}
+            <Button variant="gradient" size="sm" disabled={!s.channels.length} onClick={() => send('inbox_fetch')}>
+              <RefreshCw /> {s.channels.length > 1 ? `Lấy bình luận mới (${s.channels.length} kênh)` : 'Lấy bình luận mới'}
+            </Button>
+          </>
         )}
       </ActionBar>
     </>

@@ -1,3 +1,18 @@
+## YT Auto Studio 0.5.7
+
+### Tối ưu video
+- **Sửa lỗi video công chiếu / đã lên lịch:** sau khi video đã công chiếu xong hoặc đã công khai, tool vẫn báo "Video đang Công chiếu / Đã lên lịch" và không thích, bình luận, ghim. Nguyên nhân là tool dùng chế độ hiển thị cũ từ lần quét trước. Giờ lúc tối ưu, tool đọc lại chế độ hiển thị ngay trên trang Chi tiết video và cập nhật lại dòng của video.
+
+### Cộng đồng
+- **Nhanh hơn nhiều:**
+  - Mỗi kênh chỉ chuyển kênh một lần: tool đọc hộp thư, Gemini soạn 4 bình luận cùng lúc, rồi gửi ngay trên hộp thư đang mở.
+  - Các lần gửi cách nhau 2–5 giây thay vì 20–60 giây như trước.
+- **Nút "Gửi hết (N)":** gửi tất cả trả lời đang hiện, đúng chữ bạn đã sửa trên từng thẻ. Mỗi kênh chỉ mở hộp thư một lần.
+- **Nút Dừng dừng thật:**
+  - Tool dừng ngay việc đang làm, kể cả các trả lời đang xếp hàng gửi.
+  - Tool không tự lấy bình luận mỗi 10 phút nữa cho tới khi bạn bấm "Lấy bình luận mới" hoặc "Bật lại tự động".
+  - Nút Dừng hiện cả lúc tool đang gửi trả lời.
+
 ## YT Auto Studio 0.5.6
 
 Sửa tiếp lỗi đăng video "Bạn đã có quyền sử dụng tính năng này rồi. Hãy thử làm mới trang".

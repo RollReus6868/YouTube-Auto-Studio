@@ -90,8 +90,9 @@ module.exports = (ctx) => {
   // Chi co mot khung: moi viec (moi tai khoan) chay lan luot.
   let paneChain = Promise.resolve()
   const inPane = () => ctx.store.settings.runInPane !== false && !!(ctx.studio && ctx.studio.claim)
-  function onPane(acc, fn, what) {
+  function onPane(acc, fn, what, stopIf) {
     const run = paneChain.then(async () => {
+      if (stopIf && stopIf()) throw new Error('Đã dừng theo yêu cầu.') // dung luc con xep hang: khong mo khung
       ctx.studio.claim(what)
       try {
         ctx.studio.use(acc.partition, undefined, { force: true })
@@ -99,7 +100,7 @@ module.exports = (ctx) => {
         if (!wc || wc.isDestroyed()) throw new Error('Khung trình duyệt chưa mở.')
         wc.setAudioMuted(true) // trang xem video tu phat tieng
         try {
-          return await fn(new Page(wc, { timeout: 20000, shotDir: ctx.logFile('loi-trang'), shouldStop: ctx.stopped, wake: ctx.studio.wake }))
+          return await fn(new Page(wc, { timeout: 20000, shotDir: ctx.logFile('loi-trang'), shouldStop: () => ctx.stopped() || !!(stopIf && stopIf()), wake: ctx.studio.wake }))
         } finally {
           if (!wc.isDestroyed()) wc.setAudioMuted(false)
         }
@@ -162,14 +163,21 @@ module.exports = (ctx) => {
   }
 
   // ---- chay viec tren mot kenh ----------------------------------------------------------
-  async function withChannel(key, fn, { label: what = '' } = {}) {
+  // shouldStop: dung rieng viec nay (vd nut Dung o trang Cong dong) - buoc dang cho tren trang nem "Đã dừng theo yêu cầu."
+  async function withChannel(key, fn, { label: what = '', shouldStop = null } = {}) {
     const ch = m().find(key)
     if (!ch) throw new Error(`Không có kênh "${key}" ở trang Tài khoản. Bấm "Làm mới kênh" rồi tick kênh cần dùng.`)
     const acc = m().get(ch.accountId)
     if (acc.status === 'needs-sign-in') throw new Error(`Tài khoản Google "${acc.label}" chưa đăng nhập (trang Tài khoản → Đăng nhập).`)
     const job = `${what || 'Việc tự động'} · ${ch.name}`
-    const runner = inPane() ? (fn) => onPane(acc, fn, job) : (fn) => onAccount(acc.id, fn)
+    const runner = inPane() ? (fn) => onPane(acc, fn, job, shouldStop) : (fn) => onAccount(acc.id, (page) => {
+      if (!shouldStop) return fn(page)
+      const prev = page.shouldStop
+      page.shouldStop = () => prev() || !!shouldStop()
+      return Promise.resolve(fn(page)).finally(() => { page.shouldStop = prev })
+    })
     return runner(async (page) => {
+      if (shouldStop && shouldStop()) throw new Error('Đã dừng theo yêu cầu.')
       try {
         const r = await flows.switchChannel(page, ch, { urls: ctx.urls, log: ctx.log })
         const learnt = m().learn(acc.id, { ucId: r.ucId, name: ch.name, handle: ch.handle })
@@ -179,6 +187,7 @@ module.exports = (ctx) => {
         if (channelOf(page.url()) !== r.ucId) throw new Error(`Studio rời khỏi kênh "${ch.name}" trước khi bắt đầu.`)
         return await fn(page)
       } catch (e) {
+        if (shouldStop && shouldStop()) throw e // dung theo yeu cau: khong luu anh loi
         if (SIGNIN_URL.test(page.url())) { m().update(acc.id, { status: 'needs-sign-in' }); sync() }
         const shot = await page.snapshot((what || 'kenh').replace(/[^\w-]+/g, '-').slice(0, 40))
         if (shot) ctx.log('warn', `${what ? `${what}: ` : ''}đã lưu ảnh trang lúc lỗi: ${shot}.png`)

@@ -421,6 +421,16 @@ module.exports.push(['tinh nang: quet, toi uu da chon, nho video da toi uu', asy
   await f.commands.optimize_list(UC)
   assert.equal(S.videos.find((v) => v.id === VID).status, 'done')
   assert.deepEqual(S.videos.find((v) => v.id === 'Prem0000001').missing.slice(-3), ['thích', 'bình luận', 'ghim'])
+  // cong chieu xong, da cong khai (danh sach quet van ghi "Đang công chiếu"): doc lai o trang Chi tiet -> thich / binh luan duoc
+  await page.eval(() => localStorage.setItem('opt-vis-Prem0000001', JSON.stringify('Công khai')))
+  mock.events.length = 0
+  await f.commands.optimize_run({ channelKey: UC, ids: ['Prem0000001'] })
+  const prem = S.videos.find((v) => v.id === 'Prem0000001')
+  assert.equal(prem.visibility, 'Công khai', logs.join('\n'))
+  assert.deepEqual([prem.status, prem.missing], ['done', []], logs.join('\n'))
+  assert.equal((await events(mock, 'comment')).length, 1)
+  assert.match(logs.join('\n'), /chế độ hiển thị giờ là "Công khai" \(lúc quét: "Đang công chiếu"\)/)
+  await page.eval(() => localStorage.removeItem('opt-vis-Prem0000001'))
   // tu toi uu sau khi dang (mau tu uploader: afterUploadTemplate): xep hang cho, toi gio thi chay
   mock.events.length = 0
   const pendRead = () => JSON.parse(fs.readFileSync(path.join(tmp, 'optimize-pending.json'), 'utf8'))

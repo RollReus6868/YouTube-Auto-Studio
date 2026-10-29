@@ -60,7 +60,7 @@ function render() {
         <div class="right-section"><div class="video-title-wrapper"><ytcp-ve role="none"><a id="video-title" href="/studio/video/${v.id}/edit" aria-label="${esc(v.title)}"><span>${esc(v.title)}</span></a></ytcp-ve></div>
           <div class="video-under-title-wrapper"><div class="description">${esc(v.title)} In this episode of Dark Bible Study…</div></div></div></ytcp-video-list-cell-video></div>
       <div role="cell" class="cell-body tablecell-restrictions"><ytcp-video-notices><span class="ytcpVideoNoticesNoticeText">Có thể bị hạn chế thu nh…</span></ytcp-video-notices></div>
-      <div role="cell" class="cell-body tablecell-visibility"><div><div class="icon-text-edit-triangle-wrap editable"><span class="label-span">${v.vis}</span></div></div></div>
+      <div role="cell" class="cell-body tablecell-visibility"><div><div class="icon-text-edit-triangle-wrap editable"><span class="label-span">${OPT.load('opt-vis-' + v.id, v.vis)}</span></div></div></div>
       <div role="cell" class="cell-body tablecell-date sortable column-sorted">${v.date}<div class="cell-description">${v.note}</div></div>
       <div role="cell" class="cell-body tablecell-views sortable right-align">${v.views}</div>
       <div role="cell" class="cell-body tablecell-views right-align vidiq-scope vidiq-studio-engaged-views-cell"><span class="vidiq-scope">${Math.round(v.views * 0.8)}</span></div>

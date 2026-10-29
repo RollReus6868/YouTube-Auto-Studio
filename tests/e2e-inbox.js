@@ -97,6 +97,30 @@ const waitFor = async (fn, what, ms = 60000) => {
     assert.deepEqual(s.f.inbox.items.filter((x) => x.status === 'sent').map((x) => x.author).sort(), ['@ElizabethBade-l7n', '@milliecook8852', '@ruthann-k2'])
     assert(s.f.inbox.items.every((x) => x.status === 'sent' || x.status === 'ready'), JSON.stringify(s.f.inbox.items.map((x) => [x.author, x.status, x.error])))
     await ui.getByRole('button', { name: 'Chờ duyệt (6)' }).waitFor()
+
+    // Dung: dung ngay luot dang chay, khong tu lay binh luan nua (nut "Bat lai tu dong"); lay tay = bat lai
+    await ui.getByRole('button', { name: 'Lấy bình luận mới' }).click()
+    await ui.getByRole('button', { name: /Dừng/ }).click()
+    await waitFor(async () => !(await st()).f.inbox.busy, 'dung xong', 30000)
+    s = await st()
+    assert.equal(s.f.inbox.paused, true)
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8')).inboxPaused, true, 'nho trang thai dung')
+    assert(s.logs.some((l) => /đã bấm Dừng/.test(l.msg)))
+    await ui.getByRole('button', { name: 'Bật lại tự động' }).click()
+    await waitFor(async () => (await st()).f.inbox.paused === false, 'bat lai tu dong')
+
+    // Gui het: 6 ban nhap (dung chu da sua tren the), moi kenh mo hop thu mot lan, khong gui trung
+    const first = s.f.inbox.items.find((x) => x.status === 'ready')
+    await ui.getByLabel(`Trả lời ${first.author}`).fill('Đã sửa trước khi gửi hết 🙏')
+    const opens0 = yt.hits.filter((h) => /\/comments\/inbox/.test(h)).length
+    await ui.getByRole('button', { name: 'Gửi hết (6)' }).click()
+    await waitFor(() => replies().length === 9, 'gui het 6 tra loi', 120000)
+    await waitFor(async () => (await st()).f.inbox.sending === 0, 'gui xong')
+    s = await st()
+    assert(s.f.inbox.items.every((x) => x.status === 'sent'), JSON.stringify(s.f.inbox.items.map((x) => [x.author, x.status, x.error])))
+    assert.equal(replies().find((r) => r.author === first.author).text, 'Đã sửa trước khi gửi hết 🙏')
+    assert.equal(new Set(replies().map((r) => r.key)).size, 9, 'khong tra loi trung')
+    assert.equal(yt.hits.filter((h) => /\/comments\/inbox/.test(h)).length - opens0, 1, 'mo hop thu 1 lan cho ca 6 tra loi')
     if (process.env.YA_SHOT) require('child_process').execFileSync('import', ['-window', 'root', path.join(process.env.YA_SHOT, 'app-cong-dong.png')])
     console.log('E2E INBOX PASSED')
   }, dataDir)

@@ -9,14 +9,19 @@ const flow = require('../flows/inbox')
 
 const POLL_MS = Number(process.env.YA_INBOX_POLL_MS || process.env.YA_COMMENT_POLL_MS) || 10 * 60e3
 const MAX_READ = Number(process.env.YA_INBOX_MAX) || 60 // binh luan doc moi kenh moi luot
-const DRAFTS_PER_ROUND = 20
-// cach nhau 20–60 giay giua hai lan tu gui (tranh bo loc spam cua YouTube)
-const gap = () => (process.env.YA_INBOX_GAP_MS !== undefined ? Number(process.env.YA_INBOX_GAP_MS) : 20e3 + Math.random() * 40e3)
+const DRAFTS_PER_ROUND = 60
+const DRAFT_PARALLEL = 4 // Gemini soan cung luc
+// cach nhau 2–5 giay giua hai lan gui trong cung mot luot (nguoi dung muon nhanh; van khong gui don dap)
+const gap = () => (process.env.YA_INBOX_GAP_MS !== undefined ? Number(process.env.YA_INBOX_GAP_MS) : 2e3 + Math.random() * 3e3)
 const ACCOUNTS_MISSING = 'Chưa có tài khoản Google nào (trang Tài khoản).'
+const STOPPED = /Đã dừng theo yêu cầu/
 
 module.exports = (ctx) => {
-  const S = ctx.state.f.inbox = { channels: [], options: [], busy: false, current: '', at: '', items: [], sentLastHour: 0 }
-  let stopReq = false
+  const S = ctx.state.f.inbox = { channels: [], options: [], busy: false, current: '', at: '', items: [], sentLastHour: 0, sending: 0, paused: false }
+  // nut Dung: tang gen -> moi viec bat dau truoc do (dang chay / dang xep hang) dung ngay o buoc dang cho;
+  // paused: khong tu lay binh luan moi 10 phut nua cho toi khi nguoi dung bam "Lay binh luan moi"
+  let gen = 0
+  const halted = (g) => g !== gen
   const settings = () => ctx.store.settings
   const desk = () => ctx.desk
 
@@ -30,6 +35,7 @@ module.exports = (ctx) => {
     return [...new Set(keys)]
   }
   function refresh() {
+    S.paused = !!settings().inboxPaused
     S.options = ctx.accounts ? ctx.accounts.channels().map((c) => ({ key: c.key, name: c.name, handle: c.handle, accountId: c.accountId })) : []
     S.channels = selected()
     const d = desk()
@@ -68,93 +74,149 @@ module.exports = (ctx) => {
     return desk().update(item.id, { status: 'ready', kind: r.kind, draft: r.reply, error: '' })
   }
 
-  // ---- gui mot tra loi (tim lai hang, kiem kenh, khong gui hai lan) -------------------------
-  async function sendOne(item, text) {
-    text = String(text || '').trim().replace(/[<>]/g, '')
-    if (!item || !text) return false
-    if (!ctx.withChannel) { ctx.log('warn', ACCOUNTS_MISSING); return false }
-    if (item.status === 'sent') return false
-    if (!desk().canSend(settings().replyPerHour)) {
-      ctx.log('warn', `Đã gửi đủ ${settings().replyPerHour} trả lời trong 1 giờ qua (giới hạn trong Cài đặt). Thử lại sau.`)
-      return false
-    }
-    const ch = ctx.accounts && ctx.accounts.find(item.channelKey)
-    if (!ch) { desk().update(item.id, { status: 'error', error: `Không còn kênh "${item.channelName}" ở trang Tài khoản.` }); return false }
-    try {
-      const r = await ctx.withChannel(ch.key, async (page) => {
-        const uc = channelOf(page.url())
-        await flow.openInbox(page, uc, { urls: ctx.urls, log: ctx.log })
-        return flow.reply(page, { id: item.id, author: item.author }, text, { uc, handle: ch.handle, urls: ctx.urls, log: ctx.log })
-      }, { label: `Trả lời ${item.author}` })
-      if (r.status === 'already') {
-        desk().update(item.id, { status: 'skipped', note: 'Kênh đã trả lời bình luận này rồi' })
-        return false
+  // ---- gui tra loi: moi kenh mot lan mo hop thu, gui lien tiep (tim lai hang, kiem kenh, khong gui hai lan) ----
+  // list: [{ item, text }] cung mot kenh. Chay trong page da o dung kenh (trong withChannel). Tra ve so da gui.
+  async function sendOn(page, ch, list, g) {
+    let sent = 0
+    let opened = false
+    for (const { item, text } of list) {
+      if (halted(g)) break
+      const it = desk().get(item.id) || item
+      if (it.status === 'sent') continue
+      if (!desk().canSend(settings().replyPerHour)) {
+        ctx.log('warn', `Đã gửi đủ ${settings().replyPerHour} trả lời trong 1 giờ qua (giới hạn trong Cài đặt). Thử lại sau.`)
+        break
       }
-      desk().markSent(item.id, text)
-      return true
-    } catch (e) {
-      desk().update(item.id, { status: 'error', error: e.message })
-      ctx.log('error', `Không gửi được trả lời cho ${item.author} (${item.channelName}): ${e.message}`)
-      return false
-    } finally { refresh() }
+      try {
+        if (!opened) { await flow.openInbox(page, channelOf(page.url()), { urls: ctx.urls, log: ctx.log }); opened = true }
+        else await sleep(gap())
+        if (halted(g)) break
+        const r = await flow.reply(page, { id: it.id, author: it.author }, text, { uc: channelOf(page.url()), handle: ch.handle, urls: ctx.urls, log: ctx.log })
+        if (r.status === 'already') desk().update(it.id, { status: 'skipped', note: 'Kênh đã trả lời bình luận này rồi' })
+        else { desk().markSent(it.id, text); sent++ }
+      } catch (e) {
+        if (halted(g) || STOPPED.test(e.message)) break
+        desk().update(it.id, { status: 'error', error: e.message })
+        ctx.log('error', `Không gửi được trả lời cho ${it.author} (${it.channelName}): ${e.message}`)
+      } finally {
+        S.sending = Math.max(0, S.sending - 1)
+        refresh()
+      }
+    }
+    return sent
   }
 
-  // ---- mot luot: doc tung kenh -> Gemini soan -> (tu gui) loi khen ---------------------------
+  // list: [{ item, text }] (nhieu kenh) -> gom theo kenh, moi kenh mot lan chuyen kenh
+  async function sendMany(list) {
+    if (!ctx.withChannel) { ctx.log('warn', ACCOUNTS_MISSING); return 0 }
+    list = list.map((x) => ({ item: x.item, text: String(x.text || '').trim().replace(/[<>]/g, '') })).filter((x) => x.item && x.text && x.item.status !== 'sent')
+    if (!list.length) return 0
+    if (!desk().canSend(settings().replyPerHour)) {
+      ctx.log('warn', `Đã gửi đủ ${settings().replyPerHour} trả lời trong 1 giờ qua (giới hạn trong Cài đặt). Thử lại sau.`)
+      return 0
+    }
+    const g = gen
+    const groups = new Map()
+    for (const x of list) groups.set(x.item.channelKey, [...(groups.get(x.item.channelKey) || []), x])
+    S.sending += list.length
+    refresh()
+    let sent = 0
+    for (const [key, part] of groups) {
+      const ch = ctx.accounts && ctx.accounts.find(key)
+      const left = () => part.filter((x) => (desk().get(x.item.id) || {}).status !== 'sent')
+      if (!ch || halted(g)) {
+        if (!ch) for (const x of part) desk().update(x.item.id, { status: 'error', error: `Không còn kênh "${x.item.channelName}" ở trang Tài khoản.` })
+        S.sending = Math.max(0, S.sending - part.length)
+        refresh()
+        continue
+      }
+      const before = S.sending - part.length
+      try {
+        sent += await ctx.withChannel(ch.key, (page) => sendOn(page, ch, part, g), { label: part.length > 1 ? `Trả lời ${part.length} bình luận` : `Trả lời ${part[0].item.author}`, shouldStop: () => halted(g) })
+      } catch (e) {
+        if (!(halted(g) || STOPPED.test(e.message))) {
+          for (const x of left()) desk().update(x.item.id, { status: 'error', error: e.message })
+          ctx.log('error', `Không gửi được trả lời ở kênh "${ch.name}": ${e.message}`)
+        }
+      } finally {
+        S.sending = Math.max(0, Math.min(S.sending, before)) // phan chua gui (dung / loi) khong con cho
+        refresh()
+      }
+    }
+    if (halted(g)) ctx.log('info', `Cộng đồng: đã dừng, đã gửi ${sent} trả lời.`)
+    return sent
+  }
+
+  // Gemini soan nhieu binh luan cung luc (DRAFT_PARALLEL); key sai / het han muc -> dung ca luot
+  async function draftAll(list, g) {
+    let i = 0
+    let fatal = false
+    const worker = async () => {
+      while (!fatal && !halted(g) && i < list.length) {
+        const it = list[i++]
+        try { await draft(it) } catch (e) {
+          desk().update(it.id, { status: 'error', error: e.message })
+          if (['badKey', 'quota', 'model'].includes(e.reason)) { if (!fatal) ctx.log('error', `Gemini: ${e.message}`); fatal = true }
+        }
+        refresh()
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(DRAFT_PARALLEL, list.length) }, worker))
+  }
+
+  // ---- mot luot: moi kenh mot lan chuyen kenh: doc hop thu -> Gemini soan -> (tu gui) loi khen ----
   async function round(manual, keys) {
     if (S.busy) return
-    if (!manual && settings().replyMode === 'off') return
+    if (!manual && (settings().replyMode === 'off' || settings().inboxPaused)) return
     if (!ctx.withChannel || !ctx.accounts) return manual && ctx.log('warn', ACCOUNTS_MISSING)
     keys = (keys && keys.length ? keys : selected()).filter(Boolean)
     if (!keys.length) return manual && ctx.log('warn', 'Chọn ít nhất một kênh để lấy bình luận (trang Cộng đồng).')
+    if (manual && settings().inboxPaused) ctx.store.save({ inboxPaused: false }) // bam lay tay = bat lai tu dong
+    const g = gen
     S.busy = true
-    stopReq = false
     refresh()
     let added = 0
     let sent = 0
+    let noKey = false
     try {
       for (const key of keys) {
-        if (stopReq) break
+        if (halted(g)) break
         const ch = ctx.accounts.find(key)
         if (!ch) { ctx.log('warn', `Không có kênh "${key}" ở trang Tài khoản, bỏ qua.`); continue }
         S.current = ch.name
         refresh()
         try {
-          const rows = await ctx.withChannel(key, async (page) => {
+          await ctx.withChannel(key, async (page) => {
             await flow.openInbox(page, channelOf(page.url()), { urls: ctx.urls, log: ctx.log })
-            return flow.readComments(page, { max: MAX_READ, handle: ch.handle })
-          }, { label: `Bình luận ${ch.name}` })
-          const n = mergeRows(rows, ch)
-          added += n
-          if (n || manual) ctx.log('info', `"${ch.name}": ${n} bình luận mới chưa phản hồi (đọc ${rows.length} trong hộp thư Studio).`)
+            const rows = await flow.readComments(page, { max: MAX_READ, handle: ch.handle })
+            const n = mergeRows(rows, ch)
+            added += n
+            if (n || manual) ctx.log('info', `"${ch.name}": ${n} bình luận mới chưa phản hồi (đọc ${rows.length} trong hộp thư Studio).`)
+            refresh()
+            if (settings().replyMode === 'off' || halted(g)) return
+            const mine = (status) => desk().items.filter((x) => x.source === 'studio' && x.channelKey === ch.key && x.status === status)
+            const fresh = mine('new').slice(0, DRAFTS_PER_ROUND)
+            if (fresh.length && !ctx.store.hasSecret('gemini')) noKey = true
+            else await draftAll(fresh, g)
+            // tu gui loi khen ngan (ca ban nhap tu luot truoc chua gui vi het gioi han) ngay tren hop thu dang mo
+            if (settings().replyMode !== 'auto' || halted(g)) return
+            const auto = mine('ready').filter((x) => CommentDesk.autoOk(x))
+            if (!auto.length || !desk().canSend(settings().replyPerHour)) return
+            S.sending += auto.length
+            refresh()
+            sent += await sendOn(page, ch, auto.map((it) => ({ item: it, text: String(it.draft || '').replace(/[<>]/g, '') })), g)
+            S.sending = 0
+          }, { label: `Bình luận ${ch.name}`, shouldStop: () => halted(g) })
         } catch (e) {
+          S.sending = 0
+          if (halted(g) || STOPPED.test(e.message)) break
           ctx.log('error', `"${ch.name}": không đọc được hộp thư bình luận: ${e.message}`)
-          continue
         }
         refresh()
-        const mine = (status) => desk().items.filter((x) => x.source === 'studio' && x.channelKey === ch.key && x.status === status)
-        if (settings().replyMode === 'off') continue
-        const fresh = mine('new')
-        if (fresh.length && !ctx.store.hasSecret('gemini')) ctx.log('warn', 'Chưa có Gemini API key nên chưa soạn được trả lời (Cài đặt → Gemini API).')
-        else {
-          let i = 0
-          for (const it of fresh) {
-            if (stopReq || i++ >= DRAFTS_PER_ROUND) break
-            try { await draft(it) } catch (e) {
-              desk().update(it.id, { status: 'error', error: e.message })
-              if (['badKey', 'quota', 'model'].includes(e.reason)) { ctx.log('error', `Gemini: ${e.message}`); break }
-            }
-            refresh()
-          }
-        }
-        // tu gui loi khen ngan (ca ban nhap tu luot truoc chua gui vi het gioi han)
-        if (settings().replyMode !== 'auto') continue
-        for (const it of mine('ready').filter((x) => CommentDesk.autoOk(x))) {
-          if (stopReq || !desk().canSend(settings().replyPerHour)) break
-          if (sent) await sleep(gap())
-          if (await sendOne(it, it.draft)) sent++
-        }
       }
-      if (sent) ctx.log('ok', `Cộng đồng: đã tự gửi ${sent} trả lời cho bình luận khen.`)
+      if (noKey) ctx.log('warn', 'Chưa có Gemini API key nên chưa soạn được trả lời (Cài đặt → Gemini API).')
+      if (halted(g)) ctx.log('info', `Cộng đồng: đã dừng${sent ? ` (đã tự gửi ${sent} trả lời)` : ''}.`)
+      else if (sent) ctx.log('ok', `Cộng đồng: đã tự gửi ${sent} trả lời cho bình luận khen.`)
       else if (manual && !added) ctx.log('info', 'Cộng đồng: không có bình luận mới.')
     } finally {
       S.busy = false
@@ -171,10 +233,28 @@ module.exports = (ctx) => {
         refresh()
       },
       inbox_fetch: (p) => round(true, p && p.channelKeys),
-      inbox_stop: () => { stopReq = true; ctx.log('info', 'Cộng đồng: dừng sau bước đang làm.') },
+      // Dung ngay (ca viec dang xep hang) va khong tu lay binh luan nua cho toi khi bam "Lay binh luan moi"
+      inbox_stop: () => {
+        gen++
+        ctx.store.save({ inboxPaused: true })
+        ctx.log('info', 'Cộng đồng: đã bấm Dừng. Tool dừng việc đang làm và không tự lấy bình luận nữa cho tới khi bạn bấm "Lấy bình luận mới".')
+        refresh()
+      },
+      inbox_resume: () => { ctx.store.save({ inboxPaused: false }); ctx.log('info', 'Cộng đồng: bật lại tự lấy bình luận mỗi 10 phút.'); refresh() },
       inbox_send: async (p) => {
         const it = p && desk().get(p.id)
-        if (it) await sendOne(it, p.text) // luong da ghi "Da tra loi ..." vao nhat ky
+        if (it) await sendMany([{ item: it, text: p.text }]) // luong da ghi "Da tra loi ..." vao nhat ky
+      },
+      // gui het ban nhap dang cho (ids: dung cac binh luan dang hien; texts: chu da sua tren the)
+      inbox_send_all: async (p) => {
+        const texts = (p && p.texts) || {}
+        const ids = p && Array.isArray(p.ids) ? new Set(p.ids) : null
+        const list = desk().items.filter((x) => x.source === 'studio' && x.status === 'ready' && (!ids || ids.has(x.id)))
+          .map((it) => ({ item: it, text: texts[it.id] !== undefined ? texts[it.id] : it.draft }))
+        if (!list.length) return ctx.log('info', 'Cộng đồng: không có bản nháp nào để gửi.')
+        ctx.log('info', `Cộng đồng: gửi ${list.length} trả lời…`)
+        const n = await sendMany(list)
+        ctx.log(n === list.length ? 'ok' : 'warn', `Cộng đồng: đã gửi ${n}/${list.length} trả lời.`)
       },
       inbox_skip: (id) => { desk().update(id, { status: 'skipped', note: 'Bạn bỏ qua' }); refresh() },
       inbox_redraft: async (id) => {

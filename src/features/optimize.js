@@ -7,7 +7,7 @@
 // Video lan truoc da "Đã tối ưu" (the xanh) thi quet bo qua, khong mo trang Chi tiet nua (ot.alreadyOptimized);
 // "Quét lại" o tung video (optimize_rescan) ep doc lai. Ket qua quet cua tung video luu them o optimized.json (_scanned).
 const fs = require('fs')
-const { listVideos, optimizeVideo, inspectVideo, commentAndPin, pinNote } = require('../flows/optimize')
+const { listVideos, optimizeVideo, videoVisibility, inspectVideo, commentAndPin, pinNote } = require('../flows/optimize')
 const ot = require('../optimize-template')
 
 // Binh luan duoc tren trang xem: video cong khai / khong cong khai (rieng tu, len lich, cong chieu thi khong).
@@ -296,8 +296,17 @@ module.exports = (ctx) => {
             const warnings = [...r.warnings]
             const text = ot.renderComment(tpl.comment, { tieu_de: r.title || v.title, link: `https://youtu.be/${v.id}`, ten_kenh: name })
             let c = null
+            // che do hien thi luc quet co the da cu (cong chieu / len lich xong -> cong khai): doc lai o trang Chi tiet
+            let vis = r.visibility || ''
+            if ((tpl.like || text) && !vis && !ot.canCommentVisibility(v.visibility)) vis = await videoVisibility(page, v.id, { urls: ctx.urls }).catch(() => '')
+            vis = vis || v.visibility
+            if (vis !== v.visibility) {
+              ctx.log('info', `${r.title || v.title || v.id}: chế độ hiển thị giờ là "${vis}" (lúc quét: "${v.visibility || '?'}").`)
+              setV(v.id, { visibility: vis })
+              v.visibility = vis
+            }
             if (tpl.like || text) {
-              if (ot.canCommentVisibility(v.visibility)) {
+              if (ot.canCommentVisibility(vis)) {
                 // phan Studio da luu: loi o trang xem video chi la canh bao (chay lai se khong dang trung)
                 try {
                   const ch = channel(key) || {}
@@ -308,7 +317,7 @@ module.exports = (ctx) => {
                   if (page.snapshot) await page.snapshot(`binh-luan-${v.id}`)
                   warnings.push(`Đã tối ưu trong Studio nhưng chưa thích / bình luận được: ${e.message}`)
                 }
-              } else warnings.push(`Video đang "${v.visibility}" nên chưa thích / bình luận được. Tối ưu lại khi video đã công khai.`)
+              } else warnings.push(`Video đang "${vis}" nên chưa thích / bình luận được. Tối ưu lại khi video đã công khai.`)
             }
             // viec muon lam o trang xem video ma CHUA kiem lai duoc (sau khi tai lai trang).
             // Kenh khong ghim duoc (menu khong co Ghim / bam Ghim khong an): khong tinh la thieu, chi ghi chu.

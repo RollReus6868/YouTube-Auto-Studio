@@ -196,7 +196,7 @@ function right() {
   return `<div style="width:220px;height:124px;background:#444">player</div>
     <div class="description">Đường liên kết của video</div><a href="https://youtu.be/${id}" id="link">https://youtu.be/${id}</a>
     <div class="description">Tên tệp</div><div>${esc(video.title)}</div>
-    <div class="description">Chế độ hiển thị</div><div>${video.vis}</div>
+    <ytcp-video-metadata-visibility can-edit-visibility=""><div class="description">Chế độ hiển thị</div><div id="visibility-text">${OPT.load('opt-vis-' + id, video.vis)}</div></ytcp-video-metadata-visibility>
     ${link('subtitles-editor-link', 'Phụ đề')}${link('endscreen-editor-link', 'Màn hình kết thúc').replace(PROCESSING ? 'role="button"' : '@@', 'role="button" disabled').replace(PROCESSING ? '<ytcp-dropdown-trigger' : '@@', '<ytcp-dropdown-trigger disabled')}${link('info-cards-editor-link', 'Thẻ')}${link('quiz-editor-link', 'Câu đố vui')}`
 }
 

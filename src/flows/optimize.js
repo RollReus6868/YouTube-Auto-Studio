@@ -721,6 +721,7 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
   })
   const title = String((await page.text({ selector: SEL.title })) || '').trim()
   await assertNotBlocked(page)
+  const visibility = await readVisibility(page)
 
   // keepFilled: muc da dien (ngay quay / vi tri bat ky, >= 1 danh sach phat) = xong, khong lam lai (giong quet)
   const c = { t, title, videoId, channelName, video, now, lang: 'vi', log, warn, changed, soft, keepFilled: true }
@@ -748,7 +749,20 @@ async function optimizeVideo(page, videoId, template, { urls, log = () => {}, on
     saved = true
   })
   const after = String((await page.text({ selector: SEL.title })) || '').trim() || title
-  return { id: videoId, title: after, changed, warnings, saved }
+  return { id: videoId, title: after, changed, warnings, saved, visibility }
+}
+
+// Che do hien thi HIEN TAI cua video o cot ben phai trang Chi tiet ("Chế độ hiển thị: Công khai"; HTML that:
+// ytcp-video-metadata-visibility #visibility-text). Danh sach quet luc truoc co the cu (video cong chieu / len lich
+// da cong khai roi). '' = khong doc duoc.
+const readVisibility = (page) => page.text({ selector: 'ytcp-video-metadata-visibility #visibility-text', hidden: true }).then((t) => String(t || '').replace(/\s+/g, ' ').trim()).catch(() => '')
+
+// Mo trang Chi tiet chi de doc che do hien thi (khi khong can sua gi trong Studio)
+async function videoVisibility(page, videoId, { urls }) {
+  await page.goto(`${urls.studio}/video/${videoId}/edit`)
+  await page.waitFor({ selector: SEL.title }, { timeout: Math.max(page.timeout, 20000) }).catch(() => {})
+  await assertNotBlocked(page)
+  return readVisibility(page)
 }
 
 // ---- (b2) doc trang Chi tiet video: CHI DOC (khong bam Luu, khong doi muc nao) ------
@@ -1310,6 +1324,6 @@ async function watchTasks(page, videoId, text, { urls, log = () => {}, onStep = 
   return out
 }
 
-module.exports = { LABELS, SEL, WATCH, BLOCKED, listVideos, optimizeVideo, inspectVideo, commentAndPin, pinNote, _t: { markSection, markDialog, triggerInfo, isChecked, isEnabled, sec, playlistItems, READ, scanThreads, commentIdentity, blocker, assertNotBlocked, headerCount, endScreenState, esLocked, openPlaylistDialog } }
+module.exports = { LABELS, SEL, WATCH, BLOCKED, listVideos, optimizeVideo, videoVisibility, readVisibility, inspectVideo, commentAndPin, pinNote, _t: { markSection, markDialog, triggerInfo, isChecked, isEnabled, sec, playlistItems, READ, scanThreads, commentIdentity, blocker, assertNotBlocked, headerCount, endScreenState, esLocked, openPlaylistDialog } }
 // dung lai trong hop thoai tai video len (src/flows/upload.js): cung cac o cua trang Chi tiet video
 Object.assign(module.exports._t, { pickRadio, pickOption, setCheckbox, openMore, pickCalendarDay, FIELDS, FIELD_ORDER })

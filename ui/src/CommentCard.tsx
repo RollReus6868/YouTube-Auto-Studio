@@ -28,9 +28,11 @@ function Tag({ icon: Icon, children, tone }: { icon?: typeof FileVideo; children
   )
 }
 
-export function CommentCard({ c, canReply, on }: { c: CommentItem; canReply: boolean; on: Actions }) {
+// onEdit: bao chu dang sua len trang (nut "Gui het" gui dung chu da sua)
+export function CommentCard({ c, canReply, on, onEdit }: { c: CommentItem; canReply: boolean; on: Actions; onEdit?: (text: string) => void }) {
   const [text, setText] = useState(c.draft)
   useEffect(() => setText(c.draft), [c.draft])
+  useEffect(() => { if (onEdit) onEdit(text) }, [text]) // eslint-disable-line react-hooks/exhaustive-deps
   const k = KIND[c.kind]
   return (
     <article className="space-y-2 rounded-xl border border-border/50 bg-card/40 p-3">
