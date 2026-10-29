@@ -1,3 +1,15 @@
+## YT Auto Studio 0.6.0
+
+### Tối ưu video
+- **Gộp quét và tối ưu thành một nút.** Bấm "Quét và tối ưu" (một kênh) hoặc "Quét và tối ưu toàn bộ" (mọi kênh đã tick): tool quét xong kênh nào thì tối ưu luôn các video còn thiếu của kênh đó, không phải bấm quét rồi bấm tối ưu nữa. Nút "Tối ưu lại đã chọn" vẫn còn để làm lại vài video mà không quét.
+- **Video Công chiếu giờ được thích, bình luận và ghim**, kể cả khi chưa tới giờ công chiếu. Video lên lịch thường (còn riêng tư) vẫn chờ tới khi công khai.
+
+### Cộng đồng
+- **Nút "Quét và thả tim":** tool mở hộp thư bình luận của từng kênh đã tick (mọi bình luận, kể cả bình luận đã trả lời) và thả tim cho bình luận của người xem chưa có tim. Tool không trả lời gì.
+  - Bình luận đã có tim thì không bấm, vì bấm lại là bỏ tim. Tool cũng nhớ các bình luận đã thả tim để lần sau không bấm lại.
+  - Nếu bấm 2 lần mà trang không cho thấy tim đã được thả, tool dừng ngay để không bấm nhầm.
+  - Mỗi lần xem tối đa 100 bình luận mới nhất mỗi kênh. Bấm Dừng để dừng giữa chừng.
+
 ## YT Auto Studio 0.5.9
 
 ### Đăng video

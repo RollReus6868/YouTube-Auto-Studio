@@ -35,6 +35,11 @@ const SEL = {
   tab: '#comments-tab, tp-yt-paper-tab, [role=tab]',
   filterIcon: '#filter-icon',
   submit: 'ytcp-commentbox #submit-button button',
+  // tim cua chu kenh (HTML that): ytcp-comment-creator-heart#creator-heart > #creator-heart-button > ytcp-icon-button
+  // [aria-label="Trái tim"] + #hearted-thumbnail (anh dai dien kenh, chi hien khi da tha tim)
+  heart: 'ytcp-comment-creator-heart, #creator-heart',
+  heartButton: '#creator-heart-button ytcp-icon-button, ytcp-icon-button, [role=button], button',
+  hearted: '#hearted-thumbnail',
 }
 
 // Doc tren trang: moi hang -> thong tin binh luan. opts.mark = id thi danh dau hang do de bam.
@@ -105,7 +110,15 @@ function scrollMore(sel) {
   const ya = window.__ya
   const rows = ya.all(document, sel.thread)
   const last = rows[rows.length - 1]
-  if (last) last.scrollIntoView({ block: 'end' })
+  if (!last) return 0
+  // khung cuon chua danh sach: cuon xuong cuoi; da o cuoi san (vd vua bam nut o hang cuoi) thi van bao "scroll"
+  let box = last.parentElement
+  while (box && box !== document.body && !(box.scrollHeight > box.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement
+  const target = box && box !== document.body ? box : document.scrollingElement || document.documentElement
+  const before = target.scrollTop
+  last.scrollIntoView({ block: 'end' })
+  target.scrollTop = target.scrollHeight
+  if (target.scrollTop === before) (target === document.scrollingElement ? window : target).dispatchEvent(new Event('scroll'))
   return rows.length
 }
 
@@ -128,14 +141,16 @@ const INBOX_FILTER = [
   { name: 'ENGAGED_STATUS', value: ['COMMENT_CATEGORY_NOT_ENGAGED'] },
   { name: 'PARENT_ENTITY_CONTENT_TYPE', value: ['PARENT_ENTITY_CONTENT_TYPE_WATCH', 'PARENT_ENTITY_CONTENT_TYPE_SHORT', 'PARENT_ENTITY_CONTENT_TYPE_CREATOR_POST'] },
 ]
-const inboxUrl = (studio, uc) => `${studio}/channel/${uc}/comments/inbox?filter=${encodeURIComponent(JSON.stringify(INBOX_FILTER))}`
+const inboxUrl = (studio, uc, filter = INBOX_FILTER) => `${studio}/channel/${uc}/comments/inbox?filter=${encodeURIComponent(JSON.stringify(filter))}`
+// Tha tim: moi binh luan (ca binh luan kenh da tra loi), khong loc trang thai phan hoi
+const ALL_FILTER = INBOX_FILTER.filter((f) => f.name !== 'ENGAGED_STATUS')
 
 // uc bo trong: lay tu dia chi trang hien tai (withChannel da chuyen dung kenh).
-async function openInbox(page, uc, { urls, log = () => {} } = {}) {
+async function openInbox(page, uc, { urls, log = () => {}, all = false } = {}) {
   uc = uc || channelOf(page.url())
   if (!uc) throw new StepError('Không biết UC ID của kênh để mở hộp thư bình luận.', 'Mở hộp thư bình luận')
   await page.run('Mở Cộng đồng → Bình luận', async () => {
-    await page.goto(inboxUrl(urls.studio, uc))
+    await page.goto(inboxUrl(urls.studio, uc, all ? ALL_FILTER : INBOX_FILTER))
     await page.waitFor({ regex: LABELS.tabComments, selector: SEL.tab })
   })
   // tab "Binh luan" (khong phai "Bai dang cua nguoi xem" / "Luot de cap")
@@ -145,7 +160,7 @@ async function openInbox(page, uc, { urls, log = () => {} } = {}) {
     return !!el && (el.getAttribute('aria-selected') === 'true' || el.hasAttribute('selected') || el.classList.contains('iron-selected'))
   }, tab)
   if (!selected) await page.click(tab)
-  await page.run('Lọc "Chưa phản hồi"', () => ensureNotResponded(page, log))
+  if (!all) await page.run('Lọc "Chưa phản hồi"', () => ensureNotResponded(page, log))
   await waitList(page)
   return uc
 }
@@ -283,4 +298,74 @@ async function reply(page, comment, text, { uc = '', handle = '', urls, log = ()
   return { status: 'sent' }
 }
 
-module.exports = { LABELS, SEL, INBOX_FILTER, inboxUrl, openInbox, readComments, reply, parseAgo, scanInbox }
+// ---- tha tim --------------------------------------------------------------------------------
+// Doc tim cua binh luan chinh moi hang (khong lay tim cua cac tra loi ben trong). opts.mark = id: danh dau nut tim
+// cua hang do (data-ya-heart). Tra ve [{ id, author, hearted, can }].
+function heartScan(sel, opts, scanInbox) {
+  const ya = window.__ya
+  for (const el of ya.all(document, '[data-ya-heart]')) el.removeAttribute('data-ya-heart')
+  const rows = scanInbox(sel, { handle: opts.handle })
+  const ths = ya.all(document, sel.thread).filter((x) => ya.visible(x))
+  return rows.map((r, i) => {
+    const th = ths[i]
+    const all = ya.all(th, sel.comment)
+    const top = all.find((c) => !c.closest(sel.replies) && !c.hasAttribute('is-reply')) || th
+    const own = (el) => { const c = el.closest(sel.comment); return c === top || (top === th && !c) }
+    const box = ya.all(top, sel.heart).filter(own)[0]
+    const btn = box && ya.all(box, sel.heartButton).filter((b) => ya.visible(b))[0]
+    const thumb = box && ya.all(box, sel.hearted)[0]
+    const label = btn ? ya.norm(btn.getAttribute('aria-label') || '') : ''
+    const hearted = !!box && ((!!thumb && ya.visible(thumb)) || (!!btn && btn.getAttribute('aria-pressed') === 'true') || /bỏ|remove|unheart|đã thả/i.test(label))
+    if (opts.mark === r.id && btn) btn.setAttribute('data-ya-heart', '1')
+    return { id: r.id, author: r.author, hearted, can: !!btn }
+  })
+}
+// chay trong trang: kem ma scanInbox (page.eval chi gui ma cua mot ham)
+const HEART_SCAN = `(sel, opts) => (${heartScan})(sel, opts, ${scanInbox})`
+const HEARTED = `(sel, opts, id) => { const x = (${HEART_SCAN})(sel, opts).find((y) => y.id === id); return x && x.hearted ? true : null }`
+
+// Tha tim cac binh luan cua nguoi xem (moi nhat truoc, toi da max hang). skip(id) = true: bo qua (da tha o lan truoc).
+// Chi bam khi trang cho thay CHUA tha tim (bam lai la bo tim). Bam xong kiem lai; 2 lan dau khong thay tim hien
+// thi dung ngay (khong doc duoc trang thai -> co the dang bo tim nguoi khac). Tra ve { hearted: [id], already, unverified }.
+async function heartComments(page, { max = 100, handle = '', skip = () => false, shouldStop = () => false, onHeart = () => {}, log = () => {}, gapMs = [400, 900] } = {}) {
+  const own = String(handle || '').toLowerCase()
+  const done = new Set()
+  const out = { hearted: [], already: 0, unverified: 0, seen: 0 }
+  let failedChecks = 0
+  for (;;) {
+    const rows = await page.eval(HEART_SCAN, SEL, { handle })
+    const fresh = rows.slice(0, max).filter((r) => !done.has(r.id))
+    if (!fresh.length) {
+      // het hang moi: cuon de Studio tai them (bam nut o hang duoi co the da lam trang tai them roi)
+      if (rows.length >= max) break
+      await page.eval(scrollMore, SEL)
+      try {
+        await page.until((sel, k) => window.__ya.all(document, sel.thread).length > k, [SEL, rows.length], { timeout: 3000, what: 'thêm bình luận' })
+      } catch (_) { break } // het danh sach
+      continue
+    }
+    for (const r of fresh) {
+      done.add(r.id)
+      out.seen++
+      if (shouldStop()) return out
+      if (own && r.author.toLowerCase() === own) continue
+      if (r.hearted || skip(r.id)) { out.already++; continue }
+      if (!r.can) continue
+      const marked = await page.eval(HEART_SCAN, SEL, { handle, mark: r.id })
+      const now = marked.find((x) => x.id === r.id)
+      if (!now || now.hearted) { if (now) out.already++; continue }
+      await page.click({ selector: '[data-ya-heart]' })
+      const ok = await page.until(HEARTED, [SEL, { handle }, r.id], { timeout: 4000, what: 'tim hiện lên' }).catch(() => false)
+      if (ok) { out.hearted.push(r.id); onHeart(r.id, true) } else {
+        out.unverified++
+        onHeart(r.id, false)
+        if (++failedChecks >= 2 && !out.hearted.length) throw new StepError('Đã bấm tim nhưng trang không cho thấy tim đã được thả. Tool dừng để không bấm nhầm (bấm lại là bỏ tim).', 'Thả tim')
+      }
+      await sleep(gapMs[0] + Math.random() * (gapMs[1] - gapMs[0]))
+    }
+  }
+  if (out.hearted.length || out.unverified) log('ok', `Đã thả tim ${out.hearted.length} bình luận${out.unverified ? ` (${out.unverified} chưa kiểm lại được)` : ''}.`)
+  return out
+}
+
+module.exports = { LABELS, SEL, INBOX_FILTER, ALL_FILTER, inboxUrl, openInbox, readComments, reply, parseAgo, scanInbox, heartComments }

@@ -1,6 +1,6 @@
 // Trang "Cộng đồng": tra loi binh luan cua nguoi xem qua hop thu YouTube Studio (Cong dong → Binh luan),
 // gom binh luan duoi video, Shorts va bai dang cua cac kenh da chon. Trang thai: state.f.inbox (src/features/inbox.js).
-import { Check, MessagesSquare, Play, RefreshCw, Send, Square, Users } from 'lucide-react'
+import { Check, Heart, MessagesSquare, Play, RefreshCw, Send, Square, Users } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { CommentCard, FILTERS, isPending, type CommentItem } from '../CommentCard'
 import { ActionBar, Button, EmptyState, PageBody, PageHeader, Pill, Select, cn } from '../kit'
@@ -17,6 +17,8 @@ export type InboxState = {
   sentLastHour: number
   sending?: number // tra loi dang gui / xep hang gui
   paused?: boolean // da bam Dung: khong tu lay binh luan moi 10 phut
+  hearting?: boolean // dang "Quét và thả tim"
+  hearts?: number // so binh luan da tha tim o lan bam nay
 }
 
 const MODE: Record<string, string> = { auto: 'Tự gửi lời khen ngắn', off: 'Tắt tự động', review: 'Duyệt tay' }
@@ -98,7 +100,7 @@ export function CommunityRepliesPage({ state, send, go }: PageProps) {
         )}
         {working ? (
           <Button variant="danger" size="sm" className="max-w-full" onClick={() => send('inbox_stop')}>
-            <Square /> <span className="truncate">Dừng{s.current ? ` (đang đọc "${s.current}")` : (s.sending ?? 0) > 0 ? ` (còn ${s.sending} trả lời)` : ''}</span>
+            <Square /> <span className="truncate">Dừng{s.hearting ? ` (đang thả tim${s.current ? ` "${s.current}"` : ''}, đã thả ${s.hearts ?? 0})` : s.current ? ` (đang đọc "${s.current}")` : (s.sending ?? 0) > 0 ? ` (còn ${s.sending} trả lời)` : ''}</span>
           </Button>
         ) : (
           <>
@@ -108,6 +110,10 @@ export function CommunityRepliesPage({ state, send, go }: PageProps) {
                 <Send /> Gửi hết ({ready.length})
               </Button>
             )}
+            <Button variant="outline" size="sm" disabled={!s.channels.length} onClick={() => send('inbox_hearts')}
+              title="Mở hộp thư bình luận của từng kênh đã tick và thả tim mọi bình luận của người xem chưa có tim (không trả lời gì)">
+              <Heart /> Quét và thả tim
+            </Button>
             <Button variant="gradient" size="sm" disabled={!s.channels.length} onClick={() => send('inbox_fetch')}>
               <RefreshCw /> {s.channels.length > 1 ? `Lấy bình luận mới (${s.channels.length} kênh)` : 'Lấy bình luận mới'}
             </Button>

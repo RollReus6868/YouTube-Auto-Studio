@@ -2,13 +2,48 @@
 const assert = require('assert')
 const fs = require('fs')
 const { pathToFileURL } = require('url')
-const { openInbox, readComments, reply, parseAgo } = require('../../src/flows/inbox')
+const { openInbox, readComments, reply, parseAgo, heartComments } = require('../../src/flows/inbox')
 
 const UC = 'UCLBuhr6vMvZQPqZpTTslWaQ'
 const OWN = '@DarkFaith9999'
 const replies = (mock) => mock.events.filter((e) => e.type === 'reply')
 
+const hearts = (mock) => mock.events.filter((e) => e.type === 'heart')
+
 module.exports = [
+  ['tha tim: moi binh luan (khong loc "Chua phan hoi"), bo qua binh luan da co tim / da tha o lan truoc, khong bam tim cua tra loi', async ({ page, mock, urls }) => {
+    await openInbox(page, UC, { urls, all: true })
+    assert(!/COMMENT_CATEGORY_NOT_ENGAGED/.test(decodeURIComponent(page.url())), 'khong loc trang thai phan hoi')
+    assert(!(await page.has('Trạng thái phản hồi: Chưa phản hồi')))
+    const seen = []
+    const r = await heartComments(page, { handle: OWN, skip: (id) => id === 'UgxJohn08' || id === 'UgxDavid10', onHeart: (id, ok) => seen.push([id, ok]), gapMs: [0, 10] })
+    assert.equal(r.seen, 10, 'cuon tai het danh sach ' + JSON.stringify(r))
+    // k8 (UgxJohn08) da co tim tren trang; UgxDavid10 da tha o lan truoc (skip): khong bam (bam lai la bo tim)
+    assert.equal(r.already, 2)
+    assert.equal(r.hearted.length, 8, JSON.stringify(r))
+    assert.deepEqual(seen.filter(([, ok]) => !ok), [])
+    const ev = hearts(mock)
+    assert.equal(ev.length, 8)
+    assert(ev.every((e) => e.on), 'chi bat tim, khong bo tim nao')
+    assert(!ev.some((e) => e.key === 'k8' || e.key === 'k10'))
+    assert.equal(new Set(ev.map((e) => e.key)).size, 8, 'moi binh luan mot lan')
+    // chay lai: moi binh luan da co tim -> khong bam gi
+    mock.events.length = 0
+    await openInbox(page, UC, { urls, all: true })
+    const again = await heartComments(page, { handle: OWN, skip: (id) => id === 'UgxDavid10', gapMs: [0, 10] })
+    assert.deepEqual([again.hearted.length, again.already], [0, 10], JSON.stringify(again))
+    assert.equal(hearts(mock).length, 0)
+  }],
+
+  ['tha tim: trang khong cho thay tim sau khi bam -> dung sau 2 lan (khong bam tiep)', async ({ page, mock, urls }) => {
+    await page.goto(`${urls.studio}/channel/${UC}/comments/inbox`)
+    await page.eval(() => localStorage.setItem('mockInbox.heartnostate', '1'))
+    await openInbox(page, UC, { urls, all: true })
+    page.timeout = 3000
+    await assert.rejects(heartComments(page, { handle: OWN, gapMs: [0, 10] }), /không cho thấy tim đã được thả/)
+    assert.equal(hearts(mock).length, 2)
+  }],
+
   ['doc hop thu: tab, bo loc, tai them khi cuon, ma on dinh', async ({ page, urls, logs }) => {
     await openInbox(page, UC, { urls, log: page.log })
     assert(/\/channel\/UCLBuhr6vMvZQPqZpTTslWaQ\/comments\/inbox\?filter=.*COMMENT_CATEGORY_NOT_ENGAGED/.test(decodeURIComponent(page.url())))

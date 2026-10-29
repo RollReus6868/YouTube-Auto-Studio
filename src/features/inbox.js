@@ -10,6 +10,7 @@ const flow = require('../flows/inbox')
 const POLL_MS = Number(process.env.YA_INBOX_POLL_MS || process.env.YA_COMMENT_POLL_MS) || 10 * 60e3
 const MAX_READ = Number(process.env.YA_INBOX_MAX) || 60 // binh luan doc moi kenh moi luot
 const DRAFTS_PER_ROUND = 60
+const MAX_HEART = Number(process.env.YA_HEART_MAX) || 100 // binh luan moi nhat xem moi kenh khi tha tim
 const DRAFT_PARALLEL = 4 // Gemini soan cung luc
 // cach nhau 2–5 giay giua hai lan gui trong cung mot luot (nguoi dung muon nhanh; van khong gui don dap)
 const gap = () => (process.env.YA_INBOX_GAP_MS !== undefined ? Number(process.env.YA_INBOX_GAP_MS) : 2e3 + Math.random() * 3e3)
@@ -17,7 +18,7 @@ const ACCOUNTS_MISSING = 'Chưa có tài khoản Google nào (trang Tài khoản
 const STOPPED = /Đã dừng theo yêu cầu/
 
 module.exports = (ctx) => {
-  const S = ctx.state.f.inbox = { channels: [], options: [], busy: false, current: '', at: '', items: [], sentLastHour: 0, sending: 0, paused: false }
+  const S = ctx.state.f.inbox = { channels: [], options: [], busy: false, current: '', at: '', items: [], sentLastHour: 0, sending: 0, paused: false, hearting: false, hearts: 0 }
   // nut Dung: tang gen -> moi viec bat dau truoc do (dang chay / dang xep hang) dung ngay o buoc dang cho;
   // paused: khong tu lay binh luan moi 10 phut nua cho toi khi nguoi dung bam "Lay binh luan moi"
   let gen = 0
@@ -243,8 +244,59 @@ module.exports = (ctx) => {
     }
   }
 
+  // ---- quet va tha tim: moi kenh dang chon, moi binh luan cua nguoi xem (ca binh luan da tra loi) ----
+  // hearted.json { [kenh]: { [ma binh luan]: luc } }: lan sau khong bam lai (bam lai la bo tim)
+  const heartFile = () => ctx.logFile('hearted.json')
+  const readHearts = () => { try { return JSON.parse(require('fs').readFileSync(heartFile(), 'utf8')) } catch (_) { return {} } }
+  const writeHearts = (db) => { try { require('fs').writeFileSync(heartFile(), JSON.stringify(db)) } catch (e) { ctx.log('warn', `Không lưu được danh sách đã thả tim: ${e.message}`) } }
+  async function hearts(keys) {
+    if (S.busy) return ctx.log('warn', 'Cộng đồng: đang làm việc khác, đợi xong rồi bấm lại.')
+    if (!ctx.withChannel || !ctx.accounts) return ctx.log('warn', ACCOUNTS_MISSING)
+    const sel = selected()
+    keys = keys && keys.length ? keys.map((k) => { const ch = ctx.accounts.find(k); return ch ? ch.key : k }).filter((k) => sel.includes(k)) : sel
+    if (!keys.length) return ctx.log('warn', 'Chọn ít nhất một kênh để thả tim (trang Cộng đồng).')
+    const g = gen
+    S.busy = true
+    S.hearting = true
+    S.hearts = 0
+    refresh()
+    let total = 0
+    try {
+      for (const key of keys) {
+        if (halted(g)) break
+        const ch = ctx.accounts.find(key)
+        if (!ch) continue
+        S.current = ch.name
+        refresh()
+        try {
+          await ctx.withChannel(key, async (page) => {
+            await flow.openInbox(page, channelOf(page.url()), { urls: ctx.urls, log: ctx.log, all: true })
+            const db = readHearts()
+            const mine = db[ch.key] || {}
+            const r = await flow.heartComments(page, {
+              max: MAX_HEART, handle: ch.handle, skip: (id) => !!mine[id], shouldStop: () => halted(g),
+              onHeart: (id) => { const d = readHearts(); d[ch.key] = { ...(d[ch.key] || {}), [id]: new Date().toISOString() }; writeHearts(d); S.hearts++; total++; refresh() },
+            })
+            ctx.log(r.hearted.length || r.unverified ? 'ok' : 'info', `"${ch.name}": thả tim ${r.hearted.length + r.unverified} bình luận${r.unverified ? ` (${r.unverified} chưa kiểm lại được)` : ''}, ${r.already} bình luận đã có tim (xem ${r.seen} bình luận).`)
+          }, { label: `Thả tim ${ch.name}`, shouldStop: () => halted(g) })
+        } catch (e) {
+          if (halted(g) || STOPPED.test(e.message)) break
+          ctx.log('error', `"${ch.name}": không thả tim được: ${e.message}`)
+        }
+      }
+      if (halted(g)) ctx.log('info', `Cộng đồng: đã dừng thả tim (đã thả ${total}).`)
+      else ctx.log('ok', `Cộng đồng: thả tim xong, ${total} bình luận ở ${keys.length} kênh.`)
+    } finally {
+      S.busy = false
+      S.hearting = false
+      S.current = ''
+      refresh()
+    }
+  }
+
   return {
     commands: {
+      inbox_hearts: (p) => hearts(p && p.channelKeys),
       inbox_channels: (keys) => {
         ctx.store.save({ inboxChannels: (Array.isArray(keys) ? keys : []).map(String) })
         refresh()

@@ -316,8 +316,9 @@ function visibilityKind(s) {
   const v = lc(s)
   return Object.keys(VISIBILITY).find((k) => VISIBILITY[k].includes(v)) || ''
 }
-// Binh luan duoc tren trang xem: cong khai / khong cong khai; chua biet che do (chuoi rong) thi thu
-const canCommentVisibility = (s) => !lc(s) || ['public', 'unlisted'].includes(visibilityKind(s))
+// Binh luan duoc tren trang xem: cong khai / khong cong khai / cong chieu (ca khi chua toi gio cong chieu);
+// chua biet che do (chuoi rong) thi thu. Rieng tu / len lich thuong (chua cong khai) thi khong.
+const canCommentVisibility = (s) => !lc(s) || ['public', 'unlisted', 'premiere'].includes(visibilityKind(s))
 
 // ---- optimized.json: { [channelKey]: { [videoId]: { at, title, pinned, warnings } } } ----
 function markOptimized(db, channelKey, videoId, info = {}) {

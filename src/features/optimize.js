@@ -146,6 +146,8 @@ module.exports = (ctx) => {
     ctx.resetStop()
     const limit = S.limit
     let skipped = 0 // video lan truoc da toi uu: khong quet lai
+    const n = { ok: 0, partial: 0 }
+    let total = 0 // so video da dua vao toi uu (o.optimize)
     try {
       const tpl = ot.templateFor(templates(), key)
       await ctx.withChannel(key, async (page) => {
@@ -163,16 +165,18 @@ module.exports = (ctx) => {
         push()
         // doc tung video (chi doc): loi o mot video khong dung ca lan quet
         await scanList(page, key, S.videos.filter((v) => v.status === 'scan'), tpl)
-      }, { label: 'Quét video' })
-      const left = S.videos.filter((v) => v.status === 'new').length
-      ctx.log('ok', `Kênh ${nameOf(key)}: ${S.videos.length} video, ${left} chưa tối ưu${skipped ? ` (bỏ qua ${skipped} video đã tối ưu)` : ''}.`)
+        const left = S.videos.filter((v) => v.status === 'new').length
+        ctx.log('ok', `Kênh ${nameOf(key)}: ${S.videos.length} video, ${left} chưa tối ưu${skipped ? ` (bỏ qua ${skipped} video đã tối ưu)` : ''}.`)
+        if (o.optimize) total += await optimizeScanned(page, key, S.videos, n)
+      }, { label: o.optimize ? 'Quét và tối ưu' : 'Quét video' })
     } catch (e) {
       ctx.log('error', `Không quét được video: ${e.message}`)
     } finally {
-      for (const v of S.videos) if (v.status === 'scan') Object.assign(v, { status: 'new', step: '', note: v.note || 'Chưa đọc được.' })
+      for (const v of S.videos) if (v.status === 'scan' || v.status === 'run') Object.assign(v, { status: 'new', step: '', note: v.note || (v.status === 'scan' ? 'Chưa đọc được.' : '') })
       S.busy = false
       saveScan()
       push()
+      if (total) doneLog(n, total)
     }
   }
 
@@ -193,7 +197,7 @@ module.exports = (ctx) => {
     if (key === S.channelKey) { S.videos = c.videos; S.at = c.at }
     return out
   }
-  async function scanAll() {
+  async function scanAll({ optimize = false } = {}) {
     if (!ctx.withChannel) return ctx.log('warn', 'Chưa có tài khoản Google nào (trang Tài khoản).')
     if (S.busy) return ctx.log('warn', 'Đang tối ưu, đợi xong rồi thử lại.')
     const chans = ctx.accounts ? ctx.accounts.channels() : []
@@ -206,6 +210,8 @@ module.exports = (ctx) => {
     ctx.log('info', `Quét toàn bộ: ${ALL_LIMIT} video mới nhất của ${chans.length} kênh.`)
     let left = 0
     let skipped = 0
+    const n = { ok: 0, partial: 0 }
+    let total = 0
     try {
       for (const ch of chans) {
         if (ctx.stopped()) { allMeta.errors[ch.key] = 'Chưa quét (đã dừng).'; continue }
@@ -221,15 +227,17 @@ module.exports = (ctx) => {
             push()
             await scanList(page, ch.key, vids.filter((v) => v.status === 'scan'), tpl)
             left += vids.filter((v) => v.status === 'new').length
-          }, { label: 'Quét toàn bộ' })
+            if (optimize) total += await optimizeScanned(page, ch.key, vids, n)
+          }, { label: optimize ? 'Quét và tối ưu toàn bộ' : 'Quét toàn bộ' })
         } catch (e) {
           allMeta.errors[ch.key] = e.message
           ctx.log('error', `Kênh ${ch.name || ch.key}: không quét được (${e.message}).`)
         }
-        for (const id of allMeta.ids[ch.key] || []) { const v = findV(ch.key, id); if (v && v.status === 'scan') Object.assign(v, { status: 'new', step: '', note: v.note || 'Chưa đọc được.' }) }
+        for (const id of allMeta.ids[ch.key] || []) { const v = findV(ch.key, id); if (v && (v.status === 'scan' || v.status === 'run')) Object.assign(v, { status: 'new', step: '', note: v.note || (v.status === 'scan' ? 'Chưa đọc được.' : '') }) }
       }
       ctx.log('ok', `Quét toàn bộ xong: ${chans.length} kênh, ${left} video chưa tối ưu${skipped ? ` (bỏ qua ${skipped} video đã tối ưu)` : ''}.`)
     } finally {
+      if (total) doneLog(n, total)
       S.busy = false
       S.all.running = false
       S.all.current = ''
@@ -265,88 +273,92 @@ module.exports = (ctx) => {
   // Toi uu danh sach video `todo` cua kenh `key` (mot lan withChannel cho ca lo).
   // v.tpl (neu co): mau rieng cua video (mau Studio cua preset luc dang), khong thi mau cua kenh.
   // Video da quet (v.missing): chi lam muc quet bao thieu; muc da dien giu nguyen (tinh la xong).
-  async function optimizeMany(key, todo, { reset = true } = {}) {
+  // Lam lan luot `todo` tren page da o dung kenh (trong withChannel). n: { ok, partial } cong don.
+  async function optimizeOn(page, key, todo, n) {
     const chTpl = ot.templateFor(templates(), key)
+    const name = nameOf(key) === key ? '' : nameOf(key)
+    const setV = (id, patch) => setIn(key, id, patch)
+    let blocked = '' // hop thoai xac minh danh tinh: dung cac video con lai cua tai khoan nay
+    for (const v of todo) {
+      if (ctx.stopped()) { setV(v.id, { status: 'new', step: '' }); continue }
+      if (blocked) { setV(v.id, { status: 'error', step: '', error: blocked }); continue }
+      const onStep = (step) => setV(v.id, { step })
+      const base = v.tpl ? ot.normalizeTemplate(v.tpl) : chTpl
+      const prev = (readDb()[key] || {})[v.id]
+      // da quet: chi cac muc con thieu; video tool chua tung lam o trang xem video -> van thich / binh luan / ghim
+      // (quet khong biet; commentAndPin tu kiem nen khong dang trung)
+      const scanned = !v.tpl && Array.isArray(v.missing) && !v.unread
+      const tpl = scanned ? ot.missingTemplate(base, v.missing, { watch: !prev }) : base
+      try {
+        let r = { id: v.id, title: v.title, changed: [], warnings: [], saved: false }
+        // chua quet (hang cho sau khi dang): van mo trang Chi tiet de lay tieu de hien tai cho binh luan
+        if (ot.studioFields(tpl).length || !scanned) r = await optimizeVideo(page, v.id, tpl, { urls: ctx.urls, log: ctx.log, onStep, video: v, channelName: name })
+        else if (scanned) ctx.log('info', `${v.title || v.id}: các mục trong Studio đã đủ theo mẫu, không làm lại.`)
+        const warnings = [...r.warnings]
+        const text = ot.renderComment(tpl.comment, { tieu_de: r.title || v.title, link: `https://youtu.be/${v.id}`, ten_kenh: name })
+        let c = null
+        // che do hien thi luc quet co the da cu (cong chieu / len lich xong -> cong khai): doc lai o trang Chi tiet
+        let vis = r.visibility || ''
+        if ((tpl.like || text) && !vis && !ot.canCommentVisibility(v.visibility)) vis = await videoVisibility(page, v.id, { urls: ctx.urls }).catch(() => '')
+        vis = vis || v.visibility
+        if (vis !== v.visibility) {
+          ctx.log('info', `${r.title || v.title || v.id}: chế độ hiển thị giờ là "${vis}" (lúc quét: "${v.visibility || '?'}").`)
+          setV(v.id, { visibility: vis })
+          v.visibility = vis
+        }
+        if (tpl.like || text) {
+          if (ot.canCommentVisibility(vis)) {
+            // phan Studio da luu: loi o trang xem video chi la canh bao (chay lai se khong dang trung)
+            try {
+              const ch = channel(key) || {}
+              c = await commentAndPin(page, v.id, text, { urls: ctx.urls, log: ctx.log, onStep, like: tpl.like, pin: tpl.pin, channel: { name: ch.name || name, handle: ch.handle || '', ucId: ucOf(key) } })
+              warnings.push(...c.warnings)
+            } catch (e) {
+              if (ctx.stopped()) throw e
+              if (page.snapshot) await page.snapshot(`binh-luan-${v.id}`)
+              warnings.push(`Đã tối ưu trong Studio nhưng chưa thích / bình luận được: ${e.message}`)
+            }
+          } else warnings.push(`Video đang "${vis}" nên chưa thích / bình luận được. Tối ưu lại khi video đã công khai.`)
+        }
+        // viec muon lam o trang xem video ma CHUA kiem lai duoc (sau khi tai lai trang).
+        // Kenh khong ghim duoc (menu khong co Ghim / bam Ghim khong an): khong tinh la thieu, chi ghi chu.
+        // lan nay khong lam gi o trang xem video (da xong tu lan truoc): giu ket qua lan truoc (ca ghi chu "chua ghim")
+        const kept = !c && prev ? prev : {}
+        const cannotPin = c ? !!c.cannotPin : !!kept.cannotPin
+        const liked = !!(c && c.liked) || (base.like && !tpl.like) // khong thich lai vi lan truoc da thich
+        const note = cannotPin ? (c ? pinNote(liked, !!c.commented) : kept.note || pinNote(liked, !!kept.commented)) : ''
+        const missing = [tpl.like && !(c && c.liked) && 'thích', text && !(c && c.commented) && 'bình luận', text && tpl.pin && !(c && c.pinned) && !cannotPin && 'ghim'].filter(Boolean)
+        for (const w of warnings) if (!r.warnings.includes(w)) ctx.log('warn', `${r.title || v.title}: ${w}`)
+        if (missing.length) {
+          n.partial++
+          ctx.log('warn', `${r.title || v.title}: chưa ${missing.join(', ')} được (đã kiểm lại trên trang xem video).`)
+        }
+        if (note) ctx.log('ok', `${r.title || v.title}: ${note} (kênh không ghim được) - tính là đã tối ưu.`)
+        const did = c || { liked: !!kept.liked || liked, commented: !!kept.commented, pinned: !!kept.pinned }
+        writeDb(ot.markOptimized(readDb(), key, v.id, { title: r.title, changed: r.changed, liked: !!did.liked, commented: !!did.commented, pinned: !!did.pinned, cannotPin, note, missing, warnings }))
+        // khong quet lai: muc con thieu = muc quet thay thieu ma toi uu chua doi duoc (chi khi co canh bao Studio)
+        const left = [...(r.warnings.length ? (v.missing || []).filter((k) => !r.changed.includes(k) && !WATCH.includes(k)) : []), ...missing]
+        setV(v.id, { status: left.length ? 'new' : 'done', step: '', title: r.title || v.title, warnings, missing: left, unread: false, note })
+        n.ok++
+      } catch (e) {
+        if (page.snapshot) await page.snapshot(`toi-uu-${v.id}`)
+        if (e.code === 'verify') blocked = e.message
+        setV(v.id, { status: ctx.stopped() ? 'new' : 'error', step: '', error: e.message })
+        ctx.log(ctx.stopped() ? 'warn' : 'error', `${v.title || v.id}: ${e.message}`)
+      }
+    }
+  }
+
+  async function optimizeMany(key, todo, { reset = true } = {}) {
     const name = nameOf(key) === key ? '' : nameOf(key)
     const setV = (id, patch) => setIn(key, id, patch)
     if (reset) ctx.resetStop()
     S.busy = true
     for (const v of todo) setV(v.id, { status: 'run', step: 'Chờ', error: '' })
     ctx.log('info', `Bắt đầu tối ưu ${todo.length} video${name ? ` của kênh ${name}` : ''}.`)
-    let ok = 0
-    let partial = 0 // video chua thich / binh luan duoc
-    let blocked = '' // hop thoai xac minh danh tinh: dung cac video con lai cua tai khoan nay
+    const n = { ok: 0, partial: 0 }
     try {
-      await ctx.withChannel(key, async (page) => {
-        for (const v of todo) {
-          if (ctx.stopped()) { setV(v.id, { status: 'new', step: '' }); continue }
-          if (blocked) { setV(v.id, { status: 'error', step: '', error: blocked }); continue }
-          const onStep = (step) => setV(v.id, { step })
-          const base = v.tpl ? ot.normalizeTemplate(v.tpl) : chTpl
-          const prev = (readDb()[key] || {})[v.id]
-          // da quet: chi cac muc con thieu; video tool chua tung lam o trang xem video -> van thich / binh luan / ghim
-          // (quet khong biet; commentAndPin tu kiem nen khong dang trung)
-          const scanned = !v.tpl && Array.isArray(v.missing) && !v.unread
-          const tpl = scanned ? ot.missingTemplate(base, v.missing, { watch: !prev }) : base
-          try {
-            let r = { id: v.id, title: v.title, changed: [], warnings: [], saved: false }
-            // chua quet (hang cho sau khi dang): van mo trang Chi tiet de lay tieu de hien tai cho binh luan
-            if (ot.studioFields(tpl).length || !scanned) r = await optimizeVideo(page, v.id, tpl, { urls: ctx.urls, log: ctx.log, onStep, video: v, channelName: name })
-            else if (scanned) ctx.log('info', `${v.title || v.id}: các mục trong Studio đã đủ theo mẫu, không làm lại.`)
-            const warnings = [...r.warnings]
-            const text = ot.renderComment(tpl.comment, { tieu_de: r.title || v.title, link: `https://youtu.be/${v.id}`, ten_kenh: name })
-            let c = null
-            // che do hien thi luc quet co the da cu (cong chieu / len lich xong -> cong khai): doc lai o trang Chi tiet
-            let vis = r.visibility || ''
-            if ((tpl.like || text) && !vis && !ot.canCommentVisibility(v.visibility)) vis = await videoVisibility(page, v.id, { urls: ctx.urls }).catch(() => '')
-            vis = vis || v.visibility
-            if (vis !== v.visibility) {
-              ctx.log('info', `${r.title || v.title || v.id}: chế độ hiển thị giờ là "${vis}" (lúc quét: "${v.visibility || '?'}").`)
-              setV(v.id, { visibility: vis })
-              v.visibility = vis
-            }
-            if (tpl.like || text) {
-              if (ot.canCommentVisibility(vis)) {
-                // phan Studio da luu: loi o trang xem video chi la canh bao (chay lai se khong dang trung)
-                try {
-                  const ch = channel(key) || {}
-                  c = await commentAndPin(page, v.id, text, { urls: ctx.urls, log: ctx.log, onStep, like: tpl.like, pin: tpl.pin, channel: { name: ch.name || name, handle: ch.handle || '', ucId: ucOf(key) } })
-                  warnings.push(...c.warnings)
-                } catch (e) {
-                  if (ctx.stopped()) throw e
-                  if (page.snapshot) await page.snapshot(`binh-luan-${v.id}`)
-                  warnings.push(`Đã tối ưu trong Studio nhưng chưa thích / bình luận được: ${e.message}`)
-                }
-              } else warnings.push(`Video đang "${vis}" nên chưa thích / bình luận được. Tối ưu lại khi video đã công khai.`)
-            }
-            // viec muon lam o trang xem video ma CHUA kiem lai duoc (sau khi tai lai trang).
-            // Kenh khong ghim duoc (menu khong co Ghim / bam Ghim khong an): khong tinh la thieu, chi ghi chu.
-            // lan nay khong lam gi o trang xem video (da xong tu lan truoc): giu ket qua lan truoc (ca ghi chu "chua ghim")
-            const kept = !c && prev ? prev : {}
-            const cannotPin = c ? !!c.cannotPin : !!kept.cannotPin
-            const liked = !!(c && c.liked) || (base.like && !tpl.like) // khong thich lai vi lan truoc da thich
-            const note = cannotPin ? (c ? pinNote(liked, !!c.commented) : kept.note || pinNote(liked, !!kept.commented)) : ''
-            const missing = [tpl.like && !(c && c.liked) && 'thích', text && !(c && c.commented) && 'bình luận', text && tpl.pin && !(c && c.pinned) && !cannotPin && 'ghim'].filter(Boolean)
-            for (const w of warnings) if (!r.warnings.includes(w)) ctx.log('warn', `${r.title || v.title}: ${w}`)
-            if (missing.length) {
-              partial++
-              ctx.log('warn', `${r.title || v.title}: chưa ${missing.join(', ')} được (đã kiểm lại trên trang xem video).`)
-            }
-            if (note) ctx.log('ok', `${r.title || v.title}: ${note} (kênh không ghim được) - tính là đã tối ưu.`)
-            const did = c || { liked: !!kept.liked || liked, commented: !!kept.commented, pinned: !!kept.pinned }
-            writeDb(ot.markOptimized(readDb(), key, v.id, { title: r.title, changed: r.changed, liked: !!did.liked, commented: !!did.commented, pinned: !!did.pinned, cannotPin, note, missing, warnings }))
-            // khong quet lai: muc con thieu = muc quet thay thieu ma toi uu chua doi duoc (chi khi co canh bao Studio)
-            const left = [...(r.warnings.length ? (v.missing || []).filter((k) => !r.changed.includes(k) && !WATCH.includes(k)) : []), ...missing]
-            setV(v.id, { status: left.length ? 'new' : 'done', step: '', title: r.title || v.title, warnings, missing: left, unread: false, note })
-            ok++
-          } catch (e) {
-            if (page.snapshot) await page.snapshot(`toi-uu-${v.id}`)
-            if (e.code === 'verify') blocked = e.message
-            setV(v.id, { status: ctx.stopped() ? 'new' : 'error', step: '', error: e.message })
-            ctx.log(ctx.stopped() ? 'warn' : 'error', `${v.title || v.id}: ${e.message}`)
-          }
-        }
-      }, { label: 'Tối ưu video' })
+      await ctx.withChannel(key, (page) => optimizeOn(page, key, todo, n), { label: 'Tối ưu video' })
     } catch (e) {
       ctx.log('error', `Không tối ưu được: ${e.message}`)
       for (const v of todo) { const x = findV(key, v.id); if (x && x.status === 'run') setV(v.id, { status: 'error', step: '', error: e.message }) }
@@ -354,9 +366,19 @@ module.exports = (ctx) => {
       S.busy = false
       saveScan()
       push()
-      ctx.log(ok === todo.length && !partial ? 'ok' : 'warn', `Xong: tối ưu được ${ok}/${todo.length} video${partial ? `, ${partial} video chưa thích / bình luận / ghim được (xem cảnh báo)` : ''}.`)
+      doneLog(n, todo.length)
     }
-    return ok
+    return n.ok
+  }
+  const doneLog = ({ ok, partial }, total) => ctx.log(ok === total && !partial ? 'ok' : 'warn', `Xong: tối ưu được ${ok}/${total} video${partial ? `, ${partial} video chưa thích / bình luận / ghim được (xem cảnh báo)` : ''}.`)
+  // "Quét và tối ưu": sau khi quet xong kenh, toi uu ngay cac video con thieu tren cung trang (khong mo lai kenh)
+  async function optimizeScanned(page, key, vids, n) {
+    const todo = vids.filter((v) => v.status === 'new' && !(v.unread && /Xác minh danh tính/.test(v.note || '')))
+    if (!todo.length || ctx.stopped()) return 0
+    for (const v of todo) setIn(key, v.id, { status: 'run', step: 'Chờ', error: '' })
+    ctx.log('info', `Kênh ${nameOf(key)}: tối ưu luôn ${todo.length} video còn thiếu.`)
+    await optimizeOn(page, key, todo, n)
+    return todo.length
   }
 
   async function run({ channelKey, ids } = {}) {
@@ -445,7 +467,7 @@ module.exports = (ctx) => {
       optimize_open: () => refresh(),
       optimize_select: (key) => { if (!S.busy) { S.channelKey = String(key || ''); refresh() } },
       optimize_list: (p) => list(p),
-      optimize_scan_all: () => scanAll(),
+      optimize_scan_all: (p) => scanAll(p || {}),
       optimize_rescan: (p) => rescan(p || {}),
       optimize_limit: (n) => setLimit(n),
       optimize_open_video: (p) => openVideo(p || {}),

@@ -1,6 +1,6 @@
 // Trang "Toi uu video": quet video da dang cua kenh, chon video, toi uu trong Studio theo mau
 // (mau rieng cua kenh hoac mau mac dinh), roi thich + binh luan + ghim. Trang thai: state.f.optimize.
-import { CheckCheck, Layers, ListChecks, LoaderCircle, RefreshCw, RotateCcw, Save, ScanSearch, Sparkles, Square, Undo2, Wand2 } from 'lucide-react'
+import { Layers, ListChecks, LoaderCircle, RefreshCw, RotateCcw, Save, ScanSearch, Sparkles, Square, Undo2, Wand2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { ActionBar, Button, Card, EmptyState, PageBody, PageHeader, Pill, cn, type Tone } from '../kit'
 import { OptimizeTemplateEditor, defaultOptimizeTemplate, templateOf, type OptimizeTemplate, type Templates } from './OptimizeTemplateEditor'
@@ -86,19 +86,15 @@ function ScanAllCard({ s, send, go }: { s: OptimizeState; send: PageProps['send'
   if (!all || (!all.groups.length && !all.running)) return null
   const left = (g: OptAllGroup) => g.videos.filter((v) => v.status === 'new' || v.status === 'error')
   const total = all.groups.reduce((n, g) => n + left(g).length, 0)
-  const chans = all.groups.filter((g) => left(g).length).length
   const cur = all.groups.find((g) => g.key === all.current)
   const openVideo = (key: string, id: string) => { go('accounts'); send('optimize_open_video', { channelKey: key, id }) }
   const hint = all.running
-    ? `Đang quét${cur ? ` kênh ${cur.name}` : ''} (${Math.max(1, all.groups.findIndex((g) => g.key === all.current) + 1)}/${all.groups.length} kênh)`
+    ? `Đang quét và tối ưu${cur ? ` kênh ${cur.name}` : ''} (${Math.max(1, all.groups.findIndex((g) => g.key === all.current) + 1)}/${all.groups.length} kênh)`
     : `${all.groups.length} kênh · ${total} video chưa tối ưu${all.at ? ` · quét lúc ${new Date(all.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}` : ''}`
   return (
     <Card title="Quét toàn bộ" hint={hint}>
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <p className="flex-1 text-xs text-muted-foreground">{all.perChannel ?? 2} video mới nhất của mỗi kênh đã tick. Tối ưu chỉ làm các mục còn thiếu, mục đã điền giữ nguyên.</p>
-        <Button variant="gradient" size="sm" disabled={s.busy || !total} onClick={() => send('optimize_run_all')}>
-          <Sparkles /> Tối ưu mục còn thiếu ({total} video{chans > 1 ? `, ${chans} kênh` : ''})
-        </Button>
+        <p className="flex-1 text-xs text-muted-foreground">{all.perChannel ?? 2} video mới nhất của mỗi kênh đã tick. Quét xong kênh nào thì tối ưu luôn video còn thiếu của kênh đó (chỉ các mục còn thiếu, mục đã điền giữ nguyên).</p>
       </div>
       <div className="max-h-[520px] space-y-3 overflow-y-auto">
         {all.groups.map((g) => {
@@ -113,7 +109,7 @@ function ScanAllCard({ s, send, go }: { s: OptimizeState; send: PageProps['send'
                 {n('new') > 0 && <Pill tone="muted">{n('new')} chưa tối ưu</Pill>}
                 {n('error') > 0 && <Pill tone="error">{n('error')} lỗi</Pill>}
                 <Button variant="outline" size="sm" className="h-7" disabled={s.busy || !todo.length} onClick={() => send('optimize_run_all', { items: [{ channelKey: g.key, ids: todo.map((v) => v.id) }] })}>
-                  <Sparkles /> Tối ưu kênh này
+                  <Sparkles /> Tối ưu lại kênh này
                 </Button>
               </header>
               {g.error && <p className="px-3 pt-2 text-[11px] text-red-600 dark:text-red-400">{g.error}</p>}
@@ -196,7 +192,7 @@ export function OptimizePage({ state, send, go }: PageProps) {
       <PageHeader
         icon={Wand2}
         title="Tối ưu video"
-        description="Quét các video mới nhất (chọn số video), đọc trang Chi tiết của từng video để biết video nào còn thiếu thông tin so với mẫu, rồi tối ưu trong YouTube Studio + thích, bình luận, ghim. Video đã tối ưu ở lần trước được bỏ qua (bấm “Quét lại” ở video để đọc lại)."
+        description="Bấm “Quét và tối ưu”: tool đọc trang Chi tiết của các video mới nhất (chọn số video) để biết video nào còn thiếu thông tin so với mẫu, rồi tối ưu luôn trong YouTube Studio + thích, bình luận, ghim. Video đã tối ưu ở lần trước được bỏ qua (bấm “Quét lại” ở video để đọc lại)."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -219,11 +215,11 @@ export function OptimizePage({ state, send, go }: PageProps) {
             >
               {(s.limits ?? LIMITS).map((n) => <option key={n} value={n}>{n} video</option>)}
             </select>
-            <Button variant="outline" size="sm" disabled={s.busy || !s.channelKey} onClick={() => send('optimize_list', { channelKey: s.channelKey, limit })}>
-              {scanning ? <LoaderCircle className="animate-spin" /> : <ScanSearch />} Quét video
+            <Button variant="gradient" size="sm" disabled={s.busy || !s.channelKey} title="Quét các video mới nhất của kênh này rồi tối ưu luôn video còn thiếu" onClick={() => send('optimize_list', { channelKey: s.channelKey, limit, optimize: true })}>
+              {s.busy && !s.all?.running ? <LoaderCircle className="animate-spin" /> : <ScanSearch />} Quét và tối ưu
             </Button>
-            <Button variant="outline" size="sm" disabled={s.busy || !s.channels.length} title={`Quét ${s.all?.perChannel ?? 2} video mới nhất của mọi kênh đã tick (lần lượt từng kênh)`} onClick={() => send('optimize_scan_all')}>
-              {s.all?.running ? <LoaderCircle className="animate-spin" /> : <Layers />} Quét toàn bộ
+            <Button variant="outline" size="sm" disabled={s.busy || !s.channels.length} title={`Quét ${s.all?.perChannel ?? 2} video mới nhất của mọi kênh đã tick rồi tối ưu luôn (lần lượt từng kênh)`} onClick={() => send('optimize_scan_all', { optimize: true })}>
+              {s.all?.running ? <LoaderCircle className="animate-spin" /> : <Layers />} Quét và tối ưu toàn bộ
             </Button>
           </div>
         }
@@ -237,7 +233,7 @@ export function OptimizePage({ state, send, go }: PageProps) {
             </div>
           </Card>
         )}
-        <Card title="Video đã đăng" hint={scanning && videos.length ? `Đang đọc trang Chi tiết: ${read}/${videos.length} video` : s.at ? `${videos.length} video · ${done} đã tối ưu · quét lúc ${new Date(s.at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : `Bấm “Quét video” để đọc ${limit} video mới nhất trong Studio`}>
+        <Card title="Video đã đăng" hint={scanning && videos.length ? `Đang đọc trang Chi tiết: ${read}/${videos.length} video` : s.at ? `${videos.length} video · ${done} đã tối ưu · quét lúc ${new Date(s.at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : `Bấm “Quét và tối ưu” để đọc ${limit} video mới nhất trong Studio rồi tối ưu luôn`}>
           {videos.length ? (
             <>
               <div className="mb-1 flex items-center gap-3 px-2 text-xs text-muted-foreground">
@@ -260,14 +256,11 @@ export function OptimizePage({ state, send, go }: PageProps) {
       </PageBody>
       <ActionBar>
         {working ? (
-          <Button variant="danger" size="sm" onClick={() => send('stop')}><Square /> {s.all?.running || [...videos, ...allVideos].some((v) => v.status === 'scan') ? 'Dừng quét' : 'Dừng sau video đang tối ưu'}</Button>
+          <Button variant="danger" size="sm" onClick={() => send('stop')}><Square /> {s.all?.running || [...videos, ...allVideos].some((v) => v.status === 'scan') ? 'Dừng' : 'Dừng sau video đang tối ưu'}</Button>
         ) : (
           <>
-            <Button variant="gradient" size="sm" disabled={s.busy || !chosen.length} onClick={() => send('optimize_run', { channelKey: s.channelKey, ids: chosen.map((v) => v.id) })}>
-              <Sparkles /> Tối ưu đã chọn ({chosen.length})
-            </Button>
-            <Button variant="outline" size="sm" disabled={s.busy || !todo.length} onClick={() => send('optimize_run', { channelKey: s.channelKey, ids: todo.map((v) => v.id) })}>
-              <CheckCheck /> Tối ưu tất cả chưa tối ưu ({todo.length})
+            <Button variant="outline" size="sm" disabled={s.busy || !chosen.length} title="Tối ưu lại các video đã chọn mà không quét" onClick={() => send('optimize_run', { channelKey: s.channelKey, ids: chosen.map((v) => v.id) })}>
+              <Sparkles /> Tối ưu lại đã chọn ({chosen.length})
             </Button>
           </>
         )}

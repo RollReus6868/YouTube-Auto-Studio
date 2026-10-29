@@ -93,10 +93,11 @@ function findBrowser() {
       assert.equal(await page.getByLabel('Số video cần quét').inputValue(), '10')
       assert.deepEqual(await page.getByLabel('Số video cần quét').locator('option').allTextContents(), ['5 video', '10 video', '20 video', '30 video', '50 video'])
       // quet toan bo: ket qua theo kenh, toi uu cac muc con thieu; kenh khong ghim duoc -> "Đã tối ưu" + ghi chu
-      await page.getByRole('button', { name: 'Quét toàn bộ' }).waitFor()
+      await page.getByRole('button', { name: 'Quét và tối ưu toàn bộ' }).waitFor()
+      await page.getByRole('button', { name: 'Quét và tối ưu', exact: true }).waitFor()
       const g2 = page.getByRole('region', { name: 'Kênh Dark Faith 2nd' })
       await g2.getByText(/Xác minh danh tính của bạn/).waitFor()
-      await page.getByRole('button', { name: 'Tối ưu mục còn thiếu (2 video, 2 kênh)' }).waitFor()
+      assert.equal(await page.getByRole('button', { name: /^Tối ưu mục còn thiếu/ }).count(), 0, `${tag}: gop vao nut Quét và tối ưu`)
       const g1 = page.getByRole('region', { name: 'Kênh Dark Bible Study' })
       assert.equal(await g1.getByText('đã thích và bình luận - chưa ghim').count(), 1)
       assert.equal(await g1.locator('li', { hasText: 'Tower of Babel' }).getByText('Đã tối ưu', { exact: true }).count(), 1, `${tag}: chua ghim van "Đã tối ưu"`)
@@ -125,15 +126,15 @@ function findBrowser() {
       await page.getByText('Bí ẩn rừng sâu - Kênh Của Tôi', { exact: true }).first().waitFor()
       // che do hien thi kieu Studio: Len lich -> lich (T2..CN, ngay da qua bi khoa), danh sach gio 15 phut, Mui gio
       const vn = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getDate()} thg ${d.getMonth() + 1}, ${d.getFullYear()}` }
-      await page.getByRole('button', { name: vn(2) }).click() // mau demo: hom nay + 2 ngay
+      await page.getByRole('button', { name: vn(2), exact: true }).click() // mau demo: hom nay + 2 ngay
       const cal = page.getByRole('dialog', { name: 'Chọn ngày' })
       await cal.waitFor()
       assert.equal(await cal.getByText('T2', { exact: true }).count(), 1)
       assert.equal(await cal.getByText('CN', { exact: true }).count(), 1)
       if (new Date().getDate() > 1 && new Date(Date.now() + 2 * 864e5).getMonth() === new Date().getMonth()) assert(await cal.getByRole('button', { name: vn(-1) }).isDisabled(), 'ngay da qua bi khoa')
       await check('preset-lich')
-      await cal.getByRole('button', { name: vn(3) }).click()
-      await page.getByRole('button', { name: vn(3) }).waitFor()
+      await cal.getByRole('button', { name: vn(3), exact: true }).click()
+      await page.getByRole('button', { name: vn(3), exact: true }).waitFor()
       await page.getByLabel('Giờ', { exact: true }).click()
       await page.getByRole('option', { name: '21:15' }).click()
       await page.waitForFunction(() => document.querySelector('input[aria-label="Giờ"]').value === '21:15')

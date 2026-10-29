@@ -404,13 +404,16 @@ module.exports.push(['tinh nang: quet, toi uu da chon, nho video da toi uu', asy
   assert.equal(S.channelKey, UC)
   f.commands.optimize_template_save({ channelKey: UC, template: { ...defaultTemplate(), playlists: ['Dark Bible Study'], comment: '{tieu_de} | {ten_kenh}' } })
   assert.deepEqual(saved.optimizeTemplates[UC].playlists, ['Dark Bible Study'])
+  // video len lich thuong (chua cong khai, khong phai Cong chieu)
+  await page.goto(`${urls.studio}/video/${VID}/edit`)
+  await page.eval(() => localStorage.setItem('opt-vis-Prem0000001', JSON.stringify('Đã lên lịch')))
   await f.commands.optimize_list(UC)
   assert.equal(S.videos.length, 7)
   assert(S.videos.every((v) => v.status === 'new'))
   await f.commands.optimize_run({ channelKey: UC, ids: ['Prem0000001', VID] })
-  // cong chieu: chua thich / binh luan / ghim duoc -> van "chua toi uu" (lan sau lam tiep)
+  // len lich: chua thich / binh luan / ghim duoc -> van "chua toi uu" (lan sau lam tiep)
   assert.deepEqual(S.videos.slice(0, 2).map((v) => v.status), ['new', 'done'], logs.join('\n'))
-  assert.match(S.videos[0].warnings.join(' '), /Đang công chiếu/, 'cong chieu: khong binh luan')
+  assert.match(S.videos[0].warnings.join(' '), /Đã lên lịch/, 'len lich: khong binh luan')
   assert.deepEqual(S.videos[0].missing, ['thích', 'bình luận', 'ghim'])
   assert.deepEqual((await events(mock, 'comment')).map((e) => e.text), [`${TITLE} | Dark Bible Study`])
   const db = JSON.parse(fs.readFileSync(path.join(tmp, 'optimized.json'), 'utf8'))
@@ -421,7 +424,7 @@ module.exports.push(['tinh nang: quet, toi uu da chon, nho video da toi uu', asy
   await f.commands.optimize_list(UC)
   assert.equal(S.videos.find((v) => v.id === VID).status, 'done')
   assert.deepEqual(S.videos.find((v) => v.id === 'Prem0000001').missing.slice(-3), ['thích', 'bình luận', 'ghim'])
-  // cong chieu xong, da cong khai (danh sach quet van ghi "Đang công chiếu"): doc lai o trang Chi tiet -> thich / binh luan duoc
+  // da toi gio, da cong khai (danh sach quet van ghi "Đã lên lịch"): doc lai o trang Chi tiet -> thich / binh luan duoc
   await page.eval(() => localStorage.setItem('opt-vis-Prem0000001', JSON.stringify('Công khai')))
   mock.events.length = 0
   await f.commands.optimize_run({ channelKey: UC, ids: ['Prem0000001'] })
@@ -429,7 +432,7 @@ module.exports.push(['tinh nang: quet, toi uu da chon, nho video da toi uu', asy
   assert.equal(prem.visibility, 'Công khai', logs.join('\n'))
   assert.deepEqual([prem.status, prem.missing], ['done', []], logs.join('\n'))
   assert.equal((await events(mock, 'comment')).length, 1)
-  assert.match(logs.join('\n'), /chế độ hiển thị giờ là "Công khai" \(lúc quét: "Đang công chiếu"\)/)
+  assert.match(logs.join('\n'), /chế độ hiển thị giờ là "Công khai" \(lúc quét: "Đã lên lịch"\)/)
   await page.eval(() => localStorage.removeItem('opt-vis-Prem0000001'))
   // tu toi uu sau khi dang (mau tu uploader: afterUploadTemplate): xep hang cho, toi gio thi chay
   mock.events.length = 0
@@ -882,4 +885,64 @@ module.exports.push(['tinh nang: quet lai bo qua video da toi uu (khong mo trang
   assert.deepEqual(opened(mark), [])
   assert.deepEqual(S.all.groups[0].videos.map((v) => [v.id, v.status]), [['Prem0000001', 'done'], [VID, 'done']])
   assert.match(logs[logs.length - 1], /Quét toàn bộ xong: 1 kênh, 0 video chưa tối ưu \(bỏ qua 2 video đã tối ưu\)\./)
+}])
+
+// "Quét và tối ưu" (mot nut): quet roi toi uu luon cac video con thieu trong CUNG lan mo kenh (khong lap lai quet + toi uu).
+// Video Cong chieu (ca khi chua toi gio) van thich / binh luan / ghim duoc.
+module.exports.push(['tinh nang: "Quét và tối ưu" + "Quét và tối ưu toàn bộ"; video Công chiếu vẫn bình luận được', async ({ page, urls, mock, tmp }) => {
+  const path = require('path')
+  const logs = []
+  const labels = []
+  let saved = {}
+  const chans = [{ key: UC, ucId: UC, name: 'Dark Bible Study', handle: '@DarkBibleStudy999' }]
+  const mk = (state) => ({
+    state, log: (l, m) => logs.push(`${l} ${m}`), logFile: (n) => path.join(tmp, n), urls, push: () => {},
+    store: { get settings() { return saved }, save: (p) => { saved = { ...saved, ...p } } }, refreshSettings: () => {},
+    stopped: () => false, resetStop: () => {},
+    accounts: { channels: () => chans, find: (k) => chans.find((c) => c.key === k) || null },
+    withChannel: async (key, fn, o) => { labels.push(o && o.label); return fn(page) },
+  })
+  await page.goto(`${urls.studio}/video/${VID}/edit`)
+  await page.eval(() => { for (const id of ['LostTribe01', 'NeverProp01', 'Maccabee001', 'TheCross001', 'HonorPar001']) OPT.save('opt-video-' + id, { ...OPT.optimized(OPT.videoOf(id)), desc: 'x' }) })
+  page.timeout = 4000
+  let state = { f: {} }
+  let f = require('../../src/features/optimize')(mk(state))
+  f.start()
+  let S = state.f.optimize
+  f.commands.optimize_template_save({ channelKey: UC, template: { ...defaultTemplate(), comment: '{tieu_de}' } })
+  mock.events.length = 0
+  await f.commands.optimize_list({ channelKey: UC, optimize: true })
+  assert.deepEqual(labels, ['Quét và tối ưu'], 'mot lan mo kenh cho ca quet va toi uu')
+  assert.deepEqual((await events(mock, 'save')).map((e) => e.id).sort(), ['Prem0000001', VID].sort(), logs.join('\n'))
+  const prem = S.videos.find((v) => v.id === 'Prem0000001')
+  assert.equal(prem.visibility, 'Đang công chiếu')
+  assert.deepEqual([prem.status, prem.missing], ['done', []], logs.join('\n'))
+  assert.equal((await events(mock, 'comment')).length, 2, 'ca video Cong chieu cung duoc binh luan')
+  assert(S.videos.every((v) => v.status === 'done'), JSON.stringify(S.videos.map((v) => [v.id, v.status])))
+  assert(!logs.some((l) => /chưa thích \/ bình luận được/.test(l)), logs.join('\n'))
+  assert.match(logs.join('\n'), /Kênh Dark Bible Study: tối ưu luôn 2 video còn thiếu\./)
+  assert.match(logs[logs.length - 1], /^ok Xong: tối ưu được 2\/2 video\.$/)
+  assert.equal(S.busy, false)
+  // nut cu (chi quet) van dung duoc: khong toi uu gi
+  labels.length = 0
+  mock.events.length = 0
+  await f.commands.optimize_list(UC)
+  assert.deepEqual(labels, ['Quét video'])
+  assert.deepEqual(await events(mock, 'save'), [])
+  // "Quét và tối ưu toàn bộ": video moi nhat chua toi uu -> quet + toi uu ngay
+  fs.unlinkSync(path.join(tmp, 'optimized.json'))
+  fs.unlinkSync(path.join(tmp, 'optimize-scan.json'))
+  await page.eval((id) => localStorage.removeItem('opt-video-' + id), VID)
+  state = { f: {} }
+  f = require('../../src/features/optimize')(mk(state))
+  f.start()
+  S = state.f.optimize
+  labels.length = 0
+  mock.events.length = 0
+  await f.commands.optimize_scan_all({ optimize: true })
+  assert.deepEqual(labels, ['Quét và tối ưu toàn bộ'])
+  assert((await events(mock, 'save')).some((e) => e.id === VID), logs.slice(-8).join('\n'))
+  assert.deepEqual(S.all.groups[0].videos.map((v) => v.status), ['done', 'done'], JSON.stringify(S.all.groups[0].videos))
+  assert.match(logs.join('\n'), /Quét toàn bộ xong: 1 kênh/)
+  assert.equal(S.all.running, false)
 }])

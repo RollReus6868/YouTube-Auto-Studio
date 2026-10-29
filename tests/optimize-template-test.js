@@ -189,7 +189,7 @@ test('quet: Studio tieng Anh doc ten danh muc / ngon ngu tieng Anh', () => {
 test('che do hien thi trong trang Noi dung (Viet / Anh)', () => {
   const kinds = ['Công khai', 'Public', 'Không công khai', 'Unlisted', 'Riêng tư', 'Private', 'Đã lên lịch', 'Scheduled', 'Đang công chiếu', 'Premiere', 'Premiered', 'Premieres', ' PUBLIC ', 'Công khai'.normalize('NFD'), '', 'Khác']
   assert.deepEqual(kinds.map(ot.visibilityKind), ['public', 'public', 'unlisted', 'unlisted', 'private', 'private', 'scheduled', 'scheduled', 'premiere', 'premiere', 'premiere', 'premiere', 'public', 'public', '', ''])
-  assert.deepEqual(kinds.map(ot.canCommentVisibility), [true, true, true, true, false, false, false, false, false, false, false, false, true, true, true, false], 'chi cong khai / khong cong khai (hoac chua biet) moi binh luan')
+  assert.deepEqual(kinds.map(ot.canCommentVisibility), [true, true, true, true, false, false, false, false, true, true, true, true, true, true, true, false], 'cong khai / khong cong khai / cong chieu (hoac chua biet) moi binh luan')
   assert.equal(ot.canCommentVisibility(undefined), true)
 })
 

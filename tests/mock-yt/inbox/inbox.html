@@ -63,6 +63,9 @@
   [role=dialog] { top: 44px; left: 40px; width: 280px; padding: 16px } [role=dialog] label { display: block; padding: 6px 0; cursor: pointer }
   [role=dialog] .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px } [role=dialog] button { background: none; border: 0; color: #3ea6ff; font-weight: 600; cursor: pointer; padding: 6px 10px }
   .empty { padding: 60px; text-align: center; color: #aaa }
+  ytcp-comment-creator-heart, #creator-heart-button { display: inline-flex; align-items: center } ytcp-icon-button { cursor: pointer; padding: 0 4px }
+  #hearted-thumbnail, #hearted-border { display: none } ytcp-comment-creator-heart.hearted #hearted-thumbnail, ytcp-comment-creator-heart.hearted #hearted-border { display: inline-block }
+  ytcp-comment-creator-heart.hearted ytcp-icon-button { display: none } #hearted-thumbnail img { width: 16px; height: 16px; border-radius: 50%; background: #6b4f2a; display: block }
 </style>
 </head>
 <body>
@@ -106,6 +109,9 @@ let DATA = [
 const PAGE = 6
 const store = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch (_) { return d } }, set: (k, v) => localStorage.setItem(k, JSON.stringify(v)) }
 const replied = store.get('mockInbox.replied', {}) // key -> text (giu qua lan tai lai)
+// tim cua chu kenh (ytcp-comment-creator-heart nhu HTML that): k8 da tha tim san. mockInbox.heartnostate=1: bam tim
+// khong doi gi tren trang (de thu tool dung lai khi khong kiem duoc)
+const hearted = store.get('mockInbox.hearted', { k8: true })
 // bo loc lay tu dia chi (?filter=[...ENGAGED_STATUS...NOT_ENGAGED...]) nhu Studio; mockInbox.nofilter=1 de thu khi mat bo loc
 let filterOn = localStorage.getItem('mockInbox.nofilter') !== '1' && /COMMENT_CATEGORY_NOT_ENGAGED/.test(decodeURIComponent(location.search))
 let shown = PAGE
@@ -124,9 +130,12 @@ function metadata(author, ago, owner) {
     <div class="comment-badge-container">${owner ? '<ytcp-author-comment-badge is-creator="">✓</ytcp-author-comment-badge>' : ''}</div>
     <span class="metadata-divider">•</span><yt-formatted-string class="published-time-text" tabindex="0">${esc(ago)}</yt-formatted-string></div>`
 }
-const actions = (top, n) => `<div id="comment-actions"><ytcp-comment-action-buttons id="action-buttons"><div id="toolbar">${btn('reply-button', 'Phản hồi')}
+const heart = (key) => `<ytcp-comment-creator-heart id="creator-heart" class="${key && hearted[key] ? 'hearted' : ''}" data-hkey="${key || ''}"><div id="creator-heart-button">
+  <ytcp-icon-button compact="" tabindex="0" aria-label="Trái tim" aria-disabled="false" role="button">♡</ytcp-icon-button>
+  <yt-img-shadow id="hearted-thumbnail"><img id="img" alt="${OWN}" src=""></yt-img-shadow><yt-icon id="hearted-border">❤</yt-icon></div></ytcp-comment-creator-heart>`
+const actions = (top, n, key) => `<div id="comment-actions"><ytcp-comment-action-buttons id="action-buttons"><div id="toolbar">${btn('reply-button', 'Phản hồi')}
   ${top ? `<ytcp-button id="show-replies-button" class="${n ? 'open' : ''}"><button aria-label="0 phản hồi">0 phản hồi ${n ? '˄' : '˅'}</button></ytcp-button>` : ''}
-  <button class="icon" aria-label="Thích">👍</button><button class="icon" aria-label="Không thích">👎</button><button class="icon" aria-label="Trái tim">♡</button><button class="icon" aria-label="Tác vụ khác">⋮</button></div></ytcp-comment-action-buttons></div>`
+  <button class="icon" aria-label="Thích">👍</button><button class="icon" aria-label="Không thích">👎</button>${heart(key)}<button class="icon" aria-label="Tác vụ khác">⋮</button></div></ytcp-comment-action-buttons></div>`
 
 function replyHtml(r, parent) {
   return `<ytcp-comment class="expanded-replies" is-reply="" comment-id="${parent}.r${Math.random().toString(36).slice(2, 8)}"><div id="row-container"><div id="comment-row"><div id="body">
@@ -142,7 +151,7 @@ function threadHtml(d) {
       <div id="author-thumbnail"><a id="avatar" href="http://www.youtube.com/${esc(d.author)}">${esc(d.author[1].toUpperCase())}</a></div>
       <div id="content">${metadata(d.author, d.ago)}
         <span id="expander-container"><span id="expander"><yt-formatted-string id="content-text" split-lines="">${esc(d.text)}</yt-formatted-string><div role="button" id="more" aria-label="...Đọc thêm">...Đọc thêm</div></span></span>
-        ${actions(true, replies.length)}
+        ${actions(true, replies.length, d.key)}
       </div>
       <ytcp-comment-video-thumbnail id="video-thumbnail"><a id="body"><img id="img-with-fallback" src="${d.c[1]}" alt=""><div id="video-title"><yt-formatted-string split-lines="">${esc(d.c[0])}</yt-formatted-string></div></a></ytcp-comment-video-thumbnail>
     </div></div>
@@ -262,6 +271,17 @@ $('#main').addEventListener('scroll', () => {
   }, 500)
 })
 
+// bam tim (ca khi da tha: bam lai la bo tim nhu Studio)
+document.addEventListener('click', (e) => {
+  const h = e.target.closest('ytcp-comment-creator-heart')
+  if (!h || !h.dataset.hkey) return
+  const key = h.dataset.hkey
+  log({ type: 'heart', key, id: (DATA.find((x) => x.key === key) || {}).id, on: !hearted[key] })
+  if (localStorage.getItem('mockInbox.heartnostate') === '1') return
+  hearted[key] = !hearted[key]
+  store.set('mockInbox.hearted', hearted)
+  setTimeout(() => h.classList.toggle('hearted', !!hearted[key]), 300)
+})
 $('#comments-tab').onclick = () => { $('#comments-tab').setAttribute('aria-selected', 'true'); $('#comments-tab').classList.add('iron-selected') }
 // Studio hien danh sach tre (sau khi tai du lieu)
 setTimeout(() => { $('#comments-tab').setAttribute('aria-selected', 'true'); render() }, 400)
@@ -271,6 +291,7 @@ window.__mock = {
   prepend(d) { DATA.unshift(d); shown++; render() },
   reverse() { DATA.reverse(); render() },
   replied: () => replied,
+  hearted: () => hearted,
 }
 </script>
 </body>
