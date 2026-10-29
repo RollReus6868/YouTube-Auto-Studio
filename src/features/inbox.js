@@ -26,21 +26,31 @@ module.exports = (ctx) => {
   const desk = () => ctx.desk
 
   // ---- trang thai gui giao dien ---------------------------------------------------------
+  // Kenh dang tick tren trang Cong dong VA con tick o trang Tai khoan. Kenh da bo tick o mot trong hai noi:
+  // khong doc hop thu, khong tu gui, khong "Gui het", khong hien binh luan cua kenh do.
   function selected() {
+    const enabled = new Set(ctx.accounts ? ctx.accounts.channels().map((c) => c.key) : [])
     // khoa '<tai khoan>:<ten>' doi thanh UC ID khi da biet -> doi theo
     const keys = (settings().inboxChannels || []).map((k) => {
       const ch = ctx.accounts && ctx.accounts.find(k)
       return ch ? ch.key : k
     })
-    return [...new Set(keys)]
+    return [...new Set(keys)].filter((k) => enabled.has(k))
   }
+  // binh luan thuoc kenh dang chon? (khoa cu '<tai khoan>:<ten>' cua binh luan doi theo UC ID)
+  function chosen(item, sel = new Set(selected())) {
+    const ch = item && item.channelKey && ctx.accounts && ctx.accounts.find(item.channelKey)
+    return !!ch && sel.has(ch.key)
+  }
+
   function refresh() {
     S.paused = !!settings().inboxPaused
     S.options = ctx.accounts ? ctx.accounts.channels().map((c) => ({ key: c.key, name: c.name, handle: c.handle, accountId: c.accountId })) : []
     S.channels = selected()
     const d = desk()
     if (d) {
-      S.items = d.items.filter((x) => x.source === 'studio').slice(0, 200)
+      const sel = new Set(S.channels)
+      S.items = d.items.filter((x) => x.source === 'studio' && chosen(x, sel)).slice(0, 200)
       S.sentLastHour = d.sentLastHour()
       ctx.state.comments.sentLastHour = S.sentLastHour // gioi han chung voi trang Binh luan
     }
@@ -91,7 +101,8 @@ module.exports = (ctx) => {
         if (!opened) { await flow.openInbox(page, channelOf(page.url()), { urls: ctx.urls, log: ctx.log }); opened = true }
         else await sleep(gap())
         if (halted(g)) break
-        const r = await flow.reply(page, { id: it.id, author: it.author }, text, { uc: channelOf(page.url()), handle: ch.handle, urls: ctx.urls, log: ctx.log })
+        // uc = kenh cua binh luan (khong lay tu trang): Studio lech sang kenh khac thi reply() khong gui
+        const r = await flow.reply(page, { id: it.id, author: it.author }, text, { uc: ch.ucId || channelOf(page.url()), handle: ch.handle, urls: ctx.urls, log: ctx.log })
         if (r.status === 'already') desk().update(it.id, { status: 'skipped', note: 'Kênh đã trả lời bình luận này rồi' })
         else { desk().markSent(it.id, text); sent++ }
       } catch (e) {
@@ -110,6 +121,11 @@ module.exports = (ctx) => {
   async function sendMany(list) {
     if (!ctx.withChannel) { ctx.log('warn', ACCOUNTS_MISSING); return 0 }
     list = list.map((x) => ({ item: x.item, text: String(x.text || '').trim().replace(/[<>]/g, '') })).filter((x) => x.item && x.text && x.item.status !== 'sent')
+    const off = list.filter((x) => !chosen(x.item))
+    if (off.length) {
+      ctx.log('warn', `Không gửi ${off.length} trả lời của kênh đã bỏ tick (${[...new Set(off.map((x) => x.item.channelName))].join(', ')}).`)
+      list = list.filter((x) => chosen(x.item))
+    }
     if (!list.length) return 0
     if (!desk().canSend(settings().replyPerHour)) {
       ctx.log('warn', `Đã gửi đủ ${settings().replyPerHour} trả lời trong 1 giờ qua (giới hạn trong Cài đặt). Thử lại sau.`)
@@ -169,7 +185,8 @@ module.exports = (ctx) => {
     if (S.busy) return
     if (!manual && (settings().replyMode === 'off' || settings().inboxPaused)) return
     if (!ctx.withChannel || !ctx.accounts) return manual && ctx.log('warn', ACCOUNTS_MISSING)
-    keys = (keys && keys.length ? keys : selected()).filter(Boolean)
+    const sel = selected()
+    keys = keys && keys.length ? keys.map((k) => { const ch = ctx.accounts.find(k); return ch ? ch.key : k }).filter((k) => sel.includes(k)) : sel
     if (!keys.length) return manual && ctx.log('warn', 'Chọn ít nhất một kênh để lấy bình luận (trang Cộng đồng).')
     if (manual && settings().inboxPaused) ctx.store.save({ inboxPaused: false }) // bam lay tay = bat lai tu dong
     const g = gen
@@ -249,7 +266,7 @@ module.exports = (ctx) => {
       inbox_send_all: async (p) => {
         const texts = (p && p.texts) || {}
         const ids = p && Array.isArray(p.ids) ? new Set(p.ids) : null
-        const list = desk().items.filter((x) => x.source === 'studio' && x.status === 'ready' && (!ids || ids.has(x.id)))
+        const list = desk().items.filter((x) => x.source === 'studio' && x.status === 'ready' && (!ids || ids.has(x.id)) && chosen(x))
           .map((it) => ({ item: it, text: texts[it.id] !== undefined ? texts[it.id] : it.draft }))
         if (!list.length) return ctx.log('info', 'Cộng đồng: không có bản nháp nào để gửi.')
         ctx.log('info', `Cộng đồng: gửi ${list.length} trả lời…`)

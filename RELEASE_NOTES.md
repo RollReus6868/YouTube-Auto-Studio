@@ -1,3 +1,23 @@
+## YT Auto Studio 0.5.8
+
+### Cộng đồng
+- **Sửa lỗi kênh đã bỏ tick vẫn bị quét và trả lời.** Kênh bỏ tick ở trang Cộng đồng hoặc trang Tài khoản giờ không bị đọc hộp thư, không tự trả lời, không gửi bằng "Gửi hết", và bình luận của kênh đó cũng ẩn khỏi danh sách.
+- Trước khi gửi, tool kiểm tra Studio có đang ở đúng kênh của bình luận không. Nếu sai kênh thì không gửi.
+
+### Đăng video
+- **Chế độ hiển thị riêng cho từng video:** mở thẻ video, chọn ở ô "Chế độ hiển thị". Có các lựa chọn: Theo mẫu, Riêng tư, Không công khai, Công khai, Công khai · Công chiếu ngay, Lên lịch.
+  - Khi chọn Lên lịch, bạn chọn ngày giờ và có thể tick "Công chiếu".
+  - Video có giờ riêng không chiếm khung giờ trong lịch của mẫu.
+  - Tool nhớ lựa chọn này cho tới khi video được đăng.
+
+- **Tải video lên:**
+  - Tool không tự giới hạn tốc độ tải lên. Tool cũng giảm số lần đọc tiến độ (2 giây một lần thay vì 1 giây) để trang Studio đỡ bận.
+  - Cứ 30 giây, nhật ký ghi tốc độ tải lên (MB/s) và thời gian còn lại, để bạn so với khi tải tay trên Chrome.
+
+### Gemini viết mô tả
+- **Ô "Yêu cầu của bạn cho Gemini"** trong hộp thoại Gemini viết mô tả, ví dụ "viết 3 đoạn bằng tiếng Anh, cuối mời đọc ebook". Bấm "Viết theo yêu cầu này", Gemini sẽ làm theo yêu cầu của bạn trước.
+- Yêu cầu mặc định nằm ở **Cài đặt → Mô tả video**. Trong hộp thoại cũng có nút "Dùng làm mặc định".
+
 ## YT Auto Studio 0.5.7
 
 ### Tối ưu video

@@ -121,6 +121,15 @@ const waitFor = async (fn, what, ms = 60000) => {
     assert.equal(replies().find((r) => r.author === first.author).text, 'Đã sửa trước khi gửi hết 🙏')
     assert.equal(new Set(replies().map((r) => r.key)).size, 9, 'khong tra loi trung')
     assert.equal(yt.hits.filter((h) => /\/comments\/inbox/.test(h)).length - opens0, 1, 'mo hop thu 1 lan cho ca 6 tra loi')
+    // bo tick kenh: khong hien binh luan, khong doc hop thu, khong gui cua kenh do
+    await chip.click()
+    await waitFor(async () => (await st()).f.inbox.items.length === 0, 'an binh luan cua kenh bo tick')
+    const hits0 = yt.hits.length
+    await call('inbox_fetch')
+    await waitFor(async () => (await st()).logs.some((l) => /Chọn ít nhất một kênh/.test(l.msg)), 'khong doc kenh bo tick')
+    assert(!yt.hits.slice(hits0).some((h) => /\/comments\/inbox/.test(h)), 'khong mo hop thu kenh bo tick')
+    await chip.click()
+    await waitFor(async () => (await st()).f.inbox.items.length === 9, 'tick lai: hien lai binh luan')
     if (process.env.YA_SHOT) require('child_process').execFileSync('import', ['-window', 'root', path.join(process.env.YA_SHOT, 'app-cong-dong.png')])
     console.log('E2E INBOX PASSED')
   }, dataDir)

@@ -105,7 +105,28 @@ run(9344, {}, async ({ ui, find, dataDir }) => {
   await ui.getByRole('button', { name: /bi an tap 3/ }).click()
   await ui.getByText('Mô tả sẽ đăng').waitFor()
   await ui.getByText(/Video có Lan\.\s+Ủng hộ Kênh Thử/).waitFor()
+  // che do hien thi rieng cua video nay: Len lich + Cong chieu, chon tren the video
+  const visSel = ui.getByRole('combobox', { name: /^Chế độ hiển thị của bi an tap 3/ })
+  assert.equal(await visSel.inputValue(), '', 'mac dinh: theo mau')
+  await visSel.selectOption('schedule')
+  await waitFor(async () => { st = await call('hello'); return st.scan.videos.find((x) => x.dir.includes('tap-3')).vis?.mode === 'schedule' }, 'chon len lich')
+  const when = new Date(Date.now() + 3 * 86400e3); when.setHours(9, 30, 0, 0)
+  const p2 = (n) => String(n).padStart(2, '0')
+  await ui.getByLabel('Giờ lên lịch').fill(`${when.getFullYear()}-${p2(when.getMonth() + 1)}-${p2(when.getDate())}T09:30`)
+  await ui.getByLabel('Giờ lên lịch').blur()
+  await ui.getByRole('checkbox', { name: 'Công chiếu' }).click()
+  await waitFor(async () => { st = await call('hello'); const m = tap3(); return m.publishAt === when.toISOString() && m.schedulePremiere }, 'luu gio len lich rieng')
+  assert.equal(tap3().privacy, 'private')
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8')).videoVis[st.scan.videos.find((x) => x.dir.includes('tap-3')).id], { mode: 'schedule', at: when.toISOString(), premiere: true })
+  await visSel.selectOption('unlisted')
+  await waitFor(async () => { st = await call('hello'); return tap3().privacy === 'unlisted' && !tap3().publishAt }, 'doi sang khong cong khai')
+  await visSel.selectOption('')
+  await waitFor(async () => { st = await call('hello'); return !st.scan.videos.find((x) => x.dir.includes('tap-3')).vis }, 've theo mau')
   await ui.getByRole('button', { name: 'Cài đặt', exact: true }).click()
+  // yeu cau mac dinh cho Gemini khi viet mo ta
+  await ui.getByLabel('Yêu cầu cho Gemini khi viết mô tả').fill('Viết 1 đoạn ngắn, không hashtag')
+  await ui.getByRole('button', { name: 'Lưu cài đặt' }).click()
+  await waitFor(() => JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8')).descRequest === 'Viết 1 đoạn ngắn, không hashtag', 'luu yeu cau Gemini')
 
   // 5) trang Cong dong: khung Studio nam dung vi tri giao dien danh cho no
   await ui.getByRole('button', { name: 'Cộng đồng', exact: true }).click()

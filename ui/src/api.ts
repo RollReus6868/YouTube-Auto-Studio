@@ -71,6 +71,7 @@ export type Settings = {
   uploadChannel: string // kenh dang video (khoa kenh o trang Tai khoan)
   descDefault?: string // phan mo ta mac dinh them vao mo ta moi video (link donate, ebook...)
   descPosition?: 'above' | 'below' // phan Gemini viet / mo ta rieng cua video nam tren | duoi phan mac dinh
+  descRequest?: string // yeu cau mac dinh cho Gemini khi viet mo ta
 }
 export type VideoMeta = {
   title: string
@@ -99,9 +100,11 @@ export type VideoItem = {
   preset: string
   meta: VideoMeta
   script?: { file: string; auto: boolean } | null // kich ban cho Gemini viet mo ta (auto: file canh video, khong thi chon tay)
+  vis?: VideoVis | null // che do hien thi rieng cua video (null = theo mau)
   errors: string[]
   warnings: string[]
 }
+export type VideoVis = { mode: 'private' | 'unlisted' | 'public' | 'premiere' | 'schedule'; at?: string; premiere?: boolean }
 export type PostItem = {
   id: string
   dir: string
@@ -125,7 +128,7 @@ export type PostItem = {
 export type Job = { status: 'queued' | 'run' | 'done' | 'error' | 'stopped'; title?: string; step: string; progress: number; error: string; url: string; warnings?: string[] }
 export type UploadChannel = { key: string; name: string; handle: string; ucId: string; avatar: string }
 export type Comment = { id: string; videoId: string; videoTitle: string; author: string; text: string; publishedAt: string; likeCount: number; status: 'new' | 'ready' | 'sent' | 'skipped' | 'error'; kind: string; draft: string; error: string; note: string }
-export type Draft = { id: string; text: string; loading: boolean; error: string; script?: string } // script: ten file kich ban da gui cho Gemini
+export type Draft = { id: string; text: string; loading: boolean; error: string; script?: string; request?: string } // script: ten file kich ban da gui cho Gemini; request: yeu cau rieng da gui
 export type State = {
   status: 'idle' | 'run' | 'update'
   version: string

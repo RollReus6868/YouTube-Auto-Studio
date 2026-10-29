@@ -8,7 +8,7 @@ const { pathToFileURL } = require('url')
 
 const updater = require('./updater')
 const scanner = require('./scanner')
-const { buildVideoMeta, validateMeta, planSchedule, CATEGORIES, DESC_POSITIONS } = require('./metadata')
+const { buildVideoMeta, validateMeta, planSchedule, applyVisibility, VIS_MODES, CATEGORIES, DESC_POSITIONS } = require('./metadata')
 const { readScript, SCRIPT_EXT } = require('./docx')
 const { Store, dropApiData } = require('./store')
 const { endpoints, gemini, geminiModels, GEMINI_MODELS, descriptionPrompt } = require('./google')
@@ -135,7 +135,9 @@ function runScan(quiet = false) {
     const h = done.get(it.key)
     if (h) it.errors.unshift(`Đã đăng lên YouTube lúc ${new Date(h.at).toLocaleString('vi-VN')} (${h.url}). Chuyển ${it.layout === 'flat' ? 'file' : 'thư mục'} này vào da-dang/ để ẩn.`)
   }
-  const ready = r.videos.filter((v) => !v.errors.length)
+  // video co che do hien thi rieng (trang Dang video) khong chiem moc lich cua preset
+  const own = store.settings.videoVis || {}
+  const ready = r.videos.filter((v) => !v.errors.length && !(own[v.id] && VIS_MODES.includes(own[v.id].mode)))
   const plan = planSchedule(ready, (v) => store.presetFor(v))
   const planOf = new Map(ready.map((v, i) => [v.id, plan[i]]))
   const channel = store.settings.channel
@@ -145,7 +147,9 @@ function runScan(quiet = false) {
     videos: r.videos.map((v) => {
       const preset = store.presetFor(v)
       const p = planOf.get(v.id) || { publishAt: null, warning: '' }
-      const meta = buildVideoMeta(v, preset, { publishAt: p.publishAt, channel, settings: store.settings })
+      const ov = own[v.id] && VIS_MODES.includes(own[v.id].mode) ? own[v.id] : null
+      const vis = applyVisibility(buildVideoMeta(v, preset, { publishAt: p.publishAt, channel, settings: store.settings }), ov)
+      const meta = vis.meta
       const problems = v.errors.length ? v.errors : validateMeta(meta)
       const script = scriptFor(v)
       raw.set(v.id, { layout: v.layout, key: v.key, folder: v.folder, video: v.video, files: v.files, doneDir: v.doneDir, infoFile: v.infoFile, thumbnail: v.thumbnail, meta, info: v.info, name: v.name, script, ok: !problems.length })
@@ -156,7 +160,8 @@ function runScan(quiet = false) {
         subtitles: v.subtitles.map((s) => ({ file: path.basename(s.file), lang: s.lang || '' })),
         preset: preset.name, meta: { ...meta, thumbnail: undefined, subtitles: undefined },
         script: script ? { file: path.basename(script.path), auto: script.auto } : null,
-        errors: problems, warnings: v.warnings.concat(p.warning ? [p.warning] : []),
+        errors: problems, warnings: v.warnings.concat(p.warning && !ov ? [p.warning] : [], vis.warning ? [vis.warning] : []),
+        vis: ov, // che do hien thi rieng (null = theo mau)
       }
     }),
     posts: r.posts.map((p) => ({
@@ -356,6 +361,7 @@ async function runUploads(ids) {
         }), { label: `dang-video-${item.name || id}` })
         addHistory({ folder: item.key || item.folder, movedTo: r.folder, id: r.id, url: r.url, title: item.meta.title, channel: ch.ucId || key, at: new Date().toISOString() })
         setJob(id, { status: 'done', step: '', progress: 100, url: r.url, warnings: r.warnings })
+        if ((store.settings.videoVis || {})[id]) { const all = { ...store.settings.videoVis }; delete all[id]; store.save({ videoVis: all }) }
         if (r.after && ctx.afterUpload) ctx.afterUpload({ videoId: r.id, title: item.meta.title, publishAt: r.schedule || item.meta.publishAt, tpl: r.after, presetId: preset.id || '', channelId: key })
         ok++
       } catch (e) {
@@ -378,11 +384,13 @@ async function runUploads(ids) {
 }
 
 // ---- Gemini viet mo ta -------------------------------------------------------------
-async function describe(id) {
+// request: yeu cau rieng cua nguoi dung (o "Yêu cầu cho Gemini" trong hop thoai); khong co thi lay mac dinh o Cai dat
+async function describe(id, request) {
   const item = raw.get(id)
   if (!item) return
   const file = item.script ? path.basename(item.script.path) : ''
-  state.draft = { id, text: '', loading: true, error: '', script: file }
+  request = String(request === undefined ? store.settings.descRequest || '' : request).trim().slice(0, 2000)
+  state.draft = { id, text: '', loading: true, error: '', script: file, request }
   push()
   try {
     let script = ''
@@ -393,11 +401,11 @@ async function describe(id) {
     }
     const text = await gemini({
       key: store.getSecret('gemini'), model: store.settings.geminiModel, thinking: store.settings.geminiThinking, fetchFn: net.fetch, ep: endpoints(),
-      prompt: descriptionPrompt({ title: item.meta.title, name: item.name, notes: item.info.ghi_chu, channel: store.settings.channel, language: (store.presetFor({ info: item.info }).optimize || {}).language || '', current: item.info.mo_ta, script }),
+      prompt: descriptionPrompt({ title: item.meta.title, name: item.name, notes: item.info.ghi_chu, channel: store.settings.channel, language: (store.presetFor({ info: item.info }).optimize || {}).language || '', current: item.info.mo_ta, script, request }),
     })
-    state.draft = { id, text: text.replace(/[<>]/g, ''), loading: false, error: '', script: file }
+    state.draft = { id, text: text.replace(/[<>]/g, ''), loading: false, error: '', script: file, request }
   } catch (e) {
-    state.draft = { id, text: '', loading: false, error: e.message, script: file }
+    state.draft = { id, text: '', loading: false, error: e.message, script: file, request }
   }
   push()
 }
@@ -487,7 +495,17 @@ const commands = {
   },
   upload: (ids) => !busy && runUploads(ids),
   upload_channel: (key) => !busy && setUploadChannel(key),
-  describe: (id) => describe(id),
+  describe: (p) => (p && typeof p === 'object' ? describe(p.id, p.request) : describe(p)),
+  // che do hien thi rieng cua mot video: { id, mode: '' (theo mau) | private | unlisted | public | premiere | schedule, at, premiere }
+  video_visibility: (p) => {
+    if (!p || !p.id) return
+    const all = { ...(store.settings.videoVis || {}) }
+    if (!VIS_MODES.includes(p.mode)) delete all[p.id]
+    else all[p.id] = { mode: p.mode, ...(p.mode === 'schedule' ? { at: p.at || '', premiere: !!p.premiere } : {}) }
+    store.save({ videoVis: all })
+    refreshSettings()
+    runScan(true)
+  },
   draft_close: () => { state.draft = null },
   script_attach: (id) => attachScript(id),
   script_remove: (id) => setScript(id, ''),
@@ -508,7 +526,7 @@ const commands = {
   open_url: (u) => /^https:\/\//.test(u) && shell.openExternal(u),
   settings_save: (patch) => {
     // chi nhan cac truong cai dat thuong; khoa bi mat di lenh rieng
-    const allowed = ['channel', 'presets', 'defaultPreset', 'runInPane', 'geminiModel', 'geminiThinking', 'replyStyle', 'replyMode', 'replyPerHour', 'skipWords', 'descDefault', 'descPosition']
+    const allowed = ['channel', 'presets', 'defaultPreset', 'runInPane', 'geminiModel', 'geminiThinking', 'replyStyle', 'replyMode', 'replyPerHour', 'skipWords', 'descDefault', 'descPosition', 'descRequest']
     const clean = {}
     for (const k of allowed) if (patch && patch[k] !== undefined) clean[k] = patch[k]
     if (clean.descDefault !== undefined) clean.descDefault = String(clean.descDefault).replace(/\r\n?/g, '\n')

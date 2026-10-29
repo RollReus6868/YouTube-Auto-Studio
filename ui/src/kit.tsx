@@ -398,11 +398,11 @@ export function TextArea({ className, ...p }: TextareaHTMLAttributes<HTMLTextAre
   return <textarea className={cn(field, 'min-h-[96px] resize-y py-2 leading-relaxed', className)} {...p} />
 }
 
-export function Select({ value, onChange, options, className, label }: {
-  value: string; onChange: (v: string) => void; options: [string, string][]; className?: string; label?: string
+export function Select({ value, onChange, options, className, label, disabled }: {
+  value: string; onChange: (v: string) => void; options: [string, string][]; className?: string; label?: string; disabled?: boolean
 }) {
   return (
-    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className={cn(field, 'h-9 pr-8', className)}>
+    <select aria-label={label} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={cn(field, 'h-9 pr-8', className)}>
       {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
     </select>
   )

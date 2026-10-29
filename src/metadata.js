@@ -191,4 +191,19 @@ function planSchedule(items, presetFor, now = new Date()) {
   })
 }
 
-module.exports = { CATEGORIES, LIMITS, SCHEDULE_MODES, DESC_POSITIONS, composeDescription, defaultPreset, normalizePreset, splitTags, render, buildVideoMeta, validateMeta, planSchedule }
+// Che do hien thi rieng cua mot video (trang Dang video), de len mau / lich cua preset.
+//   ov: { mode: 'private' | 'unlisted' | 'public' | 'premiere' | 'schedule', at: ISO (schedule), premiere: bool (schedule) }
+// Tra ve { meta, warning }. mode khac / rong: giu nguyen meta.
+const VIS_MODES = ['private', 'unlisted', 'public', 'premiere', 'schedule']
+function applyVisibility(meta, ov, now = new Date()) {
+  if (!ov || !VIS_MODES.includes(ov.mode)) return { meta, warning: '' }
+  const out = { ...meta, premiere: false, publishAt: null, schedulePremiere: false }
+  if (ov.mode === 'premiere') return { meta: { ...out, privacy: 'public', premiere: true }, warning: '' }
+  if (ov.mode !== 'schedule') return { meta: { ...out, privacy: ov.mode }, warning: '' }
+  const at = ov.at ? new Date(ov.at) : null
+  if (!at || isNaN(+at)) return { meta: { ...out, privacy: 'private' }, warning: 'Chưa chọn giờ lên lịch cho video này: sẽ đăng ở chế độ Riêng tư.' }
+  if (at <= now) return { meta: { ...out, privacy: 'private' }, warning: 'Giờ lên lịch của video này đã qua: sẽ đăng ở chế độ Riêng tư. Chọn lại giờ.' }
+  return { meta: { ...out, privacy: 'private', publishAt: at.toISOString(), schedulePremiere: !!ov.premiere }, warning: '' }
+}
+
+module.exports = { CATEGORIES, LIMITS, SCHEDULE_MODES, DESC_POSITIONS, VIS_MODES, composeDescription, defaultPreset, normalizePreset, splitTags, render, buildVideoMeta, validateMeta, planSchedule, applyVisibility }

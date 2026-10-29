@@ -72,7 +72,9 @@ async function gemini({ key, model, prompt, system, json = false, thinking = '',
 
 // Loi nhac cho Gemini viet mo ta video. script: chu cua kich ban dinh kem (chi gui SCRIPT_MAX ky tu dau).
 const SCRIPT_MAX = 30000
-function descriptionPrompt({ title, name, notes, channel, language, current, script }) {
+// request: yeu cau rieng cua chu kenh (go trong tool) - uu tien hon yeu cau mac dinh ve do dai / bo cuc / hashtag
+function descriptionPrompt({ title, name, notes, channel, language, current, script, request }) {
+  const want = String(request || '').trim()
   let s = String(script || '').trim()
   const cut = s.length > SCRIPT_MAX
   if (cut) s = s.slice(0, SCRIPT_MAX)
@@ -82,7 +84,8 @@ function descriptionPrompt({ title, name, notes, channel, language, current, scr
     notes ? `Ghi chú của chủ kênh về nội dung: ${notes}` : '',
     current ? `Mô tả hiện tại (có thể dùng lại ý): ${current}` : '',
     s ? `Kịch bản của video (nội dung thật của video, nằm giữa hai dòng ===):\n===\n${s}\n===${cut ? '\n(Kịch bản dài, trên đây chỉ là phần đầu.)' : ''}` : '',
-    'Yêu cầu: 2 đến 4 đoạn ngắn, mở đầu hấp dẫn trong 2 câu đầu (hiện trên kết quả tìm kiếm), có lời kêu gọi đăng ký kênh, kết thúc bằng 3 đến 5 hashtag liên quan.',
+    want ? `Yêu cầu riêng của chủ kênh (làm đúng theo yêu cầu này; nếu khác với yêu cầu mặc định bên dưới thì theo yêu cầu này):\n${want}` : '',
+    `${want ? 'Yêu cầu mặc định (chỉ áp dụng phần nào yêu cầu riêng không nói tới)' : 'Yêu cầu'}: 2 đến 4 đoạn ngắn, mở đầu hấp dẫn trong 2 câu đầu (hiện trên kết quả tìm kiếm), có lời kêu gọi đăng ký kênh, kết thúc bằng 3 đến 5 hashtag liên quan.`,
     s ? 'Viết dựa trên nội dung thật của kịch bản: nêu đúng chủ đề, nhân vật, sự kiện và ý chính có trong kịch bản, không chép nguyên văn đoạn dài. Không bịa thông tin không có trong kịch bản, tiêu đề hay ghi chú.' : '',
     `Không dùng dấu < hoặc >.${s ? '' : ' Không bịa thông tin không có trong tiêu đề hay ghi chú.'} Chỉ trả về nội dung mô tả, không giải thích thêm.`,
   ].filter(Boolean).join('\n')

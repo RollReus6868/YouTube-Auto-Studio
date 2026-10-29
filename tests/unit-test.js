@@ -568,6 +568,27 @@ test('kich ban: tu nhan canh video trong thu muc phang, gui cho Gemini (cat 30.0
   assert(!big.includes('ĐUÔI') && big.includes('a'.repeat(g.SCRIPT_MAX)) && /chỉ là phần đầu/.test(big))
 })
 
+test('che do hien thi rieng tung video + yeu cau rieng cho Gemini', () => {
+  const md = require('../src/metadata')
+  const now = new Date(2026, 9, 29, 12)
+  const base = { title: 'T', privacy: 'public', premiere: true, publishAt: '2026-11-01T02:00:00.000Z', schedulePremiere: true }
+  assert.deepEqual(md.applyVisibility(base, null).meta, base, 'khong co: theo mau')
+  assert.deepEqual(md.applyVisibility(base, { mode: 'abc' }).meta, base)
+  const pick = (m) => [m.privacy, m.premiere, m.publishAt, m.schedulePremiere]
+  assert.deepEqual(pick(md.applyVisibility(base, { mode: 'unlisted' }, now).meta), ['unlisted', false, null, false])
+  assert.deepEqual(pick(md.applyVisibility(base, { mode: 'premiere' }, now).meta), ['public', true, null, false])
+  const at = new Date(2026, 9, 30, 9).toISOString()
+  assert.deepEqual(pick(md.applyVisibility({ ...base, publishAt: null }, { mode: 'schedule', at, premiere: true }, now).meta), ['private', false, at, true])
+  const past = md.applyVisibility(base, { mode: 'schedule', at: new Date(2026, 9, 28).toISOString() }, now)
+  assert.deepEqual([pick(past.meta), /đã qua/.test(past.warning)], [['private', false, null, false], true])
+  assert.match(md.applyVisibility(base, { mode: 'schedule' }, now).warning, /Chưa chọn giờ/)
+  const g = require('../src/google')
+  const p = g.descriptionPrompt({ title: 'X', request: 'Viết 1 đoạn bằng tiếng Anh, không hashtag' })
+  assert.match(p, /Yêu cầu riêng của chủ kênh[^\n]*\nViết 1 đoạn bằng tiếng Anh, không hashtag/)
+  assert.match(p, /Yêu cầu mặc định \(chỉ áp dụng phần nào yêu cầu riêng không nói tới\)/)
+  assert(!/Yêu cầu riêng/.test(g.descriptionPrompt({ title: 'X', request: '  ' })))
+})
+
 ;(async () => {
   let failed = 0
   for (const [name, fn] of tests) {

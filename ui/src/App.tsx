@@ -4,7 +4,7 @@ import {
   Square, Subtitles, Trash2, Upload, X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { call, demoState, emptyState, isDemo, newPreset, type Job, type Preset, type Settings as SettingsT, type State, type VideoItem } from './api'
+import { call, demoState, emptyState, isDemo, newPreset, type Job, type Preset, type Settings as SettingsT, type State, type VideoItem, type VideoVis } from './api'
 import {
   ActionBar, AppShell, BrowserPane, Button, Card, Choice, Dialog, EmptyState, Field, GradientProgress, PageBody, PageHeader, Pill, Select,
   Sidebar, TextArea, TextInput, ThemeGrid, ToggleRow, cn, useStickToBottom, type Tone,
@@ -100,6 +100,49 @@ const visText = (m: VideoItem['meta']) => m.publishAt
   ? `Riêng tư → ${m.schedulePremiere ? 'Công chiếu' : 'Công khai'} lúc ${fmtWhen(m.publishAt)}`
   : `${PRIVACY[m.privacy]}${m.premiere ? ' · Công chiếu ngay' : ''}`
 
+// Che do hien thi rieng cua mot video (moi video mot gio dang khac nhau); "Theo mẫu" = preset / lich cua mau
+const VIS_OPTIONS: [string, string][] = [
+  ['', 'Theo mẫu'], ['private', 'Riêng tư'], ['unlisted', 'Không công khai'], ['public', 'Công khai'],
+  ['premiere', 'Công khai · Công chiếu ngay'], ['schedule', 'Lên lịch'],
+]
+// ISO <-> gia tri o datetime-local (gio may)
+const toLocalInput = (iso?: string) => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(+d)) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+function VisPicker({ v, disabled, send }: { v: VideoItem; disabled: boolean; send: Backend['send'] }) {
+  const vis = v.vis ?? null
+  const [at, setAt] = useState(toLocalInput(vis?.at))
+  useEffect(() => setAt(toLocalInput(vis?.at)), [vis?.at])
+  const save = (patch: Omit<Partial<VideoVis>, 'mode'> & { mode: string }) => send('video_visibility', { id: v.id, at: vis?.at, premiere: vis?.premiere, ...patch })
+  // mac dinh khi chuyen sang "Lên lịch": gio mau dang tinh (neu co), khong thi 1 tieng nua tron gio
+  const defaultAt = () => v.meta.publishAt || new Date(Math.ceil((Date.now() + 3600e3) / 3600e3) * 3600e3).toISOString()
+  return (
+    <div className="space-y-1.5 rounded-lg bg-muted/40 px-2.5 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-bold text-muted-foreground">Chế độ hiển thị</span>
+        <Select label={`Chế độ hiển thị của ${v.meta.title || v.name}`} className="h-8 w-auto min-w-0 basis-48 text-xs" value={vis?.mode ?? ''} disabled={disabled}
+          onChange={(mode) => save(mode === 'schedule' ? { mode, at: vis?.at || defaultAt() } : { mode })} options={VIS_OPTIONS} />
+        {vis?.mode === 'schedule' && (
+          <>
+            <input type="datetime-local" aria-label="Giờ lên lịch" value={at} disabled={disabled}
+              className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+              onChange={(e) => setAt(e.target.value)}
+              onBlur={() => { const d = new Date(at); if (at && !isNaN(+d)) save({ mode: 'schedule', at: d.toISOString() }) }} />
+            <label className="inline-flex items-center gap-1.5 text-xs">
+              <input type="checkbox" checked={!!vis.premiere} disabled={disabled} onChange={(e) => save({ mode: 'schedule', premiere: e.target.checked, at: at && !isNaN(+new Date(at)) ? new Date(at).toISOString() : vis.at })} /> Công chiếu
+            </label>
+          </>
+        )}
+      </div>
+      <p className="text-[11px] text-muted-foreground">{vis ? 'Riêng video này: ' : 'Theo mẫu: '}{visText(v.meta)}</p>
+    </div>
+  )
+}
+
 /* ================= Dang video ================= */
 // cac buoc cua src/flows/upload.js (hop thoai tai len cua Studio)
 const STEPS: Record<string, string> = {
@@ -146,7 +189,7 @@ function VideoCard({ v, job, open, onToggle, busy, connected, send }: {
           <h3 className="line-clamp-2 text-sm font-bold leading-snug">{v.meta.title || v.name}</h3>
           <div className="flex flex-wrap gap-1">
             <Chip icon={LayoutTemplate} tone="active">{v.preset}</Chip>
-            {v.meta.publishAt ? <Chip icon={CalendarClock}>{fmtWhen(v.meta.publishAt)}</Chip> : <Chip>{PRIVACY[v.meta.privacy]} ngay</Chip>}
+            {v.meta.publishAt ? <Chip icon={CalendarClock} tone={v.vis ? 'active' : undefined}>{fmtWhen(v.meta.publishAt)}</Chip> : <Chip tone={v.vis ? 'active' : undefined}>{PRIVACY[v.meta.privacy]} ngay</Chip>}
             {(v.meta.premiere || (v.meta.publishAt && v.meta.schedulePremiere)) && <Chip icon={Clapperboard}>Công chiếu</Chip>}
             {v.video && <Chip icon={FileVideo}>{v.video}</Chip>}
             {v.thumb && <Chip icon={ImageIcon}>{v.thumb}</Chip>}
@@ -194,8 +237,8 @@ function VideoCard({ v, job, open, onToggle, busy, connected, send }: {
           <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
             <dt className="text-muted-foreground">Playlist</dt><dd className="truncate font-semibold">{v.meta.playlist || '—'}</dd>
             <dt className="text-muted-foreground">Dành cho trẻ em</dt><dd className="font-semibold">{v.meta.madeForKids ? 'Có' : 'Không'}</dd>
-            <dt className="text-muted-foreground">Hiển thị</dt><dd className="font-semibold">{visText(v.meta)}</dd>
           </dl>
+          <VisPicker v={v} disabled={!!active || job?.status === 'done'} send={send} />
           {[...v.errors.slice(1), ...v.warnings.slice(v.errors.length ? 0 : 1), ...(job?.warnings ?? [])].map((m) => (
             <p key={m} className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />{m}</p>
           ))}
@@ -214,6 +257,9 @@ function DraftDialog({ state, send }: Backend) {
   const d = state.draft
   const [text, setText] = useState('')
   useEffect(() => setText(d?.text ?? ''), [d?.text])
+  // yeu cau rieng cho lan viet nay (mac dinh: Cai dat → Mô tả video)
+  const [req, setReq] = useState('')
+  useEffect(() => setReq(d?.request ?? ''), [d?.id, d?.request])
   const v = state.scan.videos.find((x) => x.id === d?.id)
   const file = v?.layout === 'flat' && v.infoFile ? v.infoFile : 'info.txt'
   const fixed = (state.settings?.descDefault ?? '').trim()
@@ -225,12 +271,23 @@ function DraftDialog({ state, send }: Backend) {
       actions={
         <>
           <Button variant="outline" onClick={() => send('draft_close')}>Đóng</Button>
-          <Button variant="outline" disabled={d?.loading} onClick={() => d && send('describe', d.id)}><RefreshCw /> Viết lại</Button>
+          <Button variant="outline" disabled={d?.loading} onClick={() => d && send('describe', { id: d.id, request: req })}><RefreshCw /> Viết lại</Button>
           <Button disabled={!d || d.loading || !text.trim()} onClick={() => d && send('save_description', { id: d.id, text })}><Save /> Lưu vào {file}</Button>
         </>
       }
     >
       {d?.script && <p className="mb-2"><Pill tone="active" className="max-w-full">Theo kịch bản: {d.script}</Pill></p>}
+      <div className="mb-3 space-y-1">
+        <p className="text-xs font-bold text-muted-foreground">Yêu cầu của bạn cho Gemini</p>
+        <TextArea rows={2} className="min-h-[56px] text-foreground" value={req} onChange={(e) => setReq(e.target.value)} aria-label="Yêu cầu của bạn cho Gemini"
+          placeholder='Ví dụ: "Viết 3 đoạn bằng tiếng Anh, nhấn mạnh câu Kinh Thánh chính, cuối mời đọc ebook". Để trống: Gemini tự viết.' />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" className="h-8 px-3 text-xs" disabled={!d || d.loading} onClick={() => d && send('describe', { id: d.id, request: req })}><Sparkles /> Viết theo yêu cầu này</Button>
+          {req.trim() !== (state.settings?.descRequest ?? '').trim() && (
+            <Button variant="subtle" className="h-8 px-3 text-xs" onClick={() => send('settings_save', { descRequest: req })}><Save /> Dùng làm mặc định</Button>
+          )}
+        </div>
+      </div>
       {d?.loading ? <p className="animate-pulse">Gemini đang viết…</p>
         : d?.error ? <p className="text-red-600 dark:text-red-400">{d.error}</p>
         : <>
@@ -545,11 +602,11 @@ function LogsPage({ state, send }: Backend) {
 }
 
 /* ================= Cai dat ================= */
-type Draft = Pick<SettingsT, 'channel' | 'runInPane' | 'geminiModel' | 'geminiThinking' | 'replyStyle' | 'replyMode' | 'replyPerHour' | 'skipWords'> & { descDefault: string; descPosition: 'above' | 'below' }
+type Draft = Pick<SettingsT, 'channel' | 'runInPane' | 'geminiModel' | 'geminiThinking' | 'replyStyle' | 'replyMode' | 'replyPerHour' | 'skipWords'> & { descDefault: string; descPosition: 'above' | 'below'; descRequest: string }
 const pickDraft = (s: SettingsT | null): Draft => ({
   channel: s?.channel ?? '', runInPane: s?.runInPane ?? true, geminiModel: s?.geminiModel ?? 'gemini-3.8-flash', geminiThinking: s?.geminiThinking ?? 'low', replyStyle: s?.replyStyle ?? '',
   replyMode: s?.replyMode ?? 'review', replyPerHour: s?.replyPerHour ?? 20, skipWords: s?.skipWords ?? '',
-  descDefault: s?.descDefault ?? '', descPosition: s?.descPosition === 'below' ? 'below' : 'above',
+  descDefault: s?.descDefault ?? '', descPosition: s?.descPosition === 'below' ? 'below' : 'above', descRequest: s?.descRequest ?? '',
 })
 
 function SettingsPage({ state, send }: Backend) {
@@ -623,6 +680,9 @@ function SettingsPage({ state, send }: Backend) {
                     ]}
                   />
                 </div>
+                <Field label="Yêu cầu cho Gemini khi viết mô tả" hint='Gemini viết theo ý bạn, ví dụ: "Viết bằng tiếng Anh, 3 đoạn, giọng kể chuyện, cuối có câu mời đọc ebook, không dùng emoji". Để trống thì Gemini tự viết. Sửa riêng cho từng video được trong hộp thoại "Gemini viết mô tả".'>
+                  <TextArea rows={3} value={d.descRequest} onChange={(e) => set({ descRequest: e.target.value })} aria-label="Yêu cầu cho Gemini khi viết mô tả" placeholder="Yêu cầu của bạn cho Gemini…" />
+                </Field>
               </div>
             </Card>
             <Card title="Gemini API" hint={<Sparkles className="inline h-3.5 w-3.5" />}>

@@ -22,6 +22,8 @@ const DEFAULTS = {
   skipWords: '',
   // phan mo ta mac dinh (vd link donate / ebook) them vao mo ta moi video; co thi thay mo ta Studio dien san khi dang
   descDefault: '',
+  descRequest: '', // yeu cau rieng cua nguoi dung khi Gemini viet mo ta (vd "viet bang tieng Anh, 3 doan, nhac link ebook")
+  videoVis: {}, // che do hien thi rieng tung video (trang Dang video): { [id video]: { mode, at, premiere } }
   descPosition: 'above', // phan Gemini viet / mo ta rieng cua video nam: above = tren | below = duoi phan mac dinh
   uploadChannel: '', // khoa kenh (UC ID) dang video qua hop thoai tai len cua Studio (trang Dang video)
 }

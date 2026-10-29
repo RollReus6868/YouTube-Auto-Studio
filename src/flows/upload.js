@@ -351,13 +351,30 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
   let lastPct = -1
   let progressText = ''
   const report = (pct) => { if (pct !== null && pct !== lastPct) { lastPct = pct; onProgress(pct) } }
+  // toc do tai len ghi vao nhat ky moi 30 giay (de so voi tai tay tren Chrome): tinh tu % cua Studio va dung luong file
+  const MB = 1024 * 1024
+  let speedFrom = null // { t, pct } moc dau tien thay % > 0
+  let speedLogged = 0
+  const logSpeed = (pct, label) => {
+    const now = Date.now()
+    if (pct === null || pct <= 0 || pct >= 100) return
+    if (!speedFrom) { speedFrom = { t: now, pct }; speedLogged = now; return }
+    if (now - speedLogged < 30e3 || pct <= speedFrom.pct) return
+    speedLogged = now
+    const mbps = ((pct - speedFrom.pct) / 100) * size / MB / ((now - speedFrom.t) / 1000)
+    const left = mbps > 0 ? Math.round(((100 - pct) / 100) * size / MB / mbps / 60) : 0
+    const studio = String(label || '').replace(/\s+/g, ' ').trim().slice(0, 80)
+    log('info', `Đang tải lên ${pct}% · khoảng ${mbps.toFixed(1)} MB/s${left ? ` · còn khoảng ${left} phút` : ''}${studio ? ` (Studio: "${studio}")` : ''}.`)
+  }
+  // doc tien do moi 2 giay (doc qua day lam trang Studio ban hon, khong nhanh hon)
   const ticker = (async () => {
     while (!stopProgress) {
       const label = await readProgress(page)
       if (label) progressText = label
       const p = uploadPhase(label)
       report(p.phase === 'uploaded' ? 100 : p.pct)
-      await sleep(1000)
+      if (p.phase === 'uploading') logSpeed(p.pct, label)
+      await sleep(2000)
     }
   })()
   let reached = false // da thay tai len 100%
@@ -603,7 +620,7 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
         if (p.pct !== null && p.pct !== last) { last = p.pct; lastChange = Date.now() }
         if (Date.now() - lastChange > 10 * 60e3) throw new StepError(`Tải lên đứng yên quá 10 phút ở ${last}%.`, page.step)
         if (Date.now() > limit) throw new StepError(`Tải lên quá lâu (đang ${last}%).`, page.step)
-        await sleep(1000)
+        await sleep(2000)
       }
       if (reached) report(100)
     })
@@ -646,11 +663,11 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
           const label = await readLabel(page, SEL.progressOut)
           const p = uploadPhase(label)
           if (p.phase === 'error') throw new StepError(`YouTube báo: ${p.text}`, page.step)
-          if (p.phase === 'uploading') { seen = true; report(p.pct) }
+          if (p.phase === 'uploading') { seen = true; report(p.pct); logSpeed(p.pct, label) }
           if (p.phase === 'uploaded') break
           if (!label && (seen || Date.now() > limit - 30 * 60e3 + 20000)) break // het o tien do (hoac khong co trong 20 giay dau) = xong
           if (Date.now() > limit) throw new StepError(`Tải lên quá lâu (đang ${lastPct}%). Đừng tắt tool khi video đang tải lên.`, page.step)
-          await sleep(1000)
+          await sleep(2000)
         }
         report(100)
       })
