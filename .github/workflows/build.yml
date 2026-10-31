@@ -82,6 +82,7 @@ jobs:
           node tests/ci-run.js node tests/optimize-template-test.js
           node tests/ci-run.js node tests/hometab-test.js
           node tests/ci-run.js node tests/google-test.js
+          node tests/ci-run.js node tests/aiposts-test.js
 
       - name: Chay that app tu ma nguon (Studio gia lap nhung trong cua so)
         run: |
@@ -90,6 +91,7 @@ jobs:
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-upload.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-accounts.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-inbox.js
+          xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-aiposts.js
 
   # ------------------------------------------------------------------ 1b. Linux: luong tu dong tren YouTube gia
   flows:

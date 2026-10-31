@@ -8,7 +8,7 @@ const { chromium } = require('playwright-core')
 
 const URL = `http://localhost:${process.env.YA_PORT || 4173}/`
 const OUT = path.join(__dirname, 'screenshots')
-const PAGES = ['accounts', 'videos', 'optimize', 'posts', 'presets', 'community', 'hometab', 'guide', 'logs', 'update', 'settings']
+const PAGES = ['accounts', 'videos', 'optimize', 'posts', 'aiposts', 'presets', 'community', 'hometab', 'guide', 'logs', 'update', 'settings']
 const WITH_PANE = new Set(['accounts', 'community'])
 const problems = []
 const overflow = () => {
@@ -79,6 +79,22 @@ function findBrowser() {
       await page.getByRole('button', { name: 'Đã gửi' }).click()
       await page.getByText('Love ❤️ God bless you too!').waitFor()
       await check('community-da-gui')
+      // dang bai tu dong (Gemini): kenh da chon + khung yeu cau tung kenh, loai bai, lich, ban nhap sua duoc
+      await page.goto(`${URL}?demo#aiposts`)
+      await page.getByRole('heading', { name: 'Đăng bài tự động' }).waitFor()
+      assert.equal(await page.getByRole('group', { name: 'Kênh đăng bài tự động' }).getByRole('button', { pressed: true }).count(), 2)
+      assert.match(await page.getByLabel('Yêu cầu cho Gemini: Dark Bible Stories').inputValue(), /Bible stories for adults/)
+      await page.getByLabel('Yêu cầu cho Gemini: Dark Faith').waitFor()
+      assert.equal(await page.getByRole('group', { name: 'Loại bài' }).getByRole('button', { pressed: true }).count(), 4)
+      await page.getByRole('button', { name: 'Viết bài (2 kênh × 7)' }).waitFor()
+      await page.getByRole('button', { name: 'Đăng 3 bài' }).waitFor()
+      assert.equal(await page.getByLabel('Nội dung bài').count(), 3, 'bai xong khong sua duoc')
+      await page.getByLabel('Lựa chọn 2').waitFor()
+      assert.equal(await page.getByRole('link', { name: 'Xem bài' }).count(), 1)
+      await check('aiposts-ban-nhap')
+      await page.getByRole('button', { name: /3\. Tuỳ chọn/ }).click()
+      await page.getByRole('radiogroup', { name: 'Nguồn ảnh' }).waitFor()
+      await check('aiposts-tuy-chon')
       // trang chu kenh: kenh co anh dai dien hien anh that (nhu trang Tai khoan), khong anh / anh loi -> chu cai
       await page.goto(`${URL}?demo#hometab`)
       const homeRow = (name) => page.locator('li', { has: page.getByLabel(`Chọn kênh ${name}`) })

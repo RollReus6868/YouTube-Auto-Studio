@@ -1,9 +1,10 @@
 // Trang cua cac tinh nang dang mo-dun. Moi tinh nang them MOT dong vao FEATURE_PAGES.
 // Trang thai rieng cua tinh nang nam o state.f.<id> (xem src/features/<id>.js).
-import { LayoutPanelTop, MessagesSquare, SquarePen, Users, Wand2, type LucideIcon } from 'lucide-react'
+import { LayoutPanelTop, MessagesSquare, Sparkles, SquarePen, Users, Wand2, type LucideIcon } from 'lucide-react'
 import type { ComponentType } from 'react'
 import type { State } from '../api'
 import { AccountsPage, accountsDemo } from './AccountsPage'
+import { AiPostsPage, aipostsDemo } from './AiPostsPage'
 import { CommunityRepliesPage, inboxDemo } from './CommunityRepliesPage'
 import { HomeTabPage, hometabDemo } from './HomeTabPage'
 import { OptimizePage, optimizeDemo } from './OptimizePage'
@@ -29,5 +30,6 @@ export const FEATURE_PAGES: FeaturePage[] = [
   { id: 'community', label: 'Cộng đồng', icon: MessagesSquare, Page: CommunityRepliesPage, browser: true, after: 'presets', demo: inboxDemo },
   { id: 'optimize', label: 'Tối ưu video', icon: Wand2, Page: OptimizePage, after: 'videos', demo: optimizeDemo },
   { id: 'posts', label: 'Đăng bài', icon: SquarePen, Page: PostsPage, after: 'optimize', demo: postsDemo },
+  { id: 'aiposts', label: 'Đăng bài AI', icon: Sparkles, Page: AiPostsPage, after: 'posts', demo: aipostsDemo },
   { id: 'hometab', label: 'Trang chủ kênh', icon: LayoutPanelTop, Page: HomeTabPage, after: 'community', demo: hometabDemo },
 ]

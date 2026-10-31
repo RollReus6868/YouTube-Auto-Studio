@@ -598,9 +598,11 @@ const ctx = {
       else if (!win.isVisible()) win.showInactive()
     },
   },
+  // hop chon thu muc cua he dieu hanh -> duong dan ('' neu huy)
+  pickFolder: async (title) => { const r = await dialog.showOpenDialog(win, { title, properties: ['openDirectory'] }); return r.canceled ? '' : r.filePaths[0] || '' },
   get desk() { return desk }, // CommentDesk chung (binh luan API + hop thu Studio), co sau app.whenReady
 }
-const FEATURES = ['accounts', 'inbox', 'optimize', 'posts', 'hometab']
+const FEATURES = ['accounts', 'inbox', 'optimize', 'posts', 'aiposts', 'hometab']
 const started = []
 for (const name of FEATURES) {
   const f = require(`./features/${name}`)(ctx)

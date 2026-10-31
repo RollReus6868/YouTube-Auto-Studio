@@ -1,3 +1,20 @@
+## YT Auto Studio 0.6.1
+
+### Đăng video
+- **Sửa lỗi video lên lịch bị treo ở "Đang tải lên 100%".** Trước đây tool thấy chữ "Đã tải được 100%" là coi như xong, bấm Lên lịch rồi chuyển sang việc khác ngay. Lúc đó trình duyệt còn đang gửi phần cuối và chờ YouTube xác nhận, nên video bị kẹt ở 100% / "Đang chờ xử lý". Giờ tool chờ tới khi Studio hiện "Đã hoàn tất quá trình tải lên … Quá trình xử lý sẽ sớm bắt đầu" rồi mới bấm Lên lịch / Lưu.
+- **Sửa lỗi hộp thoại tải lên tự biến mất khi đặt giờ lên lịch.** Ô giờ của Studio nằm trong một biểu mẫu chỉ có một ô nhập, nên bấm Enter ở đó có thể làm trang Studio tải lại và mất video đang tải. Giờ tool không bấm Enter ở ô giờ nữa, và trong lúc video đang tải lên thì tool chặn mọi lần trang Studio tự chuyển hoặc tải lại.
+- Nếu hộp thoại tải lên vẫn biến mất giữa chừng, tool báo rõ ngay (video dừng ở bao nhiêu %, cần xoá bản nháp rồi đăng lại) thay vì báo "Quá 20 giây vẫn chưa thấy Lưu".
+
+### Đăng bài AI (trang mới)
+- **Gemini tự viết và đăng bài Cộng đồng.** Bạn chỉ chọn kênh, loại bài, số bài, khoảng ngày và giờ đăng. Gemini viết nội dung, tool lên lịch sẵn trên YouTube bằng "Lên lịch đăng bài", nên tới giờ không cần mở tool.
+  - Loại bài: chữ, ảnh, thăm dò, câu đố (có đáp án đúng và giải thích), thăm dò ảnh. Chọn nhiều loại thì tool xoay vòng.
+  - **Mỗi kênh một khung yêu cầu cho Gemini**: nội dung kênh, đối tượng, giọng văn, chủ đề nên viết hay nên tránh. Mỗi kênh có thể chọn ngôn ngữ riêng.
+  - Ảnh: Gemini vẽ ảnh (cần key có quyền tạo ảnh), hoặc lấy ảnh chưa dùng trong thư mục ảnh của từng kênh, hoặc không dùng ảnh. Vẽ ảnh lỗi thì bài ảnh thành bài chữ, không dừng cả loạt.
+  - Tool rải đều số bài vào các ngày và giờ đã chọn (mốc 15 phút, bỏ giờ đã qua). Có nút nhanh: hôm nay, 7 / 14 / 30 ngày, 2 hoặc 3 lần mỗi ngày.
+  - **Duyệt trước khi đăng** (mặc định bật): xem, sửa chữ, sửa lựa chọn, đổi đáp án đúng, đổi giờ, viết lại hoặc xoá từng bài, rồi bấm "Đăng N bài". Tắt duyệt thì bấm một nút là Gemini viết và tool đăng luôn.
+  - Tool nhớ các bài đã đăng của từng kênh và gửi cho Gemini để không viết lặp lại. Gemini cũng được biết tên các video gần đây của kênh (từ lần quét ở trang Tối ưu video).
+  - Danh sách bài vẫn còn khi mở lại tool.
+
 ## YT Auto Studio 0.6.0
 
 ### Tối ưu video
