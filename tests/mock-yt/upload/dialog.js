@@ -21,7 +21,10 @@
 // trong hop thoai; sau khi dong chi con o tien do goc trang), morepl (kenh co them 2 danh sach phat),
 // trust (= N: N lan dau chon file hien "Ban da hoan tat ... Hay thu lam moi trang", hop thoai tai len dung o buoc chon tep;
 // dem giam trong localStorage), trustfast (chon file < 2 giay sau khi hop thoai mo / trang an -> "Ban da hoan tat"), verify (Google doi "Xac minh danh tinh cua ban"), notypedate (o nhap ngay trong lich khong nhan
-// chu go: phai bam lich), timepick (o gio khong nhan chu go: phai chon trong danh sach), nopremiere (kenh khong co Cong chieu).
+// chu go: phai bam lich), timepick (o gio khong nhan chu go: phai chon trong danh sach), nopremiere (kenh khong co Cong chieu),
+// finishing (= ms: "Đã tải được 100%" con cho YouTube xac nhan bao lau truoc "Đã hoàn tất quá trình tải lên"; mac dinh 800),
+// formnav (form#form cua o gio KHONG chan submit: Enter trong o gio = trinh duyet gui form = tai lai trang, nhu that neu
+// Studio khong chan), timeslow (danh sach gio hien sau 1,5 giay), timenolist (bam vao o gio khong hien danh sach).
 (() => {
   const F = (k) => OPT.load('up-' + k, false)
   const EN = F('en')
@@ -301,7 +304,7 @@
             <div class="before-publishing-text section-label">${T('Đặt lịch chuyển sang chế độ công khai', 'Schedule as public')}</div>
             <ytcp-datetime-picker><div class="date-timezone-container">
               <ytcp-text-dropdown-trigger id="datepicker-trigger">${OPT.trigger('', W.date)}</ytcp-text-dropdown-trigger>
-              <ytcp-form-input-container id="time-of-day-container"><div id="time-of-day-trigger"><tp-yt-paper-input id="textbox" aria-label="${T('Giờ', 'Time')}"><input value="${esc(W.time)}" autocomplete="off"></tp-yt-paper-input></div></ytcp-form-input-container>
+              <form id="form" class="style-scope ytcp-datetime-picker"><ytcp-form-input-container id="time-of-day-container"><div id="time-of-day-trigger"><tp-yt-paper-input id="textbox" aria-label="${T('Giờ', 'Time')}"><input value="${esc(W.time)}" autocomplete="off"></tp-yt-paper-input></div></ytcp-form-input-container></form>
               <span class="timezone-trigger">${OPT.button('timezone-select-button', T('Múi giờ', 'Time zone'))}<ytcp-icon-button role="button" aria-label="${T('Tìm hiểu thêm', 'Learn more')}">?</ytcp-icon-button></span></div>
               <div class="scheduled-info-container description" id="sched-info"></div></ytcp-datetime-picker>
             ${F('nopremiere') ? '' : OPT.checkbox('schedule-type-checkbox', T('Đặt làm video Công chiếu', 'Set as Premiere'), false)}
@@ -352,9 +355,15 @@
       }
       const left = Math.max(1, Math.ceil((total - (Date.now() - t0)) / 1000))
       if (pct < 100) { show(T(`Đã tải được ${pct}% ... Còn ${left} phút`, `Uploading ${pct}% ... ${left} minutes left`)); setTimeout(tick, 150); return }
+      // 100%: trinh duyet con gui phan cuoi + cho YouTube xac nhan (roi trang luc nay = video ket o 100%)
+      const fin = Number(OPT.load('up-finishing', 0)) || 800
+      if (!W.finishAt) { W.finishAt = Date.now() + fin; W.finishing = true; log({ type: 'upload-100' }) }
+      if (Date.now() < W.finishAt) { show(T('Đã tải được 100% ... Còn 0 giây', 'Uploading 100% ... 0 seconds left')); setTimeout(tick, 150); return }
+      W.finishing = false
       W.uploaded = true
       log({ type: 'upload-finished', file: W.file, published: W.published })
-      show(T('Đã tải lên xong ... Đang kiểm tra', 'Upload complete ... Checking'))
+      show(T('Đã hoàn tất quá trình tải lên ... Quá trình xử lý sẽ sớm bắt đầu', 'Upload complete ... Processing will begin shortly'))
+      setTimeout(() => { if (!W.checked) show(T('Đã tải lên xong ... Đang kiểm tra', 'Upload complete ... Checking')) }, 1500)
       setTimeout(() => {
         W.checked = true
         show(T('Đã kiểm tra xong. Không phát hiện vấn đề nào.', 'Checks complete. No issues found.'))
@@ -485,8 +494,12 @@
       const host = $('#time-of-day-container', dlg); host.style.position = 'relative'; host.appendChild(times)
       const cur = times.querySelector('[aria-selected=true]'); if (cur) cur.scrollIntoView({ block: 'center' })
     }
-    time.addEventListener('focus', () => setTimeout(openTimes, 100))
-    time.addEventListener('click', () => setTimeout(openTimes, 100))
+    // that: o gio nam trong form#form chi co mot o nhap (Enter = gui form); formnav: khong chan -> trang tai lai
+    const tform = time.closest('form')
+    if (tform) tform.addEventListener('submit', (e) => { log({ type: 'time-form-submit', prevented: e.defaultPrevented }); if (!F('formnav')) e.preventDefault() })
+    const openLater = () => { if (!F('timenolist')) setTimeout(openTimes, F('timeslow') ? 1500 : 100) }
+    time.addEventListener('focus', openLater)
+    time.addEventListener('click', openLater)
     time.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== time) { if (time.value !== W.time) setTime(); closeTimes() } }, 200))
     paintVis()
     if (!F('nosubs')) $('#subtitles-button', dlg).onclick = subtitlesDialog

@@ -63,7 +63,10 @@ module.exports = [
     assert.deepEqual(uploadPhase('Đã tải được 5% ... Còn 4 phút'), { phase: 'uploading', pct: 5 })
     assert.deepEqual(uploadPhase('Đang tải lên 45% ... Còn 2 phút'), { phase: 'uploading', pct: 45 })
     assert.deepEqual(uploadPhase('Uploading 7% ... 3 minutes left'), { phase: 'uploading', pct: 7 })
-    assert.equal(uploadPhase('Đã tải được 100%').phase, 'uploaded')
+    // 100% chua xong: YouTube con xac nhan (roi trang luc nay = video ket o "Đang tải lên 100%")
+    assert.deepEqual(uploadPhase('Đã tải được 100% ... Còn 0 giây'), { phase: 'finishing', pct: 100 })
+    assert.equal(uploadPhase('Uploading 100% ... 0 seconds left').phase, 'finishing')
+    assert.equal(uploadPhase('Đã hoàn tất quá trình tải lên ... Quá trình xử lý sẽ sớm bắt đầu').phase, 'uploaded')
     assert.equal(uploadPhase('Tải lên hoàn tất ... Quá trình xử lý sẽ sớm bắt đầu').phase, 'uploaded')
     assert.equal(uploadPhase('Đã tải lên xong ... Đang kiểm tra').phase, 'uploaded')
     assert.equal(uploadPhase('Processing SD version...').phase, 'uploaded')
@@ -357,6 +360,80 @@ module.exports = [
     assert.equal(r.premiere, false)
     assert.match(r.warnings.join('\n'), /Chưa đặt được "Đặt làm video Công chiếu": không thấy ô này/)
   }],
+  ['len lich: "Da tai duoc 100%" chua phai xong -> cho "Da hoan tat qua trinh tai len" roi moi bam Len lich (loi treo 100% ban 0.6.0)', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { checkinfo: true, finishing: 20000 })
+    const at = inDays(1, 9, 0)
+    const r = await run(ctx, JOB(f, { thumbnail: null, publishAt: at.toISOString() }))
+    const res = await r.p
+    const [u] = await uploads(ctx.mock)
+    assert.equal(u.visibility, 'SCHEDULE')
+    assert(ctx.mock.events.some((e) => e.type === 'upload-100'), 'co giai doan 100%')
+    assert.notEqual(u.earlyDone, true, 'bam Len lich khi YouTube chua xac nhan tai len xong')
+    assert.match(ctx.logs.join('\n'), /chờ YouTube xác nhận/)
+    assert.equal(r.progress[r.progress.length - 1], 100)
+    assert(!r.progress.slice(0, -1).includes(100), 'chua bao 100% khi con dang gui phan cuoi')
+    assert.equal(res.schedule, at.toISOString())
+  }],
+
+  ['len lich: o gio nam trong form (Enter = gui form = tai lai trang); danh sach gio hien cham -> khong bam Enter, van dung gio', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { nocheckwarn: true, formnav: true, timeslow: true })
+    const at = inDays(2, 14, 30)
+    const r = await run(ctx, JOB(f, { thumbnail: null, publishAt: at.toISOString() })).p
+    const [u] = await uploads(ctx.mock)
+    assert.deepEqual([u.visibility, u.scheduleTime], ['SCHEDULE', '14:30'])
+    assert(!ctx.mock.events.some((e) => e.type === 'time-form-submit' && !e.prevented), 'form o gio da bi gui (trang tai lai)')
+    assert.equal(r.schedule, at.toISOString())
+  }],
+
+  ['len lich: o gio khong hien danh sach -> Tab (khong Enter) de Studio nhan gio da go', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { nocheckwarn: true, formnav: true, timenolist: true })
+    const at = inDays(3, 7, 15)
+    await run(ctx, JOB(f, { thumbnail: null, publishAt: at.toISOString() })).p
+    const [u] = await uploads(ctx.mock)
+    assert.deepEqual([u.visibility, u.scheduleTime], ['SCHEDULE', '07:15'])
+    assert(!ctx.mock.events.some((e) => e.type === 'time-form-submit' && !e.prevented))
+  }],
+
+  ['dang tai len: trang Studio tu chuyen trang / gui form -> bi chan, video van tai xong', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { nocheckwarn: true, slow: true, formnav: true })
+    let poked = false
+    const r = run(ctx, JOB(f, { thumbnail: null }), {
+      onStep: (s) => {
+        if (s !== 'wait' || poked) return
+        poked = true
+        // gia lap Enter trong o gio / script cua trang: gui form khong action + doi location
+        ctx.page.eval(() => {
+          const f = document.createElement('form'); f.appendChild(document.createElement('input')); document.body.appendChild(f); f.requestSubmit()
+          setTimeout(() => { location.href = location.pathname + '?roi-trang=1' }, 300)
+        }).catch(() => {})
+      },
+    })
+    const res = await r.p
+    assert(poked, 'da toi buoc cho tai len')
+    const [u] = await uploads(ctx.mock)
+    assert.equal(u.id, res.id)
+    assert.match(ctx.logs.join('\n'), /đã chặn để không mất video/)
+  }],
+
+  ['hop thoai tai len bien mat giua chung (trang bi tai lai) -> bao ro, khong doi nut Luu 20 giay', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { nocheckwarn: true, slow: true })
+    let poked = 0
+    const r = run(ctx, JOB(f, { thumbnail: null }), {
+      onStep: (s) => {
+        if (s !== 'wait' || poked) return
+        poked = Date.now()
+        ctx.page.eval(() => { const d = document.querySelector('ytcp-uploads-dialog'); if (d) d.remove() }).catch(() => {})
+      },
+    })
+    await assert.rejects(r.p, /Hộp thoại tải lên của Studio đã biến mất/)
+    assert(poked && Date.now() - poked < 10000, 'bao loi nhanh')
+  }],
+
   ['loi: gioi han tai len hang ngay -> nem loi ro rang, luu anh trang', async (ctx) => {
     const f = files(ctx.tmp)
     await flags(ctx, { limit: true })

@@ -47,6 +47,8 @@ const TRUST = 'yt-trust-tiers-wizard-dialog'
 const STALE_TRIES = 3
 // doi sau khi hop thoai tai len mo roi moi chon file (ms): lan dau + moi lan lam moi sau "Ban da hoan tat" (lau dan)
 const SETTLE = [2500, 6000, 10000, 15000]
+// "Đã tải được 100%" -> cho YouTube xac nhan toi da (ms) truoc khi bam Luu (sau do van giu trang o buoc 8)
+const FINISH_WAIT = 5 * 60e3
 const STALE_FIX = ['tải lại Studio', 'xoá bộ nhớ đệm của Studio (giữ đăng nhập)', 'mở trang Tính năng của kênh để YouTube cập nhật quyền']
 const LABELS = {
   // trang tong quan kenh: nut tai len (that: ytcp-quick-actions ytcp-icon-button#upload-icon aria-label "Tải video lên")
@@ -141,17 +143,21 @@ const SEL = {
 
 const norm = (s) => String(s || '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()
 const UP_ERROR = /(giới hạn tải lên|upload limit|rất tiếc, đã xảy ra lỗi|oops, something went wrong|tải lên không thành công|upload failed|không thể tải lên|couldn.t upload|can.t upload|lỗi khi tải lên|upload error|tệp không hợp lệ|invalid file|định dạng tệp không hợp lệ|đã hủy tải lên|upload canceled|upload cancelled)/
-const UP_DONE = /(tải lên hoàn tất|đã tải lên xong|upload complete|đang xử lý|processing|đã xử lý|processed|kiểm tra|checks? complete|checking|no issues found)/
+const UP_DONE = /(hoàn tất quá trình tải lên|tải lên hoàn tất|đã tải lên xong|upload complete|đang xử lý|processing|đã xử lý|processed|kiểm tra|checks? complete|checking|no issues found)/
 const UP_RUNNING = /(đang tải lên|đã tải được|uploading|uploaded \d|đang chờ tải lên|waiting to upload)/
 
-// Nhan tien do: { phase: 'error'|'uploaded'|'uploading'|'', pct }
+// Nhan tien do: { phase: 'error'|'uploaded'|'finishing'|'uploading'|'', pct }
+// "Đã tải được 100%" CHUA xong: trinh duyet con gui not phan cuoi va cho YouTube xac nhan. Chi khi Studio doi chu sang
+// "Đã hoàn tất quá trình tải lên ... Quá trình xử lý sẽ sớm bắt đầu" (hoac dang xu ly / kiem tra) moi la xong. Roi trang
+// (chuyen kenh, viec khac dung khung) luc con "100%" lam video ket mai o "Đang tải lên 100%" / "Đang chờ xử lý".
 function uploadPhase(label) {
   const l = norm(label)
   if (!l) return { phase: '', pct: null }
   if (UP_ERROR.test(l)) return { phase: 'error', pct: null, text: String(label).trim() }
   const m = /(\d{1,3})\s*%/.exec(l)
   const pct = m ? Math.min(100, Number(m[1])) : null
-  if (pct === 100) return { phase: 'uploaded', pct: 100 }
+  if (UP_DONE.test(l) && !UP_RUNNING.test(l)) return { phase: 'uploaded', pct: 100 }
+  if (pct === 100) return { phase: 'finishing', pct: 100 }
   if (UP_RUNNING.test(l) && pct !== null) return { phase: 'uploading', pct }
   if (UP_DONE.test(l)) return { phase: 'uploaded', pct: 100 }
   if (UP_RUNNING.test(l) || pct !== null) return { phase: 'uploading', pct }
@@ -375,19 +381,29 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
       const label = await readProgress(page)
       if (label) progressText = label
       const p = uploadPhase(label)
-      report(p.phase === 'uploaded' ? 100 : p.pct)
+      report(p.phase === 'uploaded' ? 100 : p.phase === 'finishing' ? 99 : p.pct)
       if (p.phase === 'uploading') logSpeed(p.pct, label)
       await sleep(2000)
     }
   })()
   let reached = false // da thay tai len 100%
+  let unguard = () => {}
+  // hop thoai tai len bien mat giua chung (trang bi tai lai / chuyen trang): bao ro, khong doi nut "Lưu" vo ich
+  let goneSince = 0
+  const dialogGone = async () => {
+    const there = await page.eval((s) => window.__ya.all(document, s).length > 0, 'ytcp-uploads-dialog #title-textarea, ytcp-uploads-dialog ytcp-uploads-review, ytcp-uploads-dialog #done-button').catch(() => true)
+    if (there) { goneSince = 0; return }
+    goneSince = goneSince || Date.now()
+    if (Date.now() - goneSince < 3000) return
+    throw new StepError(`Hộp thoại tải lên của Studio đã biến mất khi video mới tải được ${Math.max(lastPct, 0)}% (trang Studio bị tải lại hoặc chuyển trang, hoặc hộp thoại bị đóng). Video dừng ở dạng bản nháp: xoá bản nháp trong trang Nội dung rồi đăng lại.`, page.step)
+  }
   try {
     // ---- 3. trang Chi tiet (lam moi Studio khi gap "Ban da hoan tat") ----
     for (let attempt = 0; ; attempt++) {
       await chooseFile(SETTLE[Math.min(attempt, SETTLE.length - 1)])
       chosen = true
       const r = await waitDetails()
-      if (r === 'ok') break
+      if (r === 'ok') { unguard = guardUpload(page, log); break }
       const [kind] = r.split(':', 1)
       const text = r.slice(kind.length + 1)
       if (kind === 'err') throw new StepError(`YouTube báo: ${text}`, page.step)
@@ -609,13 +625,22 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
       let last = -1
       let lastChange = Date.now()
       let noLabelSince = 0
+      let finishingSince = 0
       for (;;) {
+        await dialogGone()
         const label = await readProgress(page)
         const err = await readError(page)
         if (err) throw new StepError(`YouTube báo: ${err}`, page.step)
         const p = uploadPhase(label)
         if (p.phase === 'error') throw new StepError(`YouTube báo: ${p.text}`, page.step)
         if (p.phase === 'uploaded') { reached = true; break }
+        if (p.phase === 'finishing') {
+          // 100% nhung YouTube chua xac nhan: cho them (it phut); qua lau thi bam Luu va giu trang (buoc 8) toi khi xong
+          if (!finishingSince) { finishingSince = Date.now(); log('info', 'Đã gửi 100%: chờ YouTube xác nhận tải lên hoàn tất trước khi bấm Lưu.') }
+          if (Date.now() - finishingSince > FINISH_WAIT) { log('warn', `YouTube vẫn hiện "${label.slice(0, 80)}" sau ${Math.round(FINISH_WAIT / 60e3)} phút: bấm Lưu rồi giữ trang tới khi tải lên hoàn tất.`); break }
+          await sleep(2000)
+          continue
+        }
         if (!label) {
           noLabelSince = noLabelSince || Date.now()
           if (Date.now() - noLabelSince > 8000) { log('warn', 'Không đọc được tiến độ tải lên trong hộp thoại: bấm Lưu rồi theo dõi tiến độ ở trang.'); break }
@@ -631,6 +656,7 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
     // ---- 7. ma video, Luu -> "Van xuat ban" ----
     let id = await poll(page, () => readId(page), 10000)
     await step('publish', 'Bấm Lưu', async () => {
+      await dialogGone()
       const done = inD(LABELS.done)
       await page.waitFor(done)
       if (!(await poll(page, () => isEnabled(page, done), 60000, 500))) throw new StepError(`Nút "${(await page.text(done)) || 'Lưu'}" bị khóa.`, page.step)
@@ -671,7 +697,7 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
           const label = await readLabel(page, SEL.progressOut)
           const p = uploadPhase(label)
           if (p.phase === 'error') throw new StepError(`YouTube báo: ${p.text}`, page.step)
-          if (p.phase === 'uploading') { seen = true; report(p.pct); logSpeed(p.pct, label) }
+          if (p.phase === 'uploading' || p.phase === 'finishing') { seen = true; report(p.phase === 'finishing' ? 99 : p.pct); if (p.phase === 'uploading') logSpeed(p.pct, label) }
           if (p.phase === 'uploaded') break
           if (!label && (seen || Date.now() > limit - 30 * 60e3 + 20000)) break // het o tien do (hoac khong co trong 20 giay dau) = xong
           if (Date.now() > limit) throw new StepError(`Tải lên quá lâu (đang ${lastPct}%). Đừng tắt tool khi video đang tải lên.`, page.step)
@@ -689,8 +715,31 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
     throw e
   } finally {
     stopProgress = true
+    unguard()
     await ticker.catch(() => {})
   }
+}
+
+// Trong luc tai len: chan moi lan trang tu chuyen / tai lai (vd Enter trong o gio cua lich: o gio nam trong
+// <form id="form"> chi co mot o nhap -> trinh duyet tu "gui form" = tai lai trang = mat video dang tai). Hai lop:
+// 1) trong trang: form khong co action bi chan submit mac dinh (Studio van nhan su kien submit cua minh);
+// 2) Electron: will-navigate (chuyen trang do trang tu lam, khong phai page.goto cua tool) bi huy.
+function submitGuard() {
+  if (window.__yaSubmitGuard) return
+  window.__yaSubmitGuard = true
+  document.addEventListener('submit', (e) => { const f = e.target; if (f && !f.getAttribute('action')) e.preventDefault() }, true)
+}
+function guardUpload(page, log = () => {}) {
+  const wc = page.wc
+  if (page.eval) page.eval(submitGuard).catch(() => {})
+  if (!wc || typeof wc.on !== 'function') return () => {}
+  let warned = 0
+  const onNav = (e, url) => {
+    e.preventDefault()
+    if (Date.now() - warned > 5000) { warned = Date.now(); log('warn', `Trang Studio định chuyển sang ${String(url || '').slice(0, 120)} khi video đang tải lên: đã chặn để không mất video.`) }
+  }
+  wc.on('will-navigate', onNav)
+  return () => { try { wc.removeListener('will-navigate', onNav) } catch (_) { /* da dong */ } }
 }
 
 // Muc `key` cua mau co can dung toi khong (khi khong mo duoc "Hien them" -> tinh la chua dat)
@@ -874,8 +923,10 @@ async function setScheduleTime(page, at) {
     const want = timeText(at, await timeValue(page))
     const choice = { regex: `^0?${reEsc(normT(want))}$`, selector: SEL.option, within: { selector: SEL.listbox } }
     await page.type(tIn, want)
-    if (await poll(page, () => page.has(choice), 1000)) await page.click(choice)
-    else await page.press('Enter')
+    // KHONG bam Enter: o gio nam trong <form id="form"> chi co mot o nhap, Enter = "gui form" = Studio tai lai trang
+    // (mat video dang tai). Bam dung moc trong danh sach; khong co danh sach thi Tab (roi o) de Studio nhan gio da go.
+    if (await poll(page, () => page.has(choice), 3000)) await page.click(choice)
+    else await page.press('Tab')
     let ok = await poll(page, () => timeIs(page, at), 2000)
     if (!ok) {
       await page.click(tIn)

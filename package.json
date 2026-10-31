@@ -1,7 +1,7 @@
 {
   "name": "yt-auto-studio",
   "productName": "YTAutoStudio",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Tool desktop tu dong dang video, bai cong dong va tra loi binh luan YouTube (Gemini)",
   "main": "src/main.js",
   "author": "RollReus6868",
@@ -12,7 +12,7 @@
   },
   "scripts": {
     "start": "electron .",
-    "test": "node tests/unit-test.js && node tests/accounts-test.js && node tests/optimize-template-test.js && node tests/google-test.js && node tests/updater-test.js && node tests/inbox-test.js && node tests/hometab-test.js",
+    "test": "node tests/unit-test.js && node tests/accounts-test.js && node tests/optimize-template-test.js && node tests/google-test.js && node tests/updater-test.js && node tests/inbox-test.js && node tests/hometab-test.js && node tests/aiposts-test.js",
     "build:ui": "npm --prefix ui run build"
   },
   "devDependencies": {
