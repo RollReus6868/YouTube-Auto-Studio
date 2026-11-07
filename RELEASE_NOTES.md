@@ -1,3 +1,13 @@
+## YT Auto Studio 0.6.2
+
+### Đăng bài và Đăng bài AI
+- **Sửa lỗi "Không thấy khung soạn bài ở tab Bài đăng".** Khung soạn bài vẫn hiện trên YouTube nhưng tool không nhận ra được, vì youtube.com chặn cách tool cài mã dò khung soạn bài (chế độ bảo mật Trusted Types). Lỗi này làm mọi bài (cả trang Đăng bài lẫn Đăng bài AI) không đăng được. Tool giờ không dùng cách bị chặn đó nữa. Ô chữ mới của YouTube ("Bạn đang nghĩ gì?") cũng đã được nhận ra.
+- **Bài có giờ đăng đã qua** hiện dòng nhắc "Giờ đăng đã qua: bấm Đăng thì bài này được đăng ngay". Nếu muốn lên lịch thì đổi giờ trước khi bấm Đăng.
+
+### Cộng đồng
+- **"Lấy bình luận mới" và "Quét và thả tim" đều bật bộ lọc "Trạng thái phản hồi: Chưa phản hồi" trước khi đọc.** Tool chỉ đọc danh sách sau khi thấy bộ lọc này hiện trên Studio. Nếu Studio không nhận bộ lọc, tool tải lại hộp thư và thử lại một lần. Vẫn không được thì tool báo lỗi ở kênh đó và không đọc, không thả tim.
+- "Quét và thả tim" giờ chỉ thả tim bình luận chưa phản hồi (trước đây xem cả bình luận kênh đã trả lời). Bình luận vừa thả tim mà rời khỏi danh sách "Chưa phản hồi" vẫn được tính là đã thả tim, tool không dừng nhầm.
+
 ## YT Auto Studio 0.6.1
 
 ### Đăng video

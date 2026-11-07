@@ -244,7 +244,7 @@ module.exports = (ctx) => {
     }
   }
 
-  // ---- quet va tha tim: moi kenh dang chon, moi binh luan cua nguoi xem (ca binh luan da tra loi) ----
+  // ---- quet va tha tim: moi kenh dang chon, binh luan cua nguoi xem trong hop thu da loc "Chua phan hoi" ----
   // hearted.json { [kenh]: { [ma binh luan]: luc } }: lan sau khong bam lai (bam lai la bo tim)
   const heartFile = () => ctx.logFile('hearted.json')
   const readHearts = () => { try { return JSON.parse(require('fs').readFileSync(heartFile(), 'utf8')) } catch (_) { return {} } }
@@ -270,14 +270,14 @@ module.exports = (ctx) => {
         refresh()
         try {
           await ctx.withChannel(key, async (page) => {
-            await flow.openInbox(page, channelOf(page.url()), { urls: ctx.urls, log: ctx.log, all: true })
+            await flow.openInbox(page, channelOf(page.url()), { urls: ctx.urls, log: ctx.log })
             const db = readHearts()
             const mine = db[ch.key] || {}
             const r = await flow.heartComments(page, {
               max: MAX_HEART, handle: ch.handle, skip: (id) => !!mine[id], shouldStop: () => halted(g),
               onHeart: (id) => { const d = readHearts(); d[ch.key] = { ...(d[ch.key] || {}), [id]: new Date().toISOString() }; writeHearts(d); S.hearts++; total++; refresh() },
             })
-            ctx.log(r.hearted.length || r.unverified ? 'ok' : 'info', `"${ch.name}": thả tim ${r.hearted.length + r.unverified} bình luận${r.unverified ? ` (${r.unverified} chưa kiểm lại được)` : ''}, ${r.already} bình luận đã có tim (xem ${r.seen} bình luận).`)
+            ctx.log(r.hearted.length || r.unverified ? 'ok' : 'info', `"${ch.name}": thả tim ${r.hearted.length + r.unverified} bình luận${r.unverified ? ` (${r.unverified} chưa kiểm lại được)` : ''}, ${r.already} bình luận đã có tim (xem ${r.seen} bình luận chưa phản hồi).`)
           }, { label: `Thả tim ${ch.name}`, shouldStop: () => halted(g) })
         } catch (e) {
           if (halted(g) || STOPPED.test(e.message)) break

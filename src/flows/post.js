@@ -14,7 +14,7 @@ const LABELS = {
   composerTag: 'ytd-backstage-post-dialog-renderer', // (HTML) khung soan bai
   composer: '^(Trạng thái hiển thị|Visibility)\\s*:?$', // (HTML) #header-visibility-label, du phong khi doi ten the
   openComposer: '#commentbox-placeholder', // (HTML) dong "Bat mi ve video tiep theo cua ban" khi khung soan dang dong
-  placeholder: '^(Gửi lời cảm ơn|Bật mí về video|Hỏi cộng đồng|Give (a )?shout|Tease your next|Ask your community)',
+  placeholder: '^(Bạn đang nghĩ gì|Gửi lời cảm ơn|Bật mí về video|Hỏi cộng đồng|What.s on your mind|Give (a )?shout|Tease your next|Ask your community)', // (HTML 11/2026) "Bạn đang nghĩ gì?"
   textBox: '#contenteditable-root, [contenteditable="true"], [contenteditable="plaintext-only"]', // (HTML)
   attach: { // (HTML) aria-label cua nut / chu tren nut
     image: '^(Thêm hình ảnh|Hình ảnh|Add (an )?image|Image)$',
@@ -242,14 +242,19 @@ function install(L) {
   }
   return yp
 }
-const YP_SRC = `window.__yp = (${install})(${JSON.stringify(LABELS)})`
+// youtube.com bat Trusted Types: eval(chuoi) / new Function(chuoi) TRONG trang bi chan (loi 0.6.1: tool khong bao
+// gio thay khung soan bai). Vi vay ma cai __yp duoc ghep san vao chinh ham gui qua page.eval (executeJavaScript cua
+// Electron khong bi CSP chan), khong goi eval trong trang.
+const YP_INSTALL = `if (!window.__yp) window.__yp = (${install})(${JSON.stringify(LABELS)}); window.__yp.composer();`
+const YP_CALL = `(n, a) => { ${YP_INSTALL} return window.__yp[n](...a) }`
+const YP_COUNT = `(x) => { ${YP_INSTALL} return window.__ya.count(x) }`
 // Moi lan goi deu tim lai khung soan (trang co the ve lai khung soan, mat dau danh dau).
-const inPage = (page, name, ...args) => page.eval((src, n, a) => { if (!window.__yp) (0, eval)(src); window.__yp.composer(); return window.__yp[n](...a) }, YP_SRC, name, args)
-const waitPage = (page, name, args, opts) => page.until((src, n, a) => { if (!window.__yp) (0, eval)(src); window.__yp.composer(); return window.__yp[n](...a) }, [YP_SRC, name, args], opts)
+const inPage = (page, name, ...args) => page.eval(YP_CALL, name, args)
+const waitPage = (page, name, args, opts) => page.until(YP_CALL, [name, args], opts)
 const describe = (t) => (t.regex ? `/${t.regex}/` : t.selector)
 // Thao tac trong khung soan: cho (va danh dau lai khung soan) roi moi bam / go
 const C = {
-  wait: (page, t, o = {}) => page.until((src, x) => { if (!window.__yp) (0, eval)(src); window.__yp.composer(); return window.__ya.count(x) }, [YP_SRC, t], { what: describe(t), ...o }),
+  wait: (page, t, o = {}) => page.until(YP_COUNT, [t], { what: describe(t), ...o }),
   click: async (page, t, o) => { await C.wait(page, t, o); await page.click(t, o) },
   type: async (page, t, v) => { await C.wait(page, t); await page.type(t, v) },
   has: async (page, t) => (await inPage(page, 'composer')) && page.has(t),

@@ -204,7 +204,8 @@ function openStatusDialog() {
   $('#dlg-apply').onclick = () => {
     const v = (d.querySelector('input:checked') || {}).value
     d.remove()
-    if (v === 'none') { filterOn = true; render() }
+    // mockInbox.filterbroken=1: bam "Ap dung" khong co tac dung (de thu tool dung lai, khong doc khi chua loc)
+    if (v === 'none' && localStorage.getItem('mockInbox.filterbroken') !== '1') { filterOn = true; render() }
   }
 }
 
@@ -280,6 +281,11 @@ document.addEventListener('click', (e) => {
   if (localStorage.getItem('mockInbox.heartnostate') === '1') return
   hearted[key] = !hearted[key]
   store.set('mockInbox.hearted', hearted)
+  // mockInbox.heartvanish=1: dang loc "Chua phan hoi" thi binh luan vua tha tim bien khoi danh sach (khong kip thay tim)
+  if (localStorage.getItem('mockInbox.heartvanish') === '1' && filterOn && hearted[key]) {
+    setTimeout(() => { DATA = DATA.filter((x) => x.key !== key); render() }, 150)
+    return
+  }
   setTimeout(() => h.classList.toggle('hearted', !!hearted[key]), 300)
 })
 $('#comments-tab').onclick = () => { $('#comments-tab').setAttribute('aria-selected', 'true'); $('#comments-tab').classList.add('iron-selected') }

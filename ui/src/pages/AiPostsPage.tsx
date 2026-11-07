@@ -3,7 +3,7 @@
 // Lenh: aipost_save(patch), aipost_generate({ post }), aipost_run({ ids }), aipost_update({ id, patch }), aipost_regen({ id }),
 //       aipost_remove({ ids }), aipost_clear_done(), aipost_pick_folder({ channelKey }).
 import {
-  CalendarClock, Check, ChevronDown, CircleAlert, CircleHelp, ExternalLink, FolderOpen, Image as ImageIcon, LayoutGrid,
+  CalendarClock, Check, ChevronDown, CircleAlert, CircleHelp, Clock, ExternalLink, FolderOpen, Image as ImageIcon, LayoutGrid,
   ListChecks, LoaderCircle, RefreshCw, Send, Sparkles, Square, Trash2, TriangleAlert, Type, Users, Wand2, type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
@@ -70,6 +70,8 @@ function DraftCard({ d, busy, send }: { d: AiDraft; busy: boolean; send: PagePro
   const locked = ['run', 'queued', 'done'].includes(d.status)
   const upd = (patch: Record<string, unknown>) => send('aipost_update', { id: d.id, patch })
   const [tone, label] = STATUS[d.status] || STATUS.draft
+  // giong features/aiposts.js run(): gio da qua hoac con duoi 5 phut -> dang ngay
+  const pastDue = !locked && !!d.when && new Date(d.when).getTime() <= Date.now() + 5 * 60e3
   return (
     <article className={cn('rounded-xl border bg-card p-3.5 shadow-sm', d.status === 'error' ? 'border-red-500/40' : d.status === 'done' ? 'border-emerald-500/30' : 'border-border/60')} aria-label={`Bài ${TYPES[d.type]?.label} ${d.channelName}`}>
       <div className="flex flex-wrap items-center gap-1.5">
@@ -117,9 +119,10 @@ function DraftCard({ d, busy, send }: { d: AiDraft; busy: boolean; send: PagePro
               : <Saved value={d.explanation} aria-label="Giải thích đáp án" placeholder="Giải thích (tuỳ chọn)" className="h-8 text-xs" onSave={(explanation) => upd({ explanation })} />}
           </div>
         )}
-        {((d.warnings && d.warnings.length > 0) || d.error) && (
+        {((d.warnings && d.warnings.length > 0) || d.error || pastDue) && (
           <ul className="space-y-0.5 text-xs">
             {d.error && <li className="flex gap-1.5 text-red-600 dark:text-red-400"><CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />{d.error}</li>}
+            {pastDue && <li className="flex gap-1.5 text-amber-700 dark:text-amber-400"><Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" />Giờ đăng đã qua: bấm Đăng thì bài này được đăng ngay. Đổi giờ ở trên nếu muốn lên lịch.</li>}
             {(d.warnings || []).map((w, i) => <li key={i} className="flex gap-1.5 text-amber-700 dark:text-amber-400"><TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />{w}</li>)}
           </ul>
         )}
@@ -350,6 +353,6 @@ export const aipostsDemo: AiPostsState = {
     { ...dd, id: 'a1', channelKey: 'k1', channelName: 'Dark Bible Stories', type: 'image', when: inDays(1, 9), status: 'draft', text: 'Before the flood, one man kept building while the world laughed. 🌧️ What would it take for you to keep going when no one believes you?\n\n#Noah #Genesis #Faith', imageUrls: [svg(210, 'Ark')], images: ['x'] },
     { ...dd, id: 'a2', channelKey: 'k1', channelName: 'Dark Bible Stories', type: 'poll', when: inDays(1, 20), status: 'draft', text: 'Which Old Testament story should we tell next?', options: [{ text: 'Samson and Delilah' }, { text: 'The witch of Endor' }, { text: 'Jonah and the great fish' }] },
     { ...dd, id: 'a3', channelKey: 'k2', channelName: 'Dark Faith', type: 'quiz', when: inDays(2, 9), status: 'done', result: 'scheduled', line: 'Đã lên lịch đăng vào 09:00', url: 'https://www.youtube.com/post/UgkxDemo', text: 'Who was taken up to heaven in a whirlwind?', answers: [{ text: 'Elijah', correct: true }, { text: 'Moses', correct: false }, { text: 'Enoch', correct: false }], explanation: '2 Kings 2:11.' },
-    { ...dd, id: 'a4', channelKey: 'k2', channelName: 'Dark Faith', type: 'text', when: inDays(2, 20), status: 'error', error: 'Quá 20 giây vẫn chưa thấy "Đăng".', text: 'Faith is not the absence of doubt. It is the decision to walk anyway. 🙏 #Faith', warnings: ['Chưa có ảnh (Gemini tạo ảnh báo hết hạn mức): đăng thành bài chữ.'] },
+    { ...dd, id: 'a4', channelKey: 'k2', channelName: 'Dark Faith', type: 'text', when: inDays(-1, 20), status: 'error', error: 'Quá 20 giây vẫn chưa thấy "Đăng".', text: 'Faith is not the absence of doubt. It is the decision to walk anyway. 🙏 #Faith', warnings: ['Chưa có ảnh (Gemini tạo ảnh báo hết hạn mức): đăng thành bài chữ.'] },
   ],
 }

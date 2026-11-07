@@ -142,32 +142,41 @@ const INBOX_FILTER = [
   { name: 'PARENT_ENTITY_CONTENT_TYPE', value: ['PARENT_ENTITY_CONTENT_TYPE_WATCH', 'PARENT_ENTITY_CONTENT_TYPE_SHORT', 'PARENT_ENTITY_CONTENT_TYPE_CREATOR_POST'] },
 ]
 const inboxUrl = (studio, uc, filter = INBOX_FILTER) => `${studio}/channel/${uc}/comments/inbox?filter=${encodeURIComponent(JSON.stringify(filter))}`
-// Tha tim: moi binh luan (ca binh luan kenh da tra loi), khong loc trang thai phan hoi
-const ALL_FILTER = INBOX_FILTER.filter((f) => f.name !== 'ENGAGED_STATUS')
+const FILTER_NAME = 'Trạng thái phản hồi: Chưa phản hồi'
 
-// uc bo trong: lay tu dia chi trang hien tai (withChannel da chuyen dung kenh).
-async function openInbox(page, uc, { urls, log = () => {}, all = false } = {}) {
+// Mo hop thu cua kenh (uc bo trong: lay tu dia chi trang, withChannel da chuyen dung kenh) VA bat bo loc
+// "Trang thai phan hoi: Chua phan hoi" truoc khi doc gi (ca "Lay binh luan moi" lan "Quet va tha tim", tu 0.6.2).
+// Chi doc khi da thay chip bo loc tren trang; khong dat duoc (ca sau khi tai lai) thi bao loi, khong doc.
+async function openInbox(page, uc, { urls, log = () => {} } = {}) {
   uc = uc || channelOf(page.url())
   if (!uc) throw new StepError('Không biết UC ID của kênh để mở hộp thư bình luận.', 'Mở hộp thư bình luận')
-  await page.run('Mở Cộng đồng → Bình luận', async () => {
-    await page.goto(inboxUrl(urls.studio, uc, all ? ALL_FILTER : INBOX_FILTER))
-    await page.waitFor({ regex: LABELS.tabComments, selector: SEL.tab })
-  })
-  // tab "Binh luan" (khong phai "Bai dang cua nguoi xem" / "Luot de cap")
-  const tab = { regex: LABELS.tabComments, selector: SEL.tab }
-  const selected = await page.eval((s) => {
-    const el = window.__ya.one(s)
-    return !!el && (el.getAttribute('aria-selected') === 'true' || el.hasAttribute('selected') || el.classList.contains('iron-selected'))
-  }, tab)
-  if (!selected) await page.click(tab)
-  if (!all) await page.run('Lọc "Chưa phản hồi"', () => ensureNotResponded(page, log))
+  for (let attempt = 0; ; attempt++) {
+    await page.run('Mở Cộng đồng → Bình luận', async () => {
+      await page.goto(inboxUrl(urls.studio, uc))
+      await page.waitFor({ regex: LABELS.tabComments, selector: SEL.tab })
+    })
+    // tab "Binh luan" (khong phai "Bai dang cua nguoi xem" / "Luot de cap")
+    const tab = { regex: LABELS.tabComments, selector: SEL.tab }
+    const selected = await page.eval((s) => {
+      const el = window.__ya.one(s)
+      return !!el && (el.getAttribute('aria-selected') === 'true' || el.hasAttribute('selected') || el.classList.contains('iron-selected'))
+    }, tab)
+    if (!selected) await page.click(tab)
+    const why = await page.run(`Lọc "${FILTER_NAME}"`, () => ensureNotResponded(page))
+    if (!why) break
+    if (attempt >= 1) {
+      throw new StepError(`Không bật được bộ lọc "${FILTER_NAME}" trong hộp thư Studio (${why}), kể cả sau khi tải lại trang. Tool không đọc bình luận khi chưa có bộ lọc này.`, page.step)
+    }
+    log('warn', `Chưa bật được bộ lọc "${FILTER_NAME}" (${why}). Tải lại hộp thư rồi thử lại.`)
+  }
   await waitList(page)
   return uc
 }
 
-// Dia chi da co bo loc; neu Studio bo qua (chip "Trang thai phan hoi: Chua phan hoi" khong hien) thi them bang tay.
-async function ensureNotResponded(page, log) {
-  if (await page.has({ regex: LABELS.statusChipOk })) return true
+// Dia chi da co bo loc; Studio bo qua (khong hien chip "Trang thai phan hoi: Chua phan hoi") thi them bang tay
+// qua nut Loc. Tra ve '' khi da thay chip, con khong thi ly do (de bao loi).
+async function ensureNotResponded(page) {
+  if (await page.has({ regex: LABELS.statusChipOk })) return ''
   try {
     // chip trang thai khac (vd "Da phan hoi") -> bam vao de sua; khong co -> nut Loc
     if (await page.has({ regex: LABELS.statusChip })) await page.click({ regex: LABELS.statusChip })
@@ -178,10 +187,11 @@ async function ensureNotResponded(page, log) {
     await page.click({ regex: LABELS.notResponded })
     await page.click({ regex: LABELS.apply })
     await page.waitFor({ regex: LABELS.statusChipOk }, { timeout: 5000 })
-    return true
+    // Studio tai lai danh sach theo bo loc moi: cho mot nhip de khong doc nham danh sach cu
+    await sleep(1500)
+    return ''
   } catch (e) {
-    log('warn', `Không đặt được bộ lọc "Chưa phản hồi" (${e.message}). Tool vẫn đọc danh sách và tự bỏ qua bình luận đã trả lời.`)
-    return false
+    return e.message.replace(/\.$/, '')
   }
 }
 
@@ -322,7 +332,14 @@ function heartScan(sel, opts, scanInbox) {
 }
 // chay trong trang: kem ma scanInbox (page.eval chi gui ma cua mot ham)
 const HEART_SCAN = `(sel, opts) => (${heartScan})(sel, opts, ${scanInbox})`
-const HEARTED = `(sel, opts, id) => { const x = (${HEART_SCAN})(sel, opts).find((y) => y.id === id); return x && x.hearted ? true : null }`
+// Sau khi bam tim: 'hearted' = tim da hien; 'gone' = hang da roi danh sach (dang loc "Chua phan hoi", Studio co the
+// coi binh luan vua tha tim la da phan hoi) trong khi danh sach van con hang khac; null = chua thay gi.
+const HEART_STATE = `(sel, opts, id) => {
+  const rows = (${HEART_SCAN})(sel, opts)
+  const x = rows.find((y) => y.id === id)
+  if (x) return x.hearted ? 'hearted' : null
+  return rows.length ? 'gone' : null
+}`
 
 // Tha tim cac binh luan cua nguoi xem (moi nhat truoc, toi da max hang). skip(id) = true: bo qua (da tha o lan truoc).
 // Chi bam khi trang cho thay CHUA tha tim (bam lai la bo tim). Bam xong kiem lai; 2 lan dau khong thay tim hien
@@ -330,7 +347,7 @@ const HEARTED = `(sel, opts, id) => { const x = (${HEART_SCAN})(sel, opts).find(
 async function heartComments(page, { max = 100, handle = '', skip = () => false, shouldStop = () => false, onHeart = () => {}, log = () => {}, gapMs = [400, 900] } = {}) {
   const own = String(handle || '').toLowerCase()
   const done = new Set()
-  const out = { hearted: [], already: 0, unverified: 0, seen: 0 }
+  const out = { hearted: [], already: 0, unverified: 0, seen: 0, left: 0 } // left: da tha tim va roi khoi danh sach "Chua phan hoi"
   let failedChecks = 0
   for (;;) {
     const rows = await page.eval(HEART_SCAN, SEL, { handle })
@@ -355,7 +372,14 @@ async function heartComments(page, { max = 100, handle = '', skip = () => false,
       const now = marked.find((x) => x.id === r.id)
       if (!now || now.hearted) { if (now) out.already++; continue }
       await page.click({ selector: '[data-ya-heart]' })
-      const ok = await page.until(HEARTED, [SEL, { handle }, r.id], { timeout: 4000, what: 'tim hiện lên' }).catch(() => false)
+      let ok = await page.until(HEART_STATE, [SEL, { handle }, r.id], { timeout: 4000, what: 'tim hiện lên' }).catch(() => null)
+      if (ok === 'gone') {
+        // kiem lai sau mot nhip: hang van khong quay lai (khong phai danh sach dang ve lai) thi coi la da tha tim
+        await sleep(600)
+        const again = await page.eval(HEART_STATE, SEL, { handle }, r.id).catch(() => null)
+        ok = again === 'gone' || again === 'hearted' ? 'hearted' : null
+        if (ok) out.left++
+      }
       if (ok) { out.hearted.push(r.id); onHeart(r.id, true) } else {
         out.unverified++
         onHeart(r.id, false)
@@ -368,4 +392,4 @@ async function heartComments(page, { max = 100, handle = '', skip = () => false,
   return out
 }
 
-module.exports = { LABELS, SEL, INBOX_FILTER, ALL_FILTER, inboxUrl, openInbox, readComments, reply, parseAgo, scanInbox, heartComments }
+module.exports = { LABELS, SEL, INBOX_FILTER, FILTER_NAME, inboxUrl, openInbox, readComments, reply, parseAgo, scanInbox, heartComments }

@@ -11,10 +11,10 @@ const replies = (mock) => mock.events.filter((e) => e.type === 'reply')
 const hearts = (mock) => mock.events.filter((e) => e.type === 'heart')
 
 module.exports = [
-  ['tha tim: moi binh luan (khong loc "Chua phan hoi"), bo qua binh luan da co tim / da tha o lan truoc, khong bam tim cua tra loi', async ({ page, mock, urls }) => {
-    await openInbox(page, UC, { urls, all: true })
-    assert(!/COMMENT_CATEGORY_NOT_ENGAGED/.test(decodeURIComponent(page.url())), 'khong loc trang thai phan hoi')
-    assert(!(await page.has('Trạng thái phản hồi: Chưa phản hồi')))
+  ['tha tim: loc "Chua phan hoi" truoc, bo qua binh luan da co tim / da tha o lan truoc, khong bam tim cua tra loi', async ({ page, mock, urls }) => {
+    await openInbox(page, UC, { urls })
+    assert(/COMMENT_CATEGORY_NOT_ENGAGED/.test(decodeURIComponent(page.url())), 'loc trang thai phan hoi trong dia chi')
+    assert(await page.has('Trạng thái phản hồi: Chưa phản hồi'), 'chip bo loc hien tren trang')
     const seen = []
     const r = await heartComments(page, { handle: OWN, skip: (id) => id === 'UgxJohn08' || id === 'UgxDavid10', onHeart: (id, ok) => seen.push([id, ok]), gapMs: [0, 10] })
     assert.equal(r.seen, 10, 'cuon tai het danh sach ' + JSON.stringify(r))
@@ -29,19 +29,43 @@ module.exports = [
     assert.equal(new Set(ev.map((e) => e.key)).size, 8, 'moi binh luan mot lan')
     // chay lai: moi binh luan da co tim -> khong bam gi
     mock.events.length = 0
-    await openInbox(page, UC, { urls, all: true })
+    await openInbox(page, UC, { urls })
     const again = await heartComments(page, { handle: OWN, skip: (id) => id === 'UgxDavid10', gapMs: [0, 10] })
     assert.deepEqual([again.hearted.length, again.already], [0, 10], JSON.stringify(again))
     assert.equal(hearts(mock).length, 0)
   }],
 
+  ['tha tim khi dang loc "Chua phan hoi": binh luan vua tha tim roi khoi danh sach -> van tinh la da tha, khong dung', async ({ page, mock, urls }) => {
+    await page.goto(`${urls.studio}/channel/${UC}/comments/inbox`)
+    await page.eval(() => localStorage.setItem('mockInbox.heartvanish', '1'))
+    await openInbox(page, UC, { urls })
+    const r = await heartComments(page, { handle: OWN, gapMs: [0, 10] })
+    assert.equal(r.unverified, 0, JSON.stringify(r))
+    assert.equal(r.already, 1, 'k8 da co tim san')
+    assert.equal(r.hearted.length, 9, JSON.stringify(r))
+    assert.equal(r.left, 9)
+    const ev = hearts(mock)
+    assert.equal(ev.length, 9)
+    assert(ev.every((e) => e.on), 'chi bat tim, khong bo tim nao')
+    assert.equal(new Set(ev.map((e) => e.key)).size, 9, 'moi binh luan mot lan')
+  }],
+
   ['tha tim: trang khong cho thay tim sau khi bam -> dung sau 2 lan (khong bam tiep)', async ({ page, mock, urls }) => {
     await page.goto(`${urls.studio}/channel/${UC}/comments/inbox`)
     await page.eval(() => localStorage.setItem('mockInbox.heartnostate', '1'))
-    await openInbox(page, UC, { urls, all: true })
+    await openInbox(page, UC, { urls })
     page.timeout = 3000
     await assert.rejects(heartComments(page, { handle: OWN, gapMs: [0, 10] }), /không cho thấy tim đã được thả/)
     assert.equal(hearts(mock).length, 2)
+  }],
+
+  ['khong bat duoc bo loc "Chua phan hoi" (ca sau khi tai lai) -> bao loi, khong doc / khong tha tim', async ({ page, mock, urls, logs }) => {
+    await page.goto(`${urls.studio}/channel/${UC}/comments/inbox`)
+    await page.eval(() => { localStorage.setItem('mockInbox.nofilter', '1'); localStorage.setItem('mockInbox.filterbroken', '1') })
+    page.timeout = 3000
+    await assert.rejects(openInbox(page, UC, { urls, log: page.log }), /Không bật được bộ lọc "Trạng thái phản hồi: Chưa phản hồi".*kể cả sau khi tải lại trang/)
+    assert(logs.some((l) => /Chưa bật được bộ lọc .*Tải lại hộp thư/.test(l)), logs.join('\n'))
+    assert.equal(hearts(mock).length, 0)
   }],
 
   ['doc hop thu: tab, bo loc, tai them khi cuon, ma on dinh', async ({ page, urls, logs }) => {

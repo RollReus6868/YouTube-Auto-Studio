@@ -147,7 +147,7 @@ function findBrowser() {
       await cal.waitFor()
       assert.equal(await cal.getByText('T2', { exact: true }).count(), 1)
       assert.equal(await cal.getByText('CN', { exact: true }).count(), 1)
-      if (new Date().getDate() > 1 && new Date(Date.now() + 2 * 864e5).getMonth() === new Date().getMonth()) assert(await cal.getByRole('button', { name: vn(-1) }).isDisabled(), 'ngay da qua bi khoa')
+      if (new Date().getDate() > 1 && new Date(Date.now() + 2 * 864e5).getMonth() === new Date().getMonth()) assert(await cal.getByRole('button', { name: vn(-1), exact: true }).isDisabled(), 'ngay da qua bi khoa')
       await check('preset-lich')
       await cal.getByRole('button', { name: vn(3), exact: true }).click()
       await page.getByRole('button', { name: vn(3), exact: true }).waitFor()

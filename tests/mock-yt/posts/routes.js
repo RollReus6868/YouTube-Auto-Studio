@@ -3,8 +3,17 @@
 const json = (res, data) => { res.setHeader('content-type', 'application/json; charset=utf-8'); res.end(JSON.stringify(data)) }
 const db = (server) => (server.postsDb = server.postsDb || [])
 
+const fs = require('fs')
+const path = require('path')
+
 module.exports = [
-  [/^\/yt\/(channel\/UC[\w-]+|@[\w.-]+)\/posts(\?.*)?$/, 'posts.html'],
+  // youtube.com bat Trusted Types (CSP require-trusted-types-for 'script'): eval(chuoi) trong trang bi chan
+  // (loi 0.6.1: tool khong thay khung soan bai tren YouTube that). Trang gia cung bat de bat loi nay.
+  [/^\/yt\/(channel\/UC[\w-]+|@[\w.-]+)\/posts(\?.*)?$/, (req, res) => {
+    res.setHeader('content-type', 'text/html; charset=utf-8')
+    res.setHeader('content-security-policy', "require-trusted-types-for 'script'")
+    res.end(fs.readFileSync(path.join(__dirname, 'posts.html')))
+  }],
   [/^\/yt\/__posts\/list\?tab=(\w+)/, (req, res, m, server) => {
     const sched = m[1] === 'sched'
     json(res, db(server).filter((p) => !!p.scheduledAt === sched).slice().reverse())

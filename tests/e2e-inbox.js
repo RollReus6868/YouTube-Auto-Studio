@@ -130,13 +130,19 @@ const waitFor = async (fn, what, ms = 60000) => {
     assert(!yt.hits.slice(hits0).some((h) => /\/comments\/inbox/.test(h)), 'khong mo hop thu kenh bo tick')
     await chip.click()
     await waitFor(async () => (await st()).f.inbox.items.length === 9, 'tick lai: hien lai binh luan')
-    // Quet va tha tim: moi binh luan cua nguoi xem chua co tim (k8 co san tim), nho de lan sau khong bam lai (bam lai = bo tim)
+    // Quet va tha tim (tu 0.6.2): hop thu loc "Trang thai phan hoi: Chua phan hoi" -> chi tha tim binh luan chua tra loi
+    // (9 binh luan vua tra loi o tren bi bo loc an), nho de lan sau khong bam lai (bam lai = bo tim)
     const hearts = () => yt.events.filter((e) => e.type === 'heart')
+    const hits1 = yt.hits.length
     await ui.getByRole('button', { name: 'Quét và thả tim' }).click()
     await waitFor(async () => (await st()).logs.some((l) => /thả tim xong/.test(l.msg)), 'tha tim xong', 120000)
     await waitFor(async () => !(await st()).f.inbox.busy, 'het ban')
-    assert(hearts().length >= 8 && hearts().every((e) => e.on), JSON.stringify(hearts()))
+    const opened = yt.hits.slice(hits1).filter((h) => /\/comments\/inbox/.test(h))
+    assert(opened.length && opened.every((h) => /COMMENT_CATEGORY_NOT_ENGAGED/.test(decodeURIComponent(h))), `mo hop thu co bo loc: ${opened}`)
+    const repliedKeys = new Set(replies().map((r) => r.key))
+    assert(hearts().length >= 1 && hearts().every((e) => e.on && !repliedKeys.has(e.key)), `chi tha tim binh luan chua phan hoi: ${JSON.stringify(hearts())}`)
     assert(!hearts().some((e) => e.key === 'k8'), 'binh luan da co tim: khong bam')
+    assert((await st()).logs.some((l) => /bình luận chưa phản hồi\)/.test(l.msg)), 'nhat ky ghi so binh luan chua phan hoi da xem')
     const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'hearted.json'), 'utf8'))
     assert.equal(Object.values(saved)[0] && Object.keys(Object.values(saved)[0]).length, hearts().length, 'nho binh luan da tha tim')
     const n0 = hearts().length

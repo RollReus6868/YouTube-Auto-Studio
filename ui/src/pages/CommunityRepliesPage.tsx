@@ -83,7 +83,7 @@ export function CommunityRepliesPage({ state, send, go }: PageProps) {
       </div>
       <PageBody>
         {items.length === 0 ? (
-          <EmptyState icon={MessagesSquare} text={!s.channels.length ? 'Tick kênh ở trên rồi bấm "Lấy bình luận mới". Tool mở Studio → Cộng đồng → Bình luận (lọc "Chưa phản hồi") của từng kênh.'
+          <EmptyState icon={MessagesSquare} text={!s.channels.length ? 'Tick kênh ở trên rồi bấm "Lấy bình luận mới". Tool mở Studio → Cộng đồng → Bình luận của từng kênh, bật bộ lọc "Trạng thái phản hồi: Chưa phản hồi" rồi mới đọc.'
             : filter === 'pending' ? 'Không có bình luận nào chờ trả lời. Bấm "Lấy bình luận mới" để kiểm tra.' : 'Chưa có bình luận nào ở mục này.'} />
         ) : items.map((c) => (
           <CommentCard key={c.id} c={c} canReply={state.secrets.gemini} onEdit={(t) => { edits.current[c.id] = t }}
@@ -111,7 +111,7 @@ export function CommunityRepliesPage({ state, send, go }: PageProps) {
               </Button>
             )}
             <Button variant="outline" size="sm" disabled={!s.channels.length} onClick={() => send('inbox_hearts')}
-              title="Mở hộp thư bình luận của từng kênh đã tick và thả tim mọi bình luận của người xem chưa có tim (không trả lời gì)">
+              title='Mở hộp thư bình luận của từng kênh đã tick, lọc "Trạng thái phản hồi: Chưa phản hồi" rồi thả tim bình luận của người xem chưa có tim (không trả lời gì)'>
               <Heart /> Quét và thả tim
             </Button>
             <Button variant="gradient" size="sm" disabled={!s.channels.length} onClick={() => send('inbox_fetch')}>
