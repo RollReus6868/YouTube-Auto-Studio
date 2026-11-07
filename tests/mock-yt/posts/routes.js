@@ -14,6 +14,8 @@ module.exports = [
     res.setHeader('content-security-policy', "require-trusted-types-for 'script'")
     res.end(fs.readFileSync(path.join(__dirname, 'posts.html')))
   }],
+  // bien the cua trang gia, bai kiem dat qua server.postsFlags (vd { timeAnim: 1500, timeClick: 'none' })
+  [/^\/yt\/__posts\/flags$/, (req, res, m, server) => json(res, server.postsFlags || {})],
   [/^\/yt\/__posts\/list\?tab=(\w+)/, (req, res, m, server) => {
     const sched = m[1] === 'sched'
     json(res, db(server).filter((p) => !!p.scheduledAt === sched).slice().reverse())

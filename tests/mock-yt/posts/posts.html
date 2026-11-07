@@ -66,6 +66,7 @@
   #cancel-button-wrapper { position: absolute; right: 16px; top: 12px }
   #picker-component { display: flex; gap: 16px; margin-top: 16px; position: relative }
   #picker-component tp-yt-paper-button { display: block; border: 1px solid #3f3f3f; padding: 8px 12px; border-radius: 4px; min-width: 140px; cursor: pointer }
+  #contentWrapper.animating > * { pointer-events: none }
   .dropdown { position: absolute; background: #282828; border-radius: 12px; padding: 8px 0; z-index: 20; max-height: 300px; overflow-y: auto; bottom: 48px }
   .dropdown [role=option] { padding: 10px 16px; cursor: pointer; white-space: nowrap } .dropdown [role=option]:hover { background: #3f3f3f }
   #calendar-dialog { position: absolute; bottom: 48px; left: 0; width: 290px; background: #282828; border-radius: 12px; padding: 12px; z-index: 20 }
@@ -124,7 +125,11 @@ const owner = !/KHAC/.test(location.pathname) // kenh cua nguoi khac: khong co k
 const PH = ['Gửi lời cảm ơn! Nhập @ để đề cập đến một kênh', 'Bật mí về video tiếp theo của bạn', 'Bạn đang nghĩ gì?'] // placeholder doi theo lan (video A/B vs C, HTML that 11/2026)
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const fmtDate = (d) => `${MON[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
-const fmtTime = (m) => `${(Math.floor(m / 60) % 12) || 12}:${String(m % 60).padStart(2, '0')} ${m < 720 ? 'AM' : 'PM'}`
+const fmtTime = (m) => `${(Math.floor(m / 60) % 12) || 12}:${String(m % 60).padStart(2, '0')}\u202f${m < 720 ? 'AM' : 'PM'}` // YouTube that dung U+202F (HTML 11/2026)
+// bien the do bai kiem dat (server.postsFlags): timeAnim = ms danh sach gio dang mo (pointer-events: none nhu
+// iron-dropdown .animating), timeClick = 'trusted-ignored' (chuot that khong chon) | 'none' (chi API select() chon duoc)
+let FLAGS = {}
+fetch('/yt/__posts/flags').then((r) => r.json()).then((f) => { FLAGS = f || {} }).catch(() => {})
 const p2 = (n) => String(n).padStart(2, '0')
 const MY_VIDEOS = [
   ['AbCdEfGhIjK', 'The Faith God Uses to Protect Black America’s Next Generation', '1.595'],
@@ -370,14 +375,22 @@ function schedPanel() {
           <div id="month-controller"><yt-icon-button id="prev-month"><button id="button" aria-label="Tháng trước">‹</button></yt-icon-button><yt-icon-button id="next-month"><button id="button" aria-label="Tháng tiếp theo">›</button></yt-icon-button></div></div>
           <div class="cal"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>${grid}</div></tp-yt-paper-dialog></ytd-calendar-date-picker>
       <div style="position:relative"><tp-yt-paper-menu-button role="group"><div id="trigger"><tp-yt-paper-button id="time-picker" role="button" tabindex="0"><div id="time-label-text">${fmtTime(S.time)}</div></tp-yt-paper-button></div>
-        <tp-yt-iron-dropdown id="dropdown" ${S.pop === 'time' ? '' : 'hidden aria-hidden="true"'}><div id="contentWrapper"><tp-yt-paper-listbox id="time-listbox" role="listbox" class="dropdown" style="width:130px">${times}</tp-yt-paper-listbox></div></tp-yt-iron-dropdown></tp-yt-paper-menu-button></div>
+        <tp-yt-iron-dropdown id="dropdown" ${S.pop === 'time' ? '' : 'hidden aria-hidden="true"'}><div id="contentWrapper" class="${S.pop === 'time' && S.timeAnimUntil > Date.now() ? 'animating' : ''}"><tp-yt-paper-listbox id="time-listbox" role="listbox" class="dropdown" style="width:130px">${times}</tp-yt-paper-listbox></div></tp-yt-iron-dropdown></tp-yt-paper-menu-button></div>
       <div style="position:relative"><tp-yt-paper-menu-button role="group"><div id="trigger"><tp-yt-paper-button id="timezone-picker" role="button" tabindex="0" style="min-width:220px"><div id="timezone-label-text">(GMT+0700) Giờ địa phương</div></tp-yt-paper-button></div>
         <tp-yt-iron-dropdown id="dropdown" ${S.pop === 'tz' ? '' : 'hidden aria-hidden="true"'}><div id="contentWrapper"><tp-yt-paper-listbox id="timezone-listbox" role="listbox" class="dropdown">${['(GMT+0700) Giờ địa phương', 'Phoenix (GMT-7)', 'Chicago (GMT-5)', 'London (GMT+0)', 'Tokyo (GMT+9)'].map((t) => `<tp-yt-paper-item role="option">${t}</tp-yt-paper-item>`).join('')}</tp-yt-paper-listbox></div></tp-yt-iron-dropdown></tp-yt-paper-menu-button></div>
     </div></ytd-date-time-picker-renderer>`)
   setTimeout(() => {
     $('#cancel-button-wrapper button').onclick = () => { S.sched = false; S.pop = ''; render() }
     $('#date-picker').onclick = () => { S.pop = S.pop === 'date' ? '' : 'date'; render(); if (S.pop === 'date') { const i = $('#textbox'); i.focus(); i.select() } }
-    $('#time-picker').onclick = () => { S.pop = S.pop === 'time' ? '' : 'time'; render() }
+    $('#time-picker').onclick = () => {
+      S.pop = S.pop === 'time' ? '' : 'time'
+      // nhu iron-dropdown: dang mo thi noi dung khong nhan chuot (.animating ::slotted(*) { pointer-events: none })
+      if (S.pop === 'time' && FLAGS.timeAnim) { S.timeAnimUntil = Date.now() + FLAGS.timeAnim; setTimeout(() => { const w = $('#time-listbox'); if (w) w.parentElement.classList.remove('animating') }, FLAGS.timeAnim) }
+      render()
+      // mo ra thi cuon toi muc dang chon (nhu iron-menu-behavior focus muc da chon)
+      const cur = $('#time-listbox [aria-selected=true]')
+      if (cur) cur.parentElement.scrollTop = cur.offsetTop - 4
+    }
     $('#timezone-picker').onclick = () => { S.pop = S.pop === 'tz' ? '' : 'tz'; render() }
     const inp = $('#textbox')
     inp.onkeydown = (e) => {
@@ -390,7 +403,16 @@ function schedPanel() {
       S.date = d; S.pop = ''; render()
     }
     for (const b of $$('.cal [data-d]')) b.onclick = () => { const [y, mo, d] = b.dataset.d.split('-'); S.date = new Date(+y, mo - 1, +d); S.pop = ''; render() }
-    for (const o of $$('#time-listbox [role=option]')) o.onclick = () => { S.time = +o.dataset.m; S.pop = ''; render() }
+    const box = $('#time-listbox')
+    const pickAt = (i) => { const o = $$('#time-listbox [role=option]')[i]; if (o) { S.time = +o.dataset.m; S.pop = ''; render() } }
+    if (box) { box.select = (i) => pickAt(+i); box.selectIndex = box.select } // API cua iron-selectable
+    for (const o of $$('#time-listbox [role=option]')) {
+      o.onclick = (e) => {
+        if (FLAGS.timeClick === 'none') return
+        if (FLAGS.timeClick === 'trusted-ignored' && e.isTrusted) return
+        S.time = +o.dataset.m; S.pop = ''; render()
+      }
+    }
     for (const o of $$('#timezone-listbox [role=option]')) o.onclick = () => { S.pop = ''; render() }
   })
   return p

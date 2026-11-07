@@ -48,6 +48,7 @@ const LABELS = {
   scheduleItem: '^(Lên lịch đăng bài|Schedule post)$', // (HTML) ytd-menu-service-item-renderer
   schedPanel: '^(Chọn ngày và giờ để xuất bản bài đăng này|(Choose|Select|Pick) (a )?date and time)', // (HTML) #hint
   datePicker: '#date-picker', timePicker: '#time-picker', tzPicker: '#timezone-picker', // (HTML)
+  timeList: '#time-listbox, tp-yt-paper-listbox, [role=listbox]', // (HTML 11/2026) danh sach moc 15 phut cua o gio
   dateInput: '#calendar-dialog input, [aria-label="Enter date"] input', // (HTML) o nhap ngay o dau lich
   schedButton: '^(Lên lịch|Schedule)$', // (HTML) #submit-button khi dang len lich
   localTz: '(Giờ địa phương|Local time)', // (HTML)
@@ -196,6 +197,42 @@ function install(L) {
       }
       return null
     },
+    // Danh sach gio (tp-yt-paper-listbox#time-listbox) cua o gio: nam trong cung tp-yt-paper-menu-button voi nut.
+    // ready = da het hieu ung mo (iron-dropdown #contentWrapper.animating: noi dung khong nhan chuot).
+    // Muc gio cua YouTube dung U+202F ("9:00 AM"): norm() doi moi khoang trang ve " ".
+    // Nut o gio: dau danh dau co the mat khi trang ve lai khung lich -> tim lai qua sched()
+    timeTrig(trig) {
+      const t = document.querySelector(trig)
+      if (t && t.isConnected && ya.visible(t)) return t
+      const s = yp.sched()
+      return s && s.time ? document.querySelector(s.time.sel) : null
+    },
+    markTimeTrig(trig) { const t = yp.timeTrig(trig); return t ? mark(t, 'data-ya-dd') : '' },
+    timeList(trig, want) {
+      const t = yp.timeTrig(trig)
+      const menu = t && t.closest('tp-yt-paper-menu-button')
+      const box = menu && menu.querySelector(L.timeList)
+      if (!box || !ya.visible(box)) return null // danh sach dong
+      const items = [...box.querySelectorAll('[role=option], tp-yt-paper-item')]
+      const i = items.findIndex((x) => norm(x.innerText || x.textContent) === norm(want))
+      const wrap = box.closest('#contentWrapper')
+      const busy = (wrap && wrap.classList.contains('animating')) || getComputedStyle(items[0] || box).pointerEvents === 'none'
+      if (i < 0) return { ready: !busy, idx: -1, sel: '' }
+      items[i].scrollIntoView({ block: 'nearest' }) // chi cuon trong danh sach, khong cuon ca trang
+      return { ready: !busy, idx: i, sel: mark(items[i], 'data-ya-time') }
+    },
+    // Du phong khi bam chuot khong chon duoc: 'click' = el.click() (Polymer coi la tap), 'select' = API paper-listbox
+    pickTime(trig, i, how) {
+      const t = yp.timeTrig(trig)
+      const box = t && t.closest('tp-yt-paper-menu-button') && t.closest('tp-yt-paper-menu-button').querySelector(L.timeList)
+      if (!box) return false
+      const it = box.querySelectorAll('[role=option], tp-yt-paper-item')[i]
+      if (how === 'click') { if (!it) return false; it.click(); return true }
+      if (typeof box.select === 'function') { box.select(i); return true }
+      if ('selected' in box) { box.selected = i; return true }
+      return false
+    },
+    timeIs(trig, want) { const t = yp.timeTrig(trig); return !!t && norm(t.innerText) === norm(want) },
     markDateInput() {
       let el = vis(L.dateInput)[0]
       if (!el) { const act = document.activeElement; const list = vis('input').filter((i) => /\b20\d\d\b/.test(i.value)); el = list.includes(act) ? act : list[list.length - 1] }
@@ -441,7 +478,35 @@ const dateText = (d, sample) => {
 const timeText = (d, sample) => (/[ap]\.?m/i.test(sample)
   ? `${(d.getHours() % 12) || 12}:${p2(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'}` // 7:00 PM
   : `${p2(d.getHours())}:${p2(d.getMinutes())}`)
-const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+// Chon gio trong danh sach (loi 0.6.2 tren YouTube that: danh sach mo, chuot bam vao "9:00 AM" nhung o gio van
+// "12:00 AM"). Cho danh sach het hieu ung mo roi bam chuot that; khong an thi bam bang ma (el.click()), roi
+// API select() cua paper-listbox. Moi cach deu kiem lai chu tren o gio.
+async function pickTime(page, trig, want, log = () => {}) {
+  for (const how of ['mouse', 'click', 'select']) {
+    if (!(await inPage(page, 'timeList', trig, want))) {
+      const sel = await inPage(page, 'markTimeTrig', trig)
+      if (!sel) throw new StepError('Không thấy ô chọn giờ.', page.step)
+      await page.click({ selector: sel })
+    }
+    let st = await waitPage(page, 'timeList', [trig, want], { timeout: 8000, what: 'danh sách giờ' }).catch(() => null)
+    // cho het hieu ung mo (noi dung danh sach chua nhan chuot)
+    const end = Date.now() + 5000
+    while (st && !st.ready && Date.now() < end) { await sleep(150); st = await inPage(page, 'timeList', trig, want) }
+    if (!st) continue
+    if (st.idx < 0) { await page.press('Escape'); throw new StepError(`Danh sách giờ không có mốc ${want}.`, page.step) }
+    await sleep(200)
+    if (how === 'mouse') await page.click({ selector: st.sel }, { after: 0 })
+    else if (!(await inPage(page, 'pickTime', trig, st.idx, how))) continue
+    const ok = await waitPage(page, 'timeIs', [trig, want], { timeout: 2500, what: `ô giờ hiện ${want}` }).catch(() => false)
+    if (ok) {
+      if (how !== 'mouse') log('info', `Đã chọn giờ ${want} (cách dự phòng: ${how === 'click' ? 'bấm bằng mã' : 'chọn qua danh sách'}).`)
+      if (await inPage(page, 'timeList', trig, want)) await page.press('Escape')
+      return
+    }
+  }
+  if (await inPage(page, 'timeList', trig, want)) await page.press('Escape')
+}
 
 async function setSchedule(page, at, log) {
   // mui ten "Menu tac vu" canh "Dang" -> "Len lich dang bai"
@@ -467,9 +532,7 @@ async function setSchedule(page, at, log) {
   // gio: mo danh sach moc 15 phut (#time-listbox), bam dung muc
   const wantTime = timeText(at, dd.time.text)
   if (norm(dd.time.text) !== norm(wantTime)) {
-    await page.click({ selector: dd.time.sel })
-    await page.click({ regex: `^${reEsc(wantTime)}$`, selector: '[role=option], tp-yt-paper-item' }, { timeout: 8000 })
-    await sleep(300)
+    await pickTime(page, dd.time.sel, wantTime, log)
     dd = await waitPage(page, 'sched', [], { timeout: 5000, what: 'ô chọn ngày giờ đăng' })
     if (norm(dd.time.text) !== norm(wantTime)) throw new StepError(`Không chọn được giờ ${wantTime} (ô giờ đang là "${dd.time.text}").`, page.step)
   }

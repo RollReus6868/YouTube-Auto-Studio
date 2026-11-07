@@ -1,3 +1,9 @@
+## YT Auto Studio 0.6.3
+
+### Đăng bài và Đăng bài AI
+- **Sửa lỗi "Không chọn được giờ … (ô giờ đang là 12:00 AM)"** khi lên lịch bài đăng. Danh sách giờ của YouTube có lúc không nhận cú bấm chuột của tool. Tool giờ chờ danh sách mở xong rồi mới bấm và kiểm tra lại ô giờ. Nếu cú bấm không có tác dụng, tool tự chọn giờ bằng hai cách dự phòng, và nhật ký ghi rõ đã dùng cách nào.
+- Đọc được giờ dạng mới của YouTube ("9:00 AM" có khoảng trắng hẹp).
+
 ## YT Auto Studio 0.6.2
 
 ### Đăng bài và Đăng bài AI

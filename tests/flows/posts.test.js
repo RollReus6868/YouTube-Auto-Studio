@@ -109,6 +109,23 @@ module.exports = [
     assert.equal(r.status, 'scheduled')
     assert.match(db(ctx.mock)[0].scheduledAt, /T07:15$/)
   }],
+  // Loi 0.6.2 tren YouTube that: "Khong chon duoc gio 9:00 AM (o gio dang la 12:00 AM)" - danh sach mo, chuot
+  // bam vao muc nhung khong chon. Ba bien the: danh sach dang hieu ung mo (khong nhan chuot), chuot that bi bo qua,
+  // chi API select() cua paper-listbox chon duoc.
+  ...[['timeAnim', { timeAnim: 1500 }, null], ['chuot that bi bo qua', { timeClick: 'trusted-ignored' }, /bấm bằng mã/], ['chi API select()', { timeClick: 'none' }, /chọn qua danh sách/]].map(([name, flags, via]) => [
+    `len lich: chon gio khi danh sach gio ${name} -> van chon dung 9:00 PM`, async (ctx) => {
+      fresh(ctx.mock)
+      ctx.mock.server.postsFlags = flags
+      try {
+        const at = inDays(2, 21, 0)
+        const r = await run(ctx, { type: 'text', text: `Hẹn giờ (${name})`, when: at.toISOString() })
+        assert.equal(r.status, 'scheduled')
+        assert.match(db(ctx.mock)[0].scheduledAt, /T21:00$/)
+        const fb = ctx.logs.filter((l) => /Đã chọn giờ 9:00 PM \(cách dự phòng/.test(l))
+        if (via) assert(fb.length === 1 && via.test(fb[0]), ctx.logs.join('\n'))
+        else assert.equal(fb.length, 0, 'chuot that chon duoc thi khong can du phong')
+      } finally { ctx.mock.server.postsFlags = {} }
+    }]),
   ['gio dang da qua -> dang ngay', async (ctx) => {
     fresh(ctx.mock)
     const r = await run(ctx, { type: 'text', text: 'Muộn rồi', when: new Date(Date.now() - 3600e3).toISOString() })
