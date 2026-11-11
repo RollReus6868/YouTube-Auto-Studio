@@ -427,7 +427,8 @@ function createGeminiWeb(ctx, opts = {}) {
   }
   const pushState = () => ctx.push()
   // state.geminiWeb luon la status() moi nhat (tai khoan doi o trang Tai khoan / Cai dat cung hien ngay); gan de thi bo qua
-  Object.defineProperty(ctx.state, 'geminiWeb', { get: status, set: () => {}, enumerable: true, configurable: true })
+  // (bai kiem YA_GEMINI_WEB_FAKE: Gemini gia cua src/ai.js tu dat state.geminiWeb, khong khoa o day)
+  if (!process.env.YA_GEMINI_WEB_FAKE) Object.defineProperty(ctx.state, 'geminiWeb', { get: status, set: () => {}, enumerable: true, configurable: true })
 
   // Cua so Gemini cua tai khoan dang chon; doi tai khoan -> tao lai tren phien khac
   function ensureWindow() {
