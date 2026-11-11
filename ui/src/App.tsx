@@ -28,6 +28,16 @@ function useBackend() {
     window.ya?.onState(setState)
     call('hello').then((s) => s && setState(s))
   }, [])
+  // bao tien trinh chinh nguoi dung dang thao tac (bam / go), toi da 30 giay mot lan: viec tu chay ngam
+  // (tu toi uu hang cho sau khi dang) doi tool ranh han moi chay (src/idle.js)
+  useEffect(() => {
+    let last = 0
+    const ping = () => { const t = Date.now(); if (t - last > 30e3) { last = t; void call('activity') } }
+    const opts = { capture: true, passive: true }
+    window.addEventListener('pointerdown', ping, opts)
+    window.addEventListener('keydown', ping, opts)
+    return () => { window.removeEventListener('pointerdown', ping, opts); window.removeEventListener('keydown', ping, opts) }
+  }, [])
   const send = (cmd: string, payload?: unknown) => call(cmd, payload).then((s) => s && setState({ ...s }))
   return { state, send }
 }

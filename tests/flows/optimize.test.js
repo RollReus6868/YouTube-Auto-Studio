@@ -946,3 +946,81 @@ module.exports.push(['tinh nang: "Quét và tối ưu" + "Quét và tối ưu to
   assert.match(logs.join('\n'), /Quét toàn bộ xong: 1 kênh/)
   assert.equal(S.all.running, false)
 }])
+
+// Loi nguoi dung bao (11/2026): tu toi uu hang cho sau khi dang chen ngang luc dang dung tinh nang khac
+// (dang chuyen kenh cho viec khac thi tool "Tự tối ưu 1 video vừa đăng" va chuyen sang kenh khac).
+// Hang cho chi tu chay khi tool ranh han (ctx.busyReason, src/idle.js); chua ranh thi giu video trong hang cho.
+// Cong tac "Tự tối ưu video sau khi đăng" (settings.optimizeAuto) tat thi khong tu chay; "Chạy ngay" / "Bỏ khỏi hàng chờ".
+module.exports.push(['tinh nang: hang cho tu toi uu chi chay khi tool ranh, cong tac tat, Chạy ngay / Bỏ khỏi hàng chờ', async ({ page, urls, mock, tmp }) => {
+  const path = require('path')
+  const fs = require('fs')
+  const logs = []
+  let saved = { presets: [{ id: 'mac-dinh', name: 'Mặc định', optimizeAfterUpload: true }] }
+  const state = { f: {} }
+  let busy = 'Cộng đồng đang chạy'
+  const ran = []
+  const ctx = {
+    state, push: () => {}, log: (l, m) => logs.push(`${l} ${m}`), logFile: (n) => path.join(tmp, n), urls,
+    store: { get settings() { return saved }, save: (p) => { saved = { ...saved, ...p } } }, refreshSettings: () => {},
+    stopped: () => false, resetStop: () => {},
+    accounts: { channels: () => [{ key: UC, ucId: UC, name: 'Dark Bible Study', handle: '@DarkBibleStudy999' }], find: (k) => (k === UC ? { key: UC, ucId: UC, name: 'Dark Bible Study' } : null) },
+    withChannel: async (key, fn) => { ran.push(key); return fn(page) },
+    busyReason: () => busy,
+  }
+  await page.goto(`${urls.studio}/video/${VID}/edit`)
+  const f = require('../../src/features/optimize')(ctx)
+  f.start()
+  const S = state.f.optimize
+  const pend = () => JSON.parse(fs.readFileSync(path.join(tmp, 'optimize-pending.json'), 'utf8')).map((x) => x.id)
+  const tpl = afterUploadTemplate({ ...KEEP, like: true, comment: 'Tự động: {tieu_de}' }, [], { after: true })
+  ctx.afterUpload({ videoId: 'NeverProp01', title: 'God Was Never Their Property', tpl, presetId: 'mac-dinh', channelId: UC })
+  ctx.afterUpload({ videoId: 'LostTribe01', title: 'Lost Tribe', tpl, presetId: 'mac-dinh', channelId: UC })
+  const later = Date.now() + 16 * 60e3
+  // tool dang ban (viec khac / nguoi dung vua thao tac): khong chay, khong bo video khoi hang cho
+  mock.events.length = 0
+  assert.equal(await f.processPending(later), 0, 'dang ban -> khong tu chay')
+  assert.equal(await f.processPending(later), 0)
+  assert.deepEqual(ran, [], 'khong chuyen kenh / khong chen vao khung Studio')
+  assert.deepEqual(pend(), ['NeverProp01', 'LostTribe01'], 'van giu trong hang cho')
+  // trang Toi uu video thay hang cho: ten, kenh, gio chay, mau
+  assert.deepEqual(S.pending.map((x) => [x.id, x.title, x.channelName, x.preset]), [['NeverProp01', 'God Was Never Their Property', 'Dark Bible Study', 'Mặc định'], ['LostTribe01', 'Lost Tribe', 'Dark Bible Study', 'Mặc định']])
+  assert(Date.parse(S.pending[0].due) > Date.now() + 14 * 60e3, 'gio chay = gio dang + 15 phut')
+  assert.equal(S.auto, true, 'mac dinh bat (theo mau)')
+  assert.match(S.pendingWait, /chờ tool rảnh: Cộng đồng đang chạy/)
+  assert.equal(logs.filter((l) => /Hàng chờ tự tối ưu: 2 video đã tới giờ nhưng chưa chạy vì Cộng đồng đang chạy/.test(l)).length, 1, 'chi ghi nhat ky mot lan')
+  busy = 'bạn vừa dùng tool (chờ 5 phút không thao tác, còn khoảng 3 phút)'
+  assert.equal(await f.processPending(later), 0, 'vua co lenh tu giao dien -> khong chay')
+  assert.deepEqual(ran, [])
+  // tat cong tac: ranh cung khong chay, hang cho giu nguyen
+  f.commands.optimize_auto(false)
+  assert.deepEqual([saved.optimizeAuto, S.auto], [false, false])
+  busy = ''
+  assert.equal(await f.processPending(later), 0, 'tat cong tac -> khong tu chay')
+  assert.deepEqual(ran, [])
+  assert.deepEqual(pend(), ['NeverProp01', 'LostTribe01'])
+  assert.match(S.pendingWait, /Tự tối ưu đang tắt/)
+  // dang tat van xep video moi (de bam Chạy ngay), nhat ky noi ro
+  ctx.afterUpload({ videoId: 'TheCross001', title: 'The Cross', tpl, presetId: 'mac-dinh', channelId: UC })
+  assert.match(logs[logs.length - 1], /Tự tối ưu đang tắt: bấm "Chạy ngay" ở trang Tối ưu video/)
+  // Bỏ khỏi hàng chờ
+  f.commands.optimize_pending_remove({ id: 'TheCross001' })
+  assert.deepEqual(pend(), ['NeverProp01', 'LostTribe01'])
+  assert.deepEqual(S.pending.map((x) => x.id), ['NeverProp01', 'LostTribe01'])
+  // Chạy ngay (nguoi dung bam): chay du dang tat / chua toi gio
+  await f.commands.optimize_pending_run({ ids: ['LostTribe01'] })
+  assert.deepEqual(ran, [UC])
+  assert.deepEqual(pend(), ['NeverProp01'])
+  assert.match(logs.join('\n'), /Tối ưu ngay 1 video trong hàng chờ tự tối ưu \(bạn bấm "Chạy ngay"\)/)
+  const cm = await events(mock, 'comment')
+  assert.equal(cm.length, 1, logs.slice(-5).join('\n'))
+  assert.match(cm[0].text, /^Tự động: /)
+  // bat lai + ranh han: tu chay, nhat ky noi ro ly do va cach tat
+  f.commands.optimize_auto(true)
+  ran.length = 0
+  assert.equal(await f.processPending(later), 1, logs.slice(-5).join('\n'))
+  assert.deepEqual(ran, [UC])
+  assert.deepEqual(pend(), [])
+  assert.deepEqual(S.pending, [])
+  assert(logs.includes('info Tự tối ưu 1 video vừa đăng (theo "Tự tối ưu sau khi đăng" của mẫu "Mặc định"; tắt ở trang Tối ưu video).'), logs.join('\n'))
+  assert.equal(S.pendingWait, '')
+}])

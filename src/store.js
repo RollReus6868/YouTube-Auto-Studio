@@ -26,6 +26,8 @@ const DEFAULTS = {
   videoVis: {}, // che do hien thi rieng tung video (trang Dang video): { [id video]: { mode, at, premiere } }
   descPosition: 'above', // phan Gemini viet / mo ta rieng cua video nam: above = tren | below = duoi phan mac dinh
   uploadChannel: '', // khoa kenh (UC ID) dang video qua hop thoai tai len cua Studio (trang Dang video)
+  // tu toi uu video trong hang cho sau khi dang (theo "Tự tối ưu sau khi đăng" cua mau): false = khong tu chay (trang Toi uu video)
+  optimizeAuto: true,
 }
 
 class Store {

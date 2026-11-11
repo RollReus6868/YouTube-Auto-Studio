@@ -9,6 +9,7 @@
 const fs = require('fs')
 const { listVideos, optimizeVideo, videoVisibility, inspectVideo, commentAndPin, pinNote } = require('../flows/optimize')
 const ot = require('../optimize-template')
+const { QUIET_MS } = require('../idle')
 
 // Binh luan duoc tren trang xem: video cong khai / khong cong khai (rieng tu, len lich, cong chieu thi khong).
 // Nhan ca Studio tieng Viet lan tieng Anh (Public / Unlisted / Private / Scheduled / Premiere): xem ot.visibilityKind
@@ -25,6 +26,9 @@ module.exports = (ctx) => {
     channelKey: '', channels: [], videos: [], busy: false, at: '', templates: {}, limit: LATEST, limits: LIMITS,
     // quet toan bo: { at, running, current (kenh dang quet), perChannel, groups: [{ key, name, error, videos }] }
     all: { at: '', running: false, current: '', perChannel: ALL_LIMIT, groups: [] },
+    // hang cho tu toi uu sau khi dang: auto = cong tac settings.optimizeAuto; pending: [{ id, title, channelKey, channelName, due, preset }];
+    // pendingWait: vi sao video da toi gio chua chay (tool dang ban / dang tat); quietMin: phut khong thao tac thi coi la ranh
+    auto: true, pending: [], pendingWait: '', quietMin: Math.round(QUIET_MS / 60e3),
   }
   const cache = new Map() // channelKey -> { videos, at } (S.videos la cung mang voi cache cua kenh dang chon)
   const allMeta = { at: '', keys: [], ids: {}, errors: {} } // lan quet toan bo gan nhat
@@ -71,6 +75,7 @@ module.exports = (ctx) => {
     const db = readDb()
     // video chua quet duoc (khong co missing) lay trang thai tu lan toi uu; video da quet giu trang thai cua lan quet / toi uu
     for (const v of S.videos) if (v.status !== 'run' && v.status !== 'scan' && !v.missing && !v.unread) v.status = ot.isOptimized(db, S.channelKey, v.id) ? 'done' : v.status === 'error' ? 'error' : 'new'
+    syncPending()
     push()
   }
   const setIn = (key, id, patch) => { const v = findV(key, id); if (v) Object.assign(v, patch); push() }
@@ -412,17 +417,32 @@ module.exports = (ctx) => {
   // main.js goi ctx.afterUpload sau moi video dang xong voi mau `tpl` (src/optimize-template.js afterUploadTemplate):
   // hop thoai tai len da dat cac muc cua mau Studio, nen chi con thich / binh luan / ghim (preset.optimizeAfterUpload)
   // va cac muc chua dat duoc trong hop thoai. Video duoc xep hang cho toi khi qua gio dang + 15 phut (cho YouTube xu ly).
+  // Toi gio roi van CHI tu chay khi tool ranh han (ctx.busyReason, src/idle.js): khong chen ngang dang video, dang bai,
+  // Cong dong... va nguoi dung khong thao tac 5 phut. Chua ranh thi de lan kiem sau (moi phut), video van o hang cho.
+  // Cong tac settings.optimizeAuto (trang Toi uu video; mac dinh bat = theo "Tự tối ưu sau khi đăng" cua mau):
+  // tat thi khong tu chay; video moi dang van duoc xep hang de nguoi dung bam "Chạy ngay" / "Bỏ khỏi hàng chờ".
   const pendingFile = () => ctx.logFile('optimize-pending.json')
   const readPending = () => { try { return JSON.parse(fs.readFileSync(pendingFile(), 'utf8')) } catch (_) { return [] } }
-  const writePending = (list) => fs.writeFileSync(pendingFile(), JSON.stringify(list, null, 1))
+  const writePending = (list) => { fs.writeFileSync(pendingFile(), JSON.stringify(list, null, 1)); syncPending() }
   const AFTER_MS = 15 * 60e3
+  const CHECK_MS = 60e3 // kiem hang cho moi phut (chi chay khi toi gio va tool ranh)
+  const autoOn = () => !ctx.store || ctx.store.settings.optimizeAuto !== false
+  const presetName = (id) => { const p = id && ((ctx.store && ctx.store.settings.presets) || []).find((q) => q.id === id); return p ? p.name || '' : '' }
+  const when = (ms) => new Date(ms).toLocaleString('vi-VN')
+  function syncPending() {
+    S.auto = autoOn()
+    S.pending = readPending().map((x) => ({ id: x.id, title: x.title || x.id, channelKey: x.channelKey, channelName: nameOf(x.channelKey), due: new Date(x.due || 0).toISOString(), preset: presetName(x.presetId) }))
+  }
   ctx.afterUpload = ({ videoId, title, publishAt, tpl, presetId, channelId } = {}) => {
     if (!tpl || !videoId || !channelId) return
     try { // khong bao gio lam hong buoc dang video
       const due = Math.max(Date.now(), (publishAt && Date.parse(publishAt)) || 0) + AFTER_MS
       const entry = { channelKey: channelId, id: videoId, title: title || videoId, due, presetId: presetId || '', tpl: ot.normalizeTemplate(tpl) }
       writePending(readPending().filter((x) => x.id !== videoId).concat([entry]))
-      ctx.log('info', `Đã xếp "${title || videoId}" vào hàng chờ tự tối ưu (lúc ${new Date(due).toLocaleString('vi-VN')}).`)
+      ctx.log('info', autoOn()
+        ? `Đã xếp "${title || videoId}" vào hàng chờ tự tối ưu (từ ${when(due)}, khi tool rảnh).`
+        : `Đã xếp "${title || videoId}" vào hàng chờ tự tối ưu. Tự tối ưu đang tắt: bấm "Chạy ngay" ở trang Tối ưu video khi muốn tối ưu.`)
+      push()
     } catch (e) { ctx.log('warn', `Không xếp được video vào hàng chờ tối ưu: ${e.message}`) }
   }
   // Mau cho video trong hang cho: tpl luc dang, cac muc cua no lay gia tri moi nhat cua preset (nguoi dung co the
@@ -433,16 +453,68 @@ module.exports = (ctx) => {
     const p = x.presetId && ps.find((q) => q.id === x.presetId)
     return ot.refreshPending(x.tpl, p && p.optimize)
   }
+  // bo `batch` (cung kenh) khoi hang cho roi toi uu: loi thi video van hien trong trang Toi uu video de chay lai
+  function runBatch(key, batch, why, opts) {
+    writePending(readPending().filter((x) => !batch.some((b) => b.id === x.id)))
+    ctx.log('info', why)
+    return optimizeMany(key, batch.map((x) => ({ id: x.id, title: x.title, visibility: '', date: '', tpl: pendingTemplate(x) })), opts)
+  }
+  let waitLogged = '' // da ghi nhat ky "chua ranh" cho dot cho nay (moi dot ghi mot lan)
+  const setWait = (text) => { if (S.pendingWait !== text) { S.pendingWait = text; push() } }
+  // Lan kiem tu dong (moi phut). Tra ve so video da toi uu (0 = khong chay).
   async function processPending(now = Date.now()) {
     if (S.busy || !ctx.withChannel) return 0
     const due = readPending().filter((x) => x.due <= now)
-    if (!due.length) return 0
+    if (!due.length) { waitLogged = ''; setWait(''); return 0 }
+    if (!autoOn()) { setWait('Tự tối ưu đang tắt: video đã tới giờ vẫn nằm trong hàng chờ, bấm "Chạy ngay" để tối ưu.'); return 0 }
+    const reason = ctx.busyReason ? ctx.busyReason() : ''
+    if (reason) {
+      setWait(`Đã tới giờ, chờ tool rảnh: ${reason}.`)
+      if (!waitLogged) ctx.log('info', `Hàng chờ tự tối ưu: ${due.length} video đã tới giờ nhưng chưa chạy vì ${reason}. Tool tự chạy khi rảnh hẳn.`)
+      waitLogged = reason
+      return 0
+    }
+    waitLogged = ''
+    setWait('')
     const key = due[0].channelKey
     const batch = due.filter((x) => x.channelKey === key)
-    // bo khoi hang cho truoc khi chay: loi thi video van hien trong trang Toi uu video de chay lai
-    writePending(readPending().filter((x) => !batch.some((b) => b.id === x.id)))
-    ctx.log('info', `Tự tối ưu ${batch.length} video vừa đăng.`)
-    return optimizeMany(key, batch.map((x) => ({ id: x.id, title: x.title, visibility: '', date: '', tpl: pendingTemplate(x) })))
+    const names = [...new Set(batch.map((x) => presetName(x.presetId)).filter(Boolean))]
+    const from = names.length ? `mẫu ${names.map((n) => `"${n}"`).join(', ')}` : 'mẫu đăng video'
+    return runBatch(key, batch, `Tự tối ưu ${batch.length} video vừa đăng (theo "Tự tối ưu sau khi đăng" của ${from}; tắt ở trang Tối ưu video).`)
+  }
+  // "Chạy ngay" (nguoi dung bam): khong doi toi gio / tool ranh, ke ca khi dang tat tu toi uu. ids trong = ca hang cho
+  async function runPendingNow({ ids } = {}) {
+    if (!ctx.withChannel) return ctx.log('warn', 'Chưa có tài khoản Google nào (trang Tài khoản).')
+    if (S.busy) return ctx.log('warn', 'Đang tối ưu, đợi xong rồi thử lại.')
+    const want = Array.isArray(ids) && ids.length ? new Set(ids.map(String)) : null
+    const list = readPending().filter((x) => !want || want.has(x.id))
+    if (!list.length) return ctx.log('warn', 'Hàng chờ tự tối ưu không có video cần chạy.')
+    ctx.resetStop()
+    for (const key of [...new Set(list.map((x) => x.channelKey))]) {
+      if (ctx.stopped()) break
+      const batch = list.filter((x) => x.channelKey === key)
+      await runBatch(key, batch, `Tối ưu ngay ${batch.length} video trong hàng chờ tự tối ưu (bạn bấm "Chạy ngay").`, { reset: false })
+    }
+  }
+  function removePending({ id } = {}) {
+    const all = readPending()
+    const x = all.find((p) => p.id === String(id || ''))
+    if (!x) return
+    writePending(all.filter((p) => p !== x))
+    ctx.log('info', `Đã bỏ "${x.title || x.id}" khỏi hàng chờ tự tối ưu (video không bị tối ưu tự động nữa).`)
+    push()
+  }
+  function setAuto(on) {
+    on = on !== false
+    if (ctx.store) ctx.store.save({ optimizeAuto: on })
+    if (ctx.refreshSettings) ctx.refreshSettings()
+    waitLogged = ''
+    S.pendingWait = ''
+    syncPending()
+    ctx.log('info', on
+      ? 'Đã bật tự tối ưu video sau khi đăng (theo mẫu đăng video): video trong hàng chờ tự chạy khi tới giờ và tool rảnh.'
+      : 'Đã tắt tự tối ưu video sau khi đăng: tool không tự chạy nữa; hàng chờ vẫn giữ, bấm "Chạy ngay" khi muốn tối ưu.')
+    push()
   }
 
   function saveTemplate({ channelKey, template } = {}) {
@@ -474,10 +546,13 @@ module.exports = (ctx) => {
       optimize_run: (p) => run(p || {}),
       optimize_run_all: (p) => runAll(p || {}),
       optimize_template_save: (p) => saveTemplate(p || {}),
+      optimize_auto: (on) => setAuto(on),
+      optimize_pending_run: (p) => runPendingNow(p || {}),
+      optimize_pending_remove: (p) => removePending(p || {}),
     },
     start() {
       refresh()
-      setInterval(() => processPending().catch((e) => ctx.log('error', `Tự tối ưu: ${e.message}`)), 5 * 60e3)
+      setInterval(() => processPending().catch((e) => ctx.log('error', `Tự tối ưu: ${e.message}`)), CHECK_MS)
     },
     processPending, // cho bai kiem
   }
