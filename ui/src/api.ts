@@ -75,6 +75,8 @@ export type Settings = {
 }
 export type VideoMeta = {
   title: string
+  titleBase?: string // tieu de goc (thu muc phang: ten file; kieu cu: theo mau)
+  titleOwn?: string // tieu de rieng (dong "Tiêu đề:" trong file .txt cua video), '' = dung tieu de goc
   description: string
   tags: string[]
   playlist: string
@@ -206,7 +208,7 @@ export const demoState: State = {
     videos: [
       { id: 'v1', layout: 'flat', thumb: 'Bí ẩn rừng sâu tập 1.jpg', infoFile: 'Bí ẩn rừng sâu tập 1.txt', dir: 'Bí ẩn rừng sâu tập 1', folder: '', name: 'Bí ẩn rừng sâu tập 1', size: 734003200, video: 'Bí ẩn rừng sâu tập 1.mp4', thumbUrl: '', subtitles: [{ file: 'Bí ẩn rừng sâu tập 1.vi.srt', lang: 'vi' }], preset: 'Video dài', meta: meta('Bí ẩn rừng sâu tập 1', '2026-10-30T02:00:00.000Z', true), script: { file: 'Bí ẩn rừng sâu tập 1.kich-ban.docx', auto: true }, errors: [], warnings: [] },
       { id: 'v2', layout: 'flat', thumb: '', infoFile: 'Bí ẩn rừng sâu tập 2.txt', dir: 'Bí ẩn rừng sâu tập 2', folder: '', name: 'Bí ẩn rừng sâu tập 2', size: 812003200, video: 'Bí ẩn rừng sâu tập 2.mp4', thumbUrl: '', subtitles: [], preset: 'Video dài', meta: meta('Bí ẩn rừng sâu tập 2', '2026-10-31T02:00:00.000Z', true), errors: [], warnings: ['Chưa có ảnh thumbnail cùng tên ("Bí ẩn rừng sâu tập 2.jpg", .jpeg, .png hoặc .webp): YouTube tự chọn ảnh từ video.'] },
-      { id: 'v3', layout: 'flat', thumb: 'Hậu trường.png', infoFile: 'Hậu trường.txt', dir: 'Hậu trường', folder: '', name: 'Hậu trường', size: 3221225472, video: 'Hậu trường.mov', thumbUrl: '', subtitles: [], preset: 'Video dài', meta: meta('Hậu trường', null), errors: [], warnings: [] },
+      { id: 'v3', layout: 'flat', thumb: 'Hậu trường.png', infoFile: 'Hậu trường.txt', dir: 'Hậu trường', folder: '', name: 'Hậu trường', size: 3221225472, video: 'Hậu trường.mov', thumbUrl: '', subtitles: [], preset: 'Video dài', meta: { ...meta('Hậu trường: một ngày quay phim giữa rừng sâu', null), titleBase: 'Hậu trường', titleOwn: 'Hậu trường: một ngày quay phim giữa rừng sâu' }, errors: [], warnings: [] },
     ],
     posts: [
       { id: 'p1', dir: '2026-10-29_bai-hoi-y-kien', folder: '', name: 'bai hoi y kien', date: '2026-10-29', time: null, text: 'Các bạn muốn xem tập tiếp theo về chủ đề gì? Bình luận cho mình biết nhé!', images: [], errors: [], warnings: [] },

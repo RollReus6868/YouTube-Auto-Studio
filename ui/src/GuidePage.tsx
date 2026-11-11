@@ -55,7 +55,7 @@ export function GuidePage({ state, send, go }: { state: State; send: Send; go: (
                 </Step>
                 <Step n={2} title="Chọn thư mục video">
                   <p>Bỏ các video cần đăng vào <b>một thư mục</b>, mỗi video kèm ảnh thumbnail <b>cùng tên</b>: <code>Bí ẩn tập 7.mp4</code> + <code>Bí ẩn tập 7.jpg</code> (hoặc .jpeg, .png, .webp). Không cần thư mục con, không cần info.txt.</p>
-                  <p>Ở trang <b>Đăng video</b>, bấm <b>Chọn thư mục</b>. Tiêu đề là tên file; mô tả, thẻ, chế độ hiển thị và lịch lấy theo <b>Mẫu mặc định</b>. Muốn mô tả riêng, bấm <b>Gemini viết mô tả</b> (tùy chọn): mô tả được lưu vào <code>Bí ẩn tập 7.txt</code> cạnh video.</p>
+                  <p>Ở trang <b>Đăng video</b>, bấm <b>Chọn thư mục</b>. Tiêu đề là tên file (muốn đổi thì bấm vào video, sửa ô <b>Tiêu đề</b> rồi bấm <b>Lưu tiêu đề</b>; tối đa 100 ký tự); mô tả, thẻ, chế độ hiển thị và lịch lấy theo <b>Mẫu mặc định</b>. Muốn mô tả riêng, bấm <b>Gemini viết mô tả</b> (tùy chọn): mô tả được lưu vào <code>Bí ẩn tập 7.txt</code> cạnh video.</p>
                   <p>Đăng xong, tool chuyển video, ảnh và file kèm theo vào thư mục con <code>da-dang</code> nên không bao giờ đăng lại.</p>
                 </Step>
                 <Step n={3} title="Chọn kênh và chế độ hiển thị">
