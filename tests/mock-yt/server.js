@@ -53,7 +53,8 @@ function startMockYt() {
     resolve({
       server, base, events: server.events, hits,
       urls: { studio: `${base}/studio`, youtube: `${base}/yt` },
-      close: () => new Promise((r) => server.close(r)),
+      // dong ca ket noi keep-alive con mo (khong thi server.close() treo: bai kiem chay xong ma tien trinh khong thoat)
+      close: () => new Promise((r) => { server.close(r); if (server.closeAllConnections) server.closeAllConnections() }),
     })
   }))
 }

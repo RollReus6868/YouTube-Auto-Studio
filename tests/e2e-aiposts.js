@@ -184,6 +184,27 @@ const WEB = process.argv[2] === 'web'
     await waitFor(async () => (await st()).f.aiposts.drafts.length === 0, 'an bai da dang')
     assert.equal(JSON.parse(fs.readFileSync(path.join(dataDir, 'ai-posts.json'), 'utf8')).length, 0, 'luu danh sach ban nhap')
 
+    // YouTube hien "Channel owner needs to verify" (HTML that 11/2026): bai dau bao loi ro, bai con lai cua kenh khong
+    // chay tiep (0.7.0: moi bai cho 45 giay roi bao "khong thay dau hieu dang xong")
+    await call('aipost_save', { count: 2, review: true })
+    await call('aipost_generate', {})
+    await waitFor(async () => { const a = (await st()).f.aiposts; return !a.busy && a.drafts.length === 2 }, 'viet 2 bai', 120000)
+    yt.server.postsFlags = { verifyAfter: 0 }
+    const t1 = Date.now()
+    await call('aipost_run', { ids: (await st()).f.aiposts.drafts.map((d) => d.id) })
+    await waitFor(async () => { const a = (await st()).f.aiposts; return !a.busy && a.drafts.every((d) => d.status === 'error') }, 'dung vi chu kenh can xac minh', 120000)
+    yt.server.postsFlags = {}
+    s = (await st()).f.aiposts
+    assert.match(s.drafts[0].error, /Channel owner needs to verify[\s\S]*không tự xác minh/)
+    assert.match(s.drafts[1].error, /^Chưa đăng: YouTube yêu cầu chủ sở hữu kênh/)
+    assert.equal(posts().length, 5, 'khong dang them')
+    assert(Date.now() - t1 < 60000, `bao loi nhanh (${Date.now() - t1} ms)`)
+    assert((await st()).logs.some((l) => l.level === 'warn' && /dừng 1 bài còn lại của kênh này/.test(l.msg)))
+    await call('aipost_remove', { ids: s.drafts.map((d) => d.id) })
+    await waitFor(async () => (await st()).f.aiposts.drafts.length === 0, 'xoa ban nhap loi')
+    await call('aipost_save', { count: 1, review: false })
+    await waitFor(async () => { const o = (await st()).f.aiposts.opts; return o.count === 1 && o.review === false }, 'tra lai tuy chon')
+
     if (WEB) {
       // bat lai duyet de chi viet (khong dang)
       await ui.getByRole('switch', { name: 'Duyệt trước khi đăng' }).click()

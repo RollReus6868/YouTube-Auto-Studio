@@ -126,6 +126,77 @@ module.exports = [
         else assert.equal(fb.length, 0, 'chuot that chon duoc thi khong can du phong')
       } finally { ctx.mock.server.postsFlags = {} }
     }]),
+  // Loi 0.7.0 tren YouTube that: go ngay + Enter doi nhan ngay nhung bai len lich ngay cu (gia thuyet: o nhap chua "chot").
+  // Nay bam o ngay trong lich (nhu nguoi dung); cac bien the nhan thang (tieng Anh / Viet / khong doc duoc).
+  ...[['go + Enter chi doi nhan', { dateCommit: 'lag' }, 5], ['nhan thang tieng Viet', { calLabel: 'vi', dateCommit: 'lag' }, 9], ['nhan thang rong (theo o hom nay)', { calLabel: 'none', dateCommit: 'lag' }, 12], ['ngay o thang sau', { dateCommit: 'lag' }, 45]].map(([name, flags, days]) => [
+    `len lich: chon ngay bang o trong lich (${name}) -> dung ngay, khong bao lech`, async (ctx) => {
+      fresh(ctx.mock)
+      ctx.mock.server.postsFlags = flags
+      try {
+        const at = inDays(days, 20, 0)
+        const r = await run(ctx, { type: 'text', text: `Hẹn ngày (${name})`, when: at.toISOString() })
+        const p2 = (n) => String(n).padStart(2, '0')
+        assert.equal(db(ctx.mock)[0].scheduledAt, `${at.getFullYear()}-${p2(at.getMonth() + 1)}-${p2(at.getDate())}T20:00`)
+        assert.equal(r.mismatch, '', r.mismatch)
+        assert(!ctx.logs.some((l) => /cách dự phòng: gõ ngày|khác giờ mong muốn/.test(l)), ctx.logs.join('\n'))
+      } finally { ctx.mock.server.postsFlags = {} }
+    }]),
+  ['len lich: bam o ngay khong an -> du phong go ngay, van dung ngay', async (ctx) => {
+    fresh(ctx.mock)
+    ctx.mock.server.postsFlags = { dateClick: 'none' }
+    try {
+      const at = inDays(6, 9, 0)
+      const r = await run(ctx, { type: 'text', text: 'Gõ ngày', when: at.toISOString() })
+      assert.match(db(ctx.mock)[0].scheduledAt, new RegExp(`-${String(at.getDate()).padStart(2, '0')}T09:00$`))
+      assert.equal(r.mismatch, '')
+      assert(ctx.logs.some((l) => /cách dự phòng: gõ ngày/.test(l)), ctx.logs.join('\n'))
+    } finally { ctx.mock.server.postsFlags = {} }
+  }],
+  ['len lich: YouTube ghi ngay khac ngay muon -> bao loi lech gio (khong coi la xong)', async (ctx) => {
+    fresh(ctx.mock)
+    ctx.mock.server.postsFlags = { dateClick: 'none', dateCommit: 'lag' } // nhan doi nhung ngay that van la ngay mai
+    try {
+      const at = inDays(4, 9, 0)
+      const r = await run(ctx, { type: 'text', text: 'Ngày bị lệch', when: at.toISOString() })
+      assert.equal(r.status, 'scheduled')
+      assert.match(r.mismatch, /YouTube lên lịch bài lúc 09:00 .*khác giờ mong muốn 09:00/)
+      assert(ctx.logs.some((l) => /^error .*khác giờ mong muốn/.test(l)), ctx.logs.join('\n'))
+    } finally { ctx.mock.server.postsFlags = {} }
+  }],
+  ['len lich, giao dien tieng Anh: doc dong "Scheduled for Nov 12, 2026, 12:00 AM" -> khong bao lech', async (ctx) => {
+    fresh(ctx.mock)
+    ctx.mock.server.postsFlags = { schedEn: true }
+    try {
+      const at = inDays(3, 0, 0)
+      const r = await run(ctx, { type: 'poll', text: 'Which one?', options: [{ text: 'A' }, { text: 'B' }], when: at.toISOString() })
+      assert.match(r.line, /Scheduled for \w{3} \d{1,2}, \d{4}, 12:00\s?AM \(local time\)$/)
+      assert.equal(r.mismatch, '')
+      assert(!ctx.logs.some((l) => /khác giờ mong muốn|Không đọc được giờ/.test(l)), ctx.logs.join('\n'))
+    } finally { ctx.mock.server.postsFlags = {} }
+  }],
+  ['len lich, danh sach khong co the rieng tung bai: khong lay nham gio cua bai khac', async (ctx) => {
+    fresh(ctx.mock, [{ id: 'UgkxOld1', type: 'text', text: 'Bài cũ đã hẹn', scheduledAt: '2030-01-01T08:00' }])
+    ctx.mock.server.postsFlags = { flatList: true }
+    try {
+      const at = inDays(2, 10, 0)
+      const r = await run(ctx, { type: 'text', text: 'Bài mới hẹn giờ', when: at.toISOString() })
+      assert.equal(r.status, 'scheduled')
+      assert.equal(r.mismatch, '', 'khong bao lech nham')
+      assert(!/2030/.test(r.line), r.line)
+    } finally { ctx.mock.server.postsFlags = {} }
+  }],
+  // HTML that 11/2026: sau vai bai, YouTube hien "Channel owner needs to verify" thay vi dang (0.7.0 cho 45 giay moi bai)
+  ['YouTube hien "Channel owner needs to verify" -> loi OWNER_VERIFY ngay, dong hop thoai, khong dang', async (ctx) => {
+    fresh(ctx.mock)
+    ctx.mock.server.postsFlags = { verifyAfter: 0 }
+    try {
+      const t0 = Date.now()
+      await assert.rejects(run(ctx, { type: 'text', text: 'Bị khoá', when: inDays(2, 9, 0).toISOString() }), (e) => e.code === 'OWNER_VERIFY' && /Channel owner needs to verify/.test(e.message) && /không tự xác minh/.test(e.message))
+      assert(Date.now() - t0 < 30000, 'khong cho het 45 giay')
+      assert.equal(db(ctx.mock).length, 0)
+      assert.equal(await ctx.page.eval(() => !!document.querySelector('ytw-feature-enablement-info-renderer')), false, 'da bam Got it')
+    } finally { ctx.mock.server.postsFlags = {} }
+  }],
   ['gio dang da qua -> dang ngay', async (ctx) => {
     fresh(ctx.mock)
     const r = await run(ctx, { type: 'text', text: 'Muộn rồi', when: new Date(Date.now() - 3600e3).toISOString() })

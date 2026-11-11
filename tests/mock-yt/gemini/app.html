@@ -8,7 +8,8 @@
   message-content#message-content-id-r_... > div.markdown.markdown-main-panel[aria-busy] > p > span.pending.
   Phan DOAN (chua do duoc vi can dang nhap): anh generated-image > single-image > img.image, hop thoai chan,
   thong bao het luot.
-  Bien the (window.FLAGS, may chu chen vao): signedOut, blockedDialog, limit, slow (ms), pendingStuck
+  Bien the (window.FLAGS, may chu chen vao): signedOut, blockedDialog, consentFrame, discoveryTooltip (+ tooltipDelay ms,
+  tooltipSticky = Esc khong tat, chi bam nen), limit, slow (ms), pendingStuck
   (aria-busy + span.pending khong bao gio het, innerText = "" nhu trang khong duoc ve), chunkMs, imageMs.
 -->
 <style>
@@ -51,6 +52,10 @@
   .cdk-overlay-container { position: fixed; inset: 0; pointer-events: none; z-index: 1000 }
   .cdk-overlay-container:empty { display: none }
   .cdk-overlay-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.6); pointer-events: auto }
+  .cdk-overlay-transparent-backdrop.cdk-overlay-backdrop-showing { background: none; opacity: 0 } /* trong suot nhung van chan chuot (nhu CDK that) */
+  .cdk-overlay-connected-position-bounding-box { position: absolute; inset: 0; pointer-events: none }
+  .gem-discovery-tooltip-container { background: #303134; border-radius: 12px; padding: 12px 16px; max-width: 280px }
+  iframe.consent { width: 100%; height: 100%; inset: 0; position: fixed; border: none; z-index: 5000 }
   .cdk-global-overlay-wrapper { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center }
   .cdk-overlay-pane { pointer-events: auto }
   mat-dialog-container { width: 520px; background: #2b2c2f; border-radius: 28px; padding: 24px }
@@ -119,6 +124,29 @@ if (F.blockedDialog) {
       el('mat-dialog-container', { role: 'dialog', 'aria-modal': 'true', class: 'mat-mdc-dialog-container' },
         el('h2', {}, 'Gemini Apps Privacy Notice'), el('p', {}, 'Before you start, review how Google uses your data. Choose a country to continue.'), ok))))
   ok.onclick = () => { $('#overlay').textContent = '' }
+}
+
+// Google hoi dong y (that 11/2026): iframe consent.google.com co dinh che ca trang (z-index 5000), "Ket noi nhung ung dung
+// Google nay voi Gemini?" + "Tiep tuc". Bam Tiep tuc trong khung -> khung bao trang me va bien mat.
+if (F.consentFrame) {
+  const fr = el('iframe', { class: 'consent', src: '/gemini/__consent?origin=gemini' })
+  document.body.append(fr)
+  addEventListener('message', (e) => { if (e.data === 'consent-ok') fr.remove() })
+}
+// Goi y nho "Giao viec can lam" (that 11/2026): lop nen trong suot cdk-overlay-backdrop-showing + gem-discovery-tooltip;
+// Esc hoac bam nen la tat. F.tooltipDelay: hien sau bao nhieu ms (vd giua luc dang tra loi)
+if (F.discoveryTooltip) {
+  setTimeout(() => {
+    const bd = el('div', { class: 'cdk-overlay-backdrop cdk-overlay-transparent-backdrop cdk-overlay-backdrop-showing' })
+    const box = el('div', { class: 'cdk-overlay-connected-position-bounding-box' }, el('div', { id: 'cdk-overlay-1', class: 'cdk-overlay-pane', style: 'position:absolute;top:60%;left:45%;pointer-events:auto' },
+      el('gem-discovery-tooltip', {}, el('div', { role: 'tooltip', class: 'gem-discovery-tooltip-container tail-top-leading' },
+        el('div', { class: 'title' }, 'Giao việc cần làm'), el('div', { class: 'text-content' }, 'Từ đặt chuyến đi cho đến lên thực đơn, hãy để Gemini giúp bạn hoàn thành mọi việc')))))
+    const close = () => { $('#overlay').textContent = ''; removeEventListener('keydown', esc, true) }
+    const esc = (e) => { if (e.key === 'Escape') close() }
+    bd.onclick = close
+    if (!F.tooltipSticky) addEventListener('keydown', esc, true)
+    $('#overlay').append(bd, box)
+  }, F.tooltipDelay || 0)
 }
 
 const editor = $('.ql-editor')

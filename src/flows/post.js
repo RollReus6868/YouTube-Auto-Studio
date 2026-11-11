@@ -50,6 +50,10 @@ const LABELS = {
   datePicker: '#date-picker', timePicker: '#time-picker', tzPicker: '#timezone-picker', // (HTML)
   timeList: '#time-listbox, tp-yt-paper-listbox, [role=listbox]', // (HTML 11/2026) danh sach moc 15 phut cua o gio
   dateInput: '#calendar-dialog input, [aria-label="Enter date"] input', // (HTML) o nhap ngay o dau lich
+  // (HTML 11/2026) lich: tp-yt-paper-dialog#calendar-dialog > tp-yt-iron-list#calendar-main > .calendar-month
+  // (.calendar-month-label "Nov 2026") > .calendar-week > span.calendar-day (them class disabled / invisible / today / selected)
+  calDialog: '#calendar-dialog', calMonth: '.calendar-month', calMonthLabel: '.calendar-month-label', calDay: '.calendar-day',
+  calNext: '#next-month button, #next-month', calPrev: '#prev-month button, #prev-month',
   schedButton: '^(Lên lịch|Schedule)$', // (HTML) #submit-button khi dang len lich
   localTz: '(Giờ địa phương|Local time)', // (HTML)
   tabPosted: '^(Đã đăng|Published|Posted)$', // (HTML) tp-yt-paper-tab
@@ -62,6 +66,11 @@ const LABELS = {
   scheduledLine: '(Đã lên lịch đăng vào|Scheduled for)', // (video) dong gio tren the trong DA LEN LICH
   toast: '^(Đã lên lịch đăng bài|Đã đăng bài|Đã xuất bản|Post scheduled|Post published|Your post (was|has been) (posted|published|scheduled))', // lich: (video); dang ngay: (DOAN)
   error: '#error-message', // (HTML) loi anh trong khung soan
+  // (HTML 11/2026) hop thoai "Channel owner needs to verify" (ytd-popup-container > ... > ytw-feature-enablement-info-renderer,
+  // nut "Got it"): YouTube khoa tinh nang bai dang cho toi khi chu so huu kenh xac minh. Ban tieng Viet: DOAN.
+  ownerVerify: 'ytw-feature-enablement-info-renderer',
+  ownerVerifyText: '(channel owner needs to verify|ask the channel owner to complete the verification|chủ sở hữu kênh cần (phải )?xác minh|yêu cầu chủ sở hữu kênh)',
+  gotIt: '^(Got it|Đã hiểu|Tôi hiểu|OK)$',
 }
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const IMAGES_MAX = 10
@@ -233,6 +242,52 @@ function install(L) {
       return false
     },
     timeIs(trig, want) { const t = yp.timeTrig(trig); return !!t && norm(t.innerText) === norm(want) },
+    // O ngay cua lich dang mo: tim thang (theo nhan "Nov 2026" / "thg 11 2026"; khong doc duoc nhan thi theo thu tu tinh
+    // tu thang co o "today"), roi o ngay d (bo o disabled / invisible). Khong thay thang -> chi huong bam thang sau / truoc.
+    calendarDay(y, m, d) {
+      const dlg = vis(L.calDialog)[0] || vis('tp-yt-paper-dialog, [role=dialog]').find((x) => x.querySelector(L.calMonth))
+      if (!dlg) return null
+      const want = y * 12 + m
+      const MON = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+      const keyOf = (t) => {
+        t = norm(t)
+        const yy = /(20\d\d)/.exec(t)
+        if (!yy) return null
+        let mi = MON.findIndex((x) => new RegExp(`(^|[^a-z])${x}`).test(t))
+        if (mi < 0) { const n = /(?:thg|tháng)\s*(\d{1,2})|(?:^|\D)(\d{1,2})\s*[/.-]\s*20\d\d/.exec(t); if (n) mi = Number(n[1] || n[2]) - 1 }
+        return mi >= 0 && mi < 12 ? Number(yy[1]) * 12 + mi : null
+      }
+      const months = [...dlg.querySelectorAll(L.calMonth)]
+      let keys = months.map((mo) => { const lab = mo.querySelector(L.calMonthLabel); return keyOf(lab ? lab.textContent : '') })
+      if (!keys.some((k) => k !== null)) {
+        const i0 = months.findIndex((mo) => mo.querySelector(`${L.calDay}.today`))
+        const now = new Date()
+        keys = i0 < 0 ? keys : months.map((_, i) => now.getFullYear() * 12 + now.getMonth() + i - i0)
+      }
+      const at = keys.indexOf(want)
+      const seen = keys.filter((k) => k !== null)
+      if (at < 0) return { day: '', nav: !seen.length ? '' : Math.max(...seen) < want ? 'next' : Math.min(...seen) > want ? 'prev' : '' }
+      const cell = [...months[at].querySelectorAll(L.calDay)].find((c) => norm(c.textContent) === String(d) && !/(^|\s)(invisible|disabled)(\s|$)/.test(c.className) && c.getAttribute('aria-disabled') !== 'true')
+      if (!cell) return { day: '', nav: '', off: true }
+      cell.scrollIntoView({ block: 'nearest' })
+      return { day: mark(cell, 'data-ya-day'), selected: /(^|\s)selected(\s|$)/.test(cell.className) }
+    },
+    markCalNav(dir) {
+      const dlg = vis(L.calDialog)[0] || vis('tp-yt-paper-dialog, [role=dialog]').find((x) => x.querySelector(L.calMonth))
+      const b = dlg && vis(dir === 'prev' ? L.calPrev : L.calNext, dlg)[0]
+      return b ? mark(b, 'data-ya-calnav') : ''
+    },
+    calendarOpen() { return !!(vis(L.calDialog)[0] || vis('tp-yt-paper-dialog, [role=dialog]').find((x) => x.querySelector(L.calMonth))) },
+    dateIs(want) { const s = yp.sched(); return !!(s && s.date && norm(s.date.text) === norm(want)) },
+    // Hop thoai "Channel owner needs to verify": chu + nut "Got it"
+    ownerVerify() {
+      const re = new RegExp(L.ownerVerifyText, 'i')
+      const el = vis(L.ownerVerify)[0] || vis('tp-yt-paper-dialog, [role=dialog], [role=alertdialog]').find((x) => re.test(norm(x.innerText)))
+      if (!el) return null
+      const box = el.closest('tp-yt-paper-dialog, [role=dialog], ytd-popup-container') || el.parentElement || el
+      const b = ya.find({ regex: L.gotIt, selector: 'button, [role=button]' }, true).find((x) => box.contains(x))
+      return { text: String(el.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 200), btn: b ? mark(b, 'data-ya-gotit') : '' }
+    },
     markDateInput() {
       let el = vis(L.dateInput)[0]
       if (!el) { const act = document.activeElement; const list = vis('input').filter((i) => /\b20\d\d\b/.test(i.value)); el = list.includes(act) ? act : list[list.length - 1] }
@@ -250,9 +305,17 @@ function install(L) {
     postLinks() { return vis('a[href*="/post/"]').filter(outside).map((a) => abs(a.getAttribute('href'))) },
     // The bai trung: chu bai (200 ky tu dau), link video, hoac link /post/ moi (khong co trong before)
     findCard(key, vid, before) {
+      // Di len tu chu bai toi khoi dau tien co link /post/ hoac dong "Scheduled for"; gap khoi chua NHIEU bai (nhieu link
+      // /post/ khac nhau / nhieu dong gio) la da vuot qua the bai -> thoi (loi 0.7.0: lay nham gio cua bai khac).
+      const many = (a) => {
+        const links = new Set([...a.querySelectorAll('a[href*="/post/"]')].map((x) => x.getAttribute('href').split('?')[0]))
+        const lines = (a.innerText || '').match(new RegExp(L.scheduledLine, 'gi')) || []
+        return links.size > 1 || lines.length > 1
+      }
       const cardOf = (el) => {
         for (let a = el, i = 0; a && i < 14; a = a.parentElement, i++) {
           if (a.matches && a.matches(C)) return null
+          if (a.querySelector && many(a)) return null
           const link = a.querySelector && a.querySelector('a[href*="/post/"]')
           const sched = a.innerText && new RegExp(L.scheduledLine, 'i').test(a.innerText)
           if (link || sched) {
@@ -508,6 +571,38 @@ async function pickTime(page, trig, want, log = () => {}) {
   if (await inPage(page, 'timeList', trig, want)) await page.press('Escape')
 }
 
+// Chon ngay: mo lich, bam dung o ngay (nhu nguoi dung; loi 0.7.0 tren YouTube that: go ngay vao o nhap + Enter doi
+// nhan ngay nhung bai van len lich ngay cu), lich chua toi thang can thi bam thang sau / truoc. Khong bam duoc o ngay
+// thi du phong: go vao o nhap o dau lich dung kieu dang hien ("Oct 29, 2026") + Enter. Moi cach deu kiem lai nhan ngay.
+async function pickDate(page, trig, at, wantDate, log = () => {}) {
+  const open = async () => { if (!(await inPage(page, 'calendarOpen'))) await page.click({ selector: trig }) }
+  await open()
+  let r = null
+  for (let i = 0; i < 26; i++) {
+    r = await waitPage(page, 'calendarDay', [at.getFullYear(), at.getMonth(), at.getDate()], { timeout: 8000, what: 'lịch chọn ngày' }).catch(() => null)
+    if (!r || r.day || !r.nav) break
+    const nav = await inPage(page, 'markCalNav', r.nav)
+    if (!nav) break
+    await page.click({ selector: nav }, { after: 300 })
+  }
+  if (r && r.day) {
+    await sleep(200)
+    await page.click({ selector: r.day }, { after: 0 })
+    if (await waitPage(page, 'dateIs', [wantDate], { timeout: 3000, what: `ô ngày hiện ${wantDate}` }).catch(() => false)) {
+      await sleep(300)
+      if (await inPage(page, 'calendarOpen')) await page.press('Escape')
+      return
+    }
+  }
+  // du phong: go ngay
+  await open()
+  const inp = await waitPage(page, 'markDateInput', [], { timeout: 8000, what: 'ô nhập ngày trong lịch' })
+  await page.type({ selector: inp.sel }, dateText(at, inp.value))
+  await page.press('Enter')
+  await sleep(400)
+  if (await inPage(page, 'dateIs', wantDate)) log('info', `Đã chọn ngày ${wantDate} (cách dự phòng: gõ ngày vào ô nhập của lịch).`)
+}
+
 async function setSchedule(page, at, log) {
   // mui ten "Menu tac vu" canh "Dang" -> "Len lich dang bai"
   const more = await inPage(page, 'markMore')
@@ -515,17 +610,12 @@ async function setSchedule(page, at, log) {
   await page.click({ selector: more })
   await page.click({ regex: LABELS.scheduleItem })
   let dd = await waitPage(page, 'sched', [], { timeout: 10000, what: 'ô chọn ngày giờ đăng' })
-  // ngay: mo lich, go vao o nhap o dau lich dung kieu dang hien ("Oct 29, 2026"), Enter
   const wantDate = dateText(at, dd.date.text)
   if (norm(dd.date.text) !== norm(wantDate)) {
-    await page.click({ selector: dd.date.sel })
-    const inp = await waitPage(page, 'markDateInput', [], { timeout: 8000, what: 'ô nhập ngày trong lịch' })
-    await page.type({ selector: inp.sel }, dateText(at, inp.value))
-    await page.press('Enter')
-    await sleep(400)
+    await pickDate(page, dd.date.sel, at, wantDate, log)
     dd = await waitPage(page, 'sched', [], { timeout: 5000, what: 'ô chọn ngày giờ đăng' })
     if (norm(dd.date.text) !== norm(wantDate)) {
-      await page.press('Escape')
+      if (await inPage(page, 'calendarOpen')) await page.press('Escape')
       throw new StepError(`Không chọn được ngày ${wantDate} (ô ngày đang là "${dd.date.text}").`, page.step)
     }
   }
@@ -542,10 +632,46 @@ async function setSchedule(page, at, log) {
 
 // Doan "da dang xong": thong bao, hoac khung soan ve trang thai dong (o chu an / trong, hien lai
 // cac nut dinh kem, nut Dang mo). Loi trang bao (#error-message) thi dung ngay.
-async function waitPublished(page, timeout = 45000) {
+const OWNER_VERIFY_MSG = (name) => `YouTube không cho đăng bài lên kênh${name ? ` "${name}"` : ''}: hiện hộp thoại "Channel owner needs to verify" (chủ sở hữu kênh cần xác minh). Tài khoản đang dùng không phải chủ sở hữu kênh, hoặc chủ sở hữu chưa xác minh kênh để mở tính năng này. Hãy để chủ sở hữu kênh tự xác minh trong YouTube Studio (Cài đặt → Kênh → Điều kiện sử dụng tính năng) rồi đăng lại. Tool không tự xác minh.`
+
+// Hop thoai "Channel owner needs to verify" dang hien -> dong (Got it) va bao loi OWNER_VERIFY (dung cac bai con lai cua kenh)
+async function checkOwnerVerify(page, name) {
+  let v = null
+  try { v = await inPage(page, 'ownerVerify') } catch (_) { return }
+  if (!v) return
+  if (v.btn) await page.click({ selector: v.btn }).catch(() => {})
+  throw Object.assign(new StepError(OWNER_VERIFY_MSG(name), page.step), { code: 'OWNER_VERIFY' })
+}
+
+// Gio tren the bai DA LEN LICH -> Date (gio may). "Scheduled for Nov 12, 2026, 12:00 AM (local time)",
+// "Đã lên lịch đăng vào 00:00 13 thg 11, 2026 (giờ địa phương)", "13/11/2026 00:00"... Khong doc duoc -> null.
+const MON_RE = 'jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec'
+function parseSchedLine(line) {
+  const t = norm(line)
+  const tm = /(\d{1,2}):(\d{2})(?:\s*(sa|ch|[ap])\.?(?:\s*m\b\.?)?)?/.exec(t)
+  if (!tm) return null
+  let h = Number(tm[1])
+  const ap = { sa: 'a', ch: 'p' }[tm[3]] || tm[3]
+  if (ap === 'p' && h < 12) h += 12
+  if (ap === 'a' && h === 12) h = 0
+  let y, mo, d
+  let m = new RegExp(`\\b(${MON_RE})[a-z]*\\.?\\s+(\\d{1,2}),?\\s+(\\d{4})`).exec(t)
+  if (m) { mo = MON_RE.split('|').indexOf(m[1]); d = Number(m[2]); y = Number(m[3]) }
+  if (!m) { m = new RegExp(`\\b(\\d{1,2})\\s+(${MON_RE})[a-z]*\\.?,?\\s+(\\d{4})`).exec(t); if (m) { d = Number(m[1]); mo = MON_RE.split('|').indexOf(m[2]); y = Number(m[3]) } }
+  if (!m) { m = /\b(\d{1,2})\s*(?:thg|tháng)\s*(\d{1,2}),?\s*(?:năm\s*)?(\d{4})/.exec(t); if (m) { d = Number(m[1]); mo = Number(m[2]) - 1; y = Number(m[3]) } }
+  if (!m) { m = /\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})/.exec(t); if (m) { d = Number(m[1]); mo = Number(m[2]) - 1; y = Number(m[3]) } }
+  if (!m) { m = /\b(\d{4})-(\d{1,2})-(\d{1,2})/.exec(t); if (m) { y = Number(m[1]); mo = Number(m[2]) - 1; d = Number(m[3]) } }
+  if (!m || mo < 0) return null
+  const out = new Date(y, mo, d, h, Number(tm[2]), 0, 0)
+  return out.getDate() === d ? out : null
+}
+const fmtVi = (d) => `${p2(d.getHours())}:${p2(d.getMinutes())} ${d.getDate()} thg ${d.getMonth() + 1}, ${d.getFullYear()}`
+
+async function waitPublished(page, timeout = 45000, name = '') {
   const end = Date.now() + timeout
   for (;;) {
     if (page.shouldStop()) throw new StepError('Đã dừng theo yêu cầu.', page.step)
+    await checkOwnerVerify(page, name)
     let s = null
     try { s = await inPage(page, 'state') } catch (_) { /* trang dang ve lai */ }
     if (s) {
@@ -646,17 +772,28 @@ async function createPost(page, input, { urls, log = () => {}, onStep = () => {}
       }
     })
     onStep('verify')
-    const signal = await page.run('Chờ YouTube xác nhận', () => waitPublished(page))
+    const signal = await page.run('Chờ YouTube xác nhận', () => waitPublished(page, 45000, ch.name))
     log('info', `YouTube xác nhận: ${signal}.`)
     const card = await page.run('Tìm bài vừa đăng', () => findCard(page, at ? 'sched' : 'pub', key, vid, at ? before.sched : before.pub))
     if (!card) log('warn', 'Đã đăng nhưng chưa thấy bài trong danh sách để lấy đường dẫn.')
-    else if (at && card.line && !norm(card.line).includes(norm(line))) log('warn', `Giờ lên lịch YouTube hiện "${card.line}", khác giờ mong muốn ${line}.`)
-    return { status: at ? 'scheduled' : 'posted', url: (card && card.url) || '', line: (card && card.line) || '', signal, when: at ? at.toISOString() : null }
-  } catch (e) {
+    // so gio YouTube ghi tren the bai voi gio muon (doc ca "Scheduled for Nov 12, 2026, 12:00 AM" lan "00:00 12 thg 11, 2026")
+    let mismatch = ''
+    if (at && card && card.line) {
+      const got = parseSchedLine(card.line)
+      if (!got) log('info', `Không đọc được giờ trên thẻ bài ("${card.line}") để so với giờ mong muốn ${line}.`)
+      else if (got.getTime() !== at.getTime()) {
+        mismatch = `YouTube lên lịch bài lúc ${fmtVi(got)} ("${card.line}"), khác giờ mong muốn ${line}. Hãy sửa giờ bài này trong tab Đã lên lịch của kênh.`
+        log('error', mismatch)
+      }
+    }
+    return { status: at ? 'scheduled' : 'posted', url: (card && card.url) || '', line: (card && card.line) || '', signal, when: at ? at.toISOString() : null, mismatch }
+  } catch (e0) {
+    let e = e0
     await page.snapshot('dang-bai-loi')
+    if (e.code !== 'OWNER_VERIFY') { try { await checkOwnerVerify(page, ch.name) } catch (v) { e = v } }
     await cancelComposer(page)
     throw e
   }
 }
 
-module.exports = { createPost, LABELS, scheduleTime, dateText, timeText, chooseFiles }
+module.exports = { createPost, LABELS, scheduleTime, dateText, timeText, chooseFiles, parseSchedLine }

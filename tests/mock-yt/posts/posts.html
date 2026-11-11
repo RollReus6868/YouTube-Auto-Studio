@@ -71,9 +71,13 @@
   .dropdown [role=option] { padding: 10px 16px; cursor: pointer; white-space: nowrap } .dropdown [role=option]:hover { background: #3f3f3f }
   #calendar-dialog { position: absolute; bottom: 48px; left: 0; width: 290px; background: #282828; border-radius: 12px; padding: 12px; z-index: 20 }
   #calendar-dialog input.bad { border-color: #f44 }
-  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; max-height: 220px; overflow-y: auto }
-  .cal button { padding: 6px 0; border-radius: 50% } .cal button[disabled] { background: none !important } .cal .sel { background: #3ea6ff; color: #000 }
-  .cal .mon { grid-column: 1 / -1; text-align: left; color: #aaa; font-size: 12px; padding-top: 8px }
+  .calendar-header { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; color: #aaa; font-size: 12px }
+  #calendar-main { display: block; max-height: 220px; overflow-y: auto; position: relative }
+  .calendar-month-label { color: #aaa; font-size: 12px; padding: 8px 0 4px }
+  .calendar-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center }
+  .calendar-day { padding: 6px 0; border-radius: 50%; cursor: pointer } .calendar-day.disabled { color: #555; cursor: default } .calendar-day.invisible { visibility: hidden }
+  .calendar-day.today { outline: 1px solid #aaa } .calendar-day.selected { background: #3ea6ff; color: #000 }
+  #verify-dialog { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); width: 512px; background: #212121; border-radius: 12px; padding: 24px; z-index: 50 }
   ytd-popup-container ytd-menu-popup-renderer { position: absolute; background: #282828; border-radius: 12px; padding: 8px 0; z-index: 30 }
   ytd-menu-popup-renderer tp-yt-paper-item { padding: 10px 16px; cursor: pointer; white-space: nowrap }
   .spinner { height: 76px; display: flex; align-items: center; justify-content: center; color: #aaa }
@@ -111,6 +115,7 @@
   </ytd-backstage-items>
 </div>
 <ytd-popup-container id="popups"></ytd-popup-container>
+<ytd-popup-container id="popups-dialog"></ytd-popup-container>
 <script>
 // Trusted Types nhu youtube.com: trang gia van gan HTML (chinh sach "default" chi cho createHTML), con
 // eval(chuoi) / new Function(chuoi) cua ma ngoai van bi chan nhu tren YouTube that.
@@ -201,6 +206,8 @@ function render() {
   $('#cancel-button button').onclick = () => { reset(); render() }
   $('#submit-button button').onclick = () => {
     if (!valid()) return
+    // FLAGS.verifyAfter = n: sau n bai, YouTube hien "Channel owner needs to verify" thay vi dang (HTML 11/2026)
+    if (FLAGS.verifyAfter !== undefined && (window.POSTS_DONE || 0) >= FLAGS.verifyAfter) return ownerVerify()
     if (!S.sched) return submit(null)
     const at = new Date(S.date); at.setHours(0, S.time, 0, 0)
     if (at <= new Date()) return
@@ -357,23 +364,32 @@ function openVideo() {
 // ---- len lich (html/yt-12 + video C): #scheduling-panel > ytd-date-time-picker-renderer ----
 function schedPanel() {
   const today = new Date(); today.setHours(0, 0, 0, 0)
+  // lich that (HTML 11/2026): tp-yt-iron-list#calendar-main > .calendar-month (.calendar-month-label "Nov 2026") >
+  // .calendar-week > span.calendar-day (disabled / invisible / today / selected). FLAGS.calLabel: 'vi' = "thg 11 2026", 'none' = nhan rong
+  const shown = S.dateShown || S.date
+  const monLabel = (d) => (FLAGS.calLabel === 'none' ? '' : FLAGS.calLabel === 'vi' ? `thg ${d.getMonth() + 1} ${d.getFullYear()}` : `${MON[d.getMonth()]} ${d.getFullYear()}`)
   let grid = ''
-  for (let k = 0; k < 3; k++) {
+  for (let k = 0; k < 14; k++) {
     const first = new Date(today.getFullYear(), today.getMonth() + k, 1)
-    grid += `<div class="mon">${MON[first.getMonth()].toUpperCase()} ${first.getFullYear()}</div>` + '<span></span>'.repeat(first.getDay())
+    let cells = '<span class="calendar-day invisible"></span>'.repeat(first.getDay())
     for (let d = new Date(first); d.getMonth() === first.getMonth(); d.setDate(d.getDate() + 1)) {
-      grid += `<button data-d="${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}" ${d < today ? 'disabled' : ''} class="${+d === +S.date ? 'sel' : ''}">${d.getDate()}</button>`
+      const cls = [d < today ? 'disabled' : '', +d === +today ? 'today' : '', +d === +shown ? 'selected' : ''].filter(Boolean).join(' ')
+      cells += `<span class="calendar-day ${cls}" ${d < today ? 'aria-disabled="true"' : `data-d="${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}"`}>${d.getDate()}</span>`
     }
+    const weeks = cells.match(/<span[^>]*>[^<]*<\/span>/g)
+    let rows = ''
+    for (let i = 0; i < weeks.length; i += 7) rows += `<div class="calendar-week">${weeks.slice(i, i + 7).join('')}</div>`
+    grid += `<div class="calendar-month" role="listitem"><div class="calendar-month-label">${monLabel(first)}</div>${rows}</div>`
   }
   let times = ''
   for (let m = 0; m < 1440; m += 15) times += `<tp-yt-paper-item role="option" aria-selected="${m === S.time}" data-m="${m}">${fmtTime(m)}</tp-yt-paper-item>`
   const p = h(`<ytd-date-time-picker-renderer><div id="cancel-button-wrapper"><ytd-button-renderer><yt-button-shape><button title="" aria-label="Hủy">✕</button></yt-button-shape></ytd-button-renderer></div>
     <div id="hint" role="heading"><yt-formatted-string>Chọn ngày và giờ để xuất bản bài đăng này</yt-formatted-string></div>
     <div id="picker-component">
-      <ytd-calendar-date-picker style="position:relative"><tp-yt-paper-menu-button role="group"><div id="trigger"><tp-yt-paper-button id="date-picker" role="button" tabindex="0"><div id="date-label-text">${fmtDate(S.date)}</div></tp-yt-paper-button></div></tp-yt-paper-menu-button>
-        <tp-yt-paper-dialog id="calendar-dialog" role="dialog" ${S.pop === 'date' ? '' : 'hidden aria-hidden="true"'}><div id="control-area"><form id="date-input" onsubmit="return false"><tp-yt-paper-input-container aria-label="Enter date"><tp-yt-iron-input><input id="textbox" value="${fmtDate(S.date)}"></tp-yt-iron-input></tp-yt-paper-input-container></form>
+      <ytd-calendar-date-picker style="position:relative"><tp-yt-paper-menu-button role="group"><div id="trigger"><tp-yt-paper-button id="date-picker" role="button" tabindex="0"><div id="date-label-text">${fmtDate(shown)}</div></tp-yt-paper-button></div></tp-yt-paper-menu-button>
+        <tp-yt-paper-dialog id="calendar-dialog" role="dialog" ${S.pop === 'date' ? '' : 'hidden aria-hidden="true"'}><div id="control-area"><form id="date-input" onsubmit="return false"><tp-yt-paper-input-container aria-label="Enter date"><tp-yt-iron-input><input id="textbox" value="${fmtDate(shown)}"></tp-yt-iron-input></tp-yt-paper-input-container></form>
           <div id="month-controller"><yt-icon-button id="prev-month"><button id="button" aria-label="Tháng trước">‹</button></yt-icon-button><yt-icon-button id="next-month"><button id="button" aria-label="Tháng tiếp theo">›</button></yt-icon-button></div></div>
-          <div class="cal"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>${grid}</div></tp-yt-paper-dialog></ytd-calendar-date-picker>
+          <div class="calendar-container"><div class="calendar-header"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div><tp-yt-iron-list id="calendar-main"><div id="items" role="list">${grid}</div></tp-yt-iron-list></div></tp-yt-paper-dialog></ytd-calendar-date-picker>
       <div style="position:relative"><tp-yt-paper-menu-button role="group"><div id="trigger"><tp-yt-paper-button id="time-picker" role="button" tabindex="0"><div id="time-label-text">${fmtTime(S.time)}</div></tp-yt-paper-button></div>
         <tp-yt-iron-dropdown id="dropdown" ${S.pop === 'time' ? '' : 'hidden aria-hidden="true"'}><div id="contentWrapper" class="${S.pop === 'time' && S.timeAnimUntil > Date.now() ? 'animating' : ''}"><tp-yt-paper-listbox id="time-listbox" role="listbox" class="dropdown" style="width:130px">${times}</tp-yt-paper-listbox></div></tp-yt-iron-dropdown></tp-yt-paper-menu-button></div>
       <div style="position:relative"><tp-yt-paper-menu-button role="group"><div id="trigger"><tp-yt-paper-button id="timezone-picker" role="button" tabindex="0" style="min-width:220px"><div id="timezone-label-text">(GMT+0700) Giờ địa phương</div></tp-yt-paper-button></div>
@@ -400,9 +416,17 @@ function schedPanel() {
       const mi = m ? MON.findIndex((x) => x.toLowerCase() === m[1].toLowerCase()) : -1
       const d = mi >= 0 ? new Date(+m[3], mi, +m[2]) : null
       if (!d || d.getDate() !== +m[2] || d < today) { inp.classList.add('bad'); return }
-      S.date = d; S.pop = ''; render()
+      // FLAGS.dateCommit 'lag' (gia thuyet loi 0.7.0 tren YouTube that): Enter chi doi nhan ngay, ngay dang that van la ngay cu
+      if (FLAGS.dateCommit === 'lag') S.dateShown = d
+      else { S.date = d; S.dateShown = null }
+      S.pop = ''; render()
     }
-    for (const b of $$('.cal [data-d]')) b.onclick = () => { const [y, mo, d] = b.dataset.d.split('-'); S.date = new Date(+y, mo - 1, +d); S.pop = ''; render() }
+    // FLAGS.dateClick 'none': bam o ngay khong an (bai kiem cach du phong go ngay)
+    for (const b of $$('#calendar-main .calendar-day[data-d]')) b.onclick = () => { if (FLAGS.dateClick === 'none') return; const [y, mo, d] = b.dataset.d.split('-'); S.date = new Date(+y, mo - 1, +d); S.dateShown = null; S.pop = ''; render() }
+    const cm = $('#calendar-main')
+    if (cm && S.pop === 'date') { const sel = cm.querySelector('.calendar-day.selected'); if (sel) cm.scrollTop = sel.closest('.calendar-month').offsetTop }
+    const step = (dir) => () => { const ms = $$('#calendar-main .calendar-month'); const i = ms.findIndex((x) => x.offsetTop + x.offsetHeight > cm.scrollTop + 1); const t = ms[Math.max(0, Math.min(ms.length - 1, i + dir))]; if (t) cm.scrollTop = t.offsetTop }
+    if (cm) { $('#next-month button').onclick = step(1); $('#prev-month button').onclick = step(-1) }
     const box = $('#time-listbox')
     const pickAt = (i) => { const o = $$('#time-listbox [role=option]')[i]; if (o) { S.time = +o.dataset.m; S.pop = ''; render() } }
     if (box) { box.select = (i) => pickAt(+i); box.selectIndex = box.select } // API cua iron-selectable
@@ -440,17 +464,32 @@ async function submit(at) {
   $('#composer-slot').innerHTML = '<div class="spinner"><tp-yt-paper-spinner-lite aria-label="loading">⟳</tp-yt-paper-spinner-lite></div>' // video C: vong xoay ~3 giay
   window.CE = null
   await fetch('/yt/__posts/add', { method: 'POST', body: JSON.stringify(payload) })
+  window.POSTS_DONE = (window.POSTS_DONE || 0) + 1
   setTimeout(() => {
     reset(); render()
     toast(at ? 'Đã lên lịch đăng bài của bạn' : 'Đã đăng bài đăng') // lich: theo video C; dang ngay: DOAN
     loadList()
   }, 900)
 }
+function ownerVerify() {
+  const L = $('#popups-dialog')
+  L.innerHTML = `<tp-yt-paper-dialog role="dialog" id="verify-dialog"><ytd-engagement-panel-section-list-renderer><div id="content"><ytd-flow-root-renderer><ytd-flow-step-renderer><div id="content">
+    <ytw-feature-enablement-info-renderer class="ytwFeatureEnablementInfoRendererHost"><div class="ytwFeatureEnablementInfoRendererContents"><span class="ytAttributedStringHost" role="text" style="display:block;font-size:20px;font-weight:500;margin-bottom:16px">Channel owner needs to verify</span><span class="ytAttributedStringHost" role="text">Ask the channel owner to complete the verification process so you can access this feature.</span></div></ytw-feature-enablement-info-renderer></div>
+    <div id="bottom-bar" style="text-align:right;margin-top:24px"><yt-flow-bottom-bar-renderer><ytd-button-renderer><yt-button-shape><button aria-label="Got it" style="background:#fff;color:#000;border-radius:18px;padding:8px 16px"><div><span role="text">Got it</span></div></button></yt-button-shape></ytd-button-renderer></yt-flow-bottom-bar-renderer></div>
+  </ytd-flow-step-renderer></ytd-flow-root-renderer></div></ytd-engagement-panel-section-list-renderer></tp-yt-paper-dialog>`
+  L.querySelector('button').onclick = () => { L.innerHTML = '' }
+}
 function toast(t) { const el = h(`<tp-yt-paper-toast role="alert"><yt-notification-action-renderer><span id="text">${t}</span></yt-notification-action-renderer></tp-yt-paper-toast>`); document.body.appendChild(el); setTimeout(() => el.remove(), 4000) }
 
 // ---- tab DA DANG / DA LEN LICH (html/yt-11: tp-yt-paper-tab; URL ?pvf=CAE%253D theo video C) ----
 const tabOf = () => (/pvf=CAE/.test(location.search) ? 'sched' : /pvf=CAI/.test(location.search) ? 'arch' : 'pub')
-function fmtSched(s) { const [d, t] = s.split('T'); const [y, mo, da] = d.split('-'); return `${t} ${+da} thg ${+mo}, ${y}` }
+function fmtSched(s) {
+  const [d, t] = s.split('T'); const [y, mo, da] = d.split('-')
+  // FLAGS.schedEn: giao dien tieng Anh (HTML 11/2026): "Scheduled for Nov 12, 2026, 12:00 AM (local time)"
+  if (FLAGS.schedEn) { const [hh, mm] = t.split(':'); return `${MON[mo - 1]} ${+da}, ${y}, ${fmtTime(hh * 60 + +mm)}` }
+  return `${t} ${+da} thg ${+mo}, ${y}`
+}
+const schedLine = (s) => (FLAGS.schedEn ? `Scheduled for ${fmtSched(s)} (local time)` : `Đã lên lịch đăng vào ${fmtSched(s)} (giờ địa phương)`)
 async function loadList() {
   const tab = tabOf()
   for (const t of $$('tp-yt-paper-tab')) t.setAttribute('aria-selected', String(t.dataset.tab === tab))
@@ -462,8 +501,13 @@ async function loadList() {
   await new Promise((r) => setTimeout(r, 350)) // danh sach hien cham
   $('#spinner-container').hidden = true
   if (!rows.length) { $(tab === 'sched' ? '#scheduling-zero-state-message' : '#zero-state-message').hidden = false; return }
+  // FLAGS.flatList: the bai khong boc the rieng, dong gio nam ngoai khoi chu bai (bai kiem: khong lay nham gio cua bai khac)
+  if (FLAGS.flatList) {
+    $('#contents').innerHTML = rows.map((p) => `<div class="row"><div><yt-formatted-string id="content-text">${esc(p.text)}</yt-formatted-string></div></div>${p.scheduledAt ? `<div class="sched-line">${schedLine(p.scheduledAt)}</div>` : `<a href="/yt/post/${p.id}">vừa xong</a>`}`).join('')
+    return
+  }
   $('#contents').innerHTML = rows.map((p) => `<ytd-backstage-post-thread-renderer><ytd-backstage-post-renderer><img alt="" src="${AV}"><div style="flex:1">
-    <div id="header"><a id="author-text" style="color:#fff;font-weight:500">Dark Bible Stories</a> &nbsp;${p.scheduledAt ? `<span class="sched-line">Đã lên lịch đăng vào ${fmtSched(p.scheduledAt)} (giờ địa phương)</span>` : `<yt-formatted-string id="published-time-text"><a href="/yt/post/${p.id}">vừa xong</a></yt-formatted-string>`}</div>
+    <div id="header"><a id="author-text" style="color:#fff;font-weight:500">Dark Bible Stories</a> &nbsp;${p.scheduledAt ? `<span class="sched-line">${schedLine(p.scheduledAt)}</span>` : `<yt-formatted-string id="published-time-text"><a href="/yt/post/${p.id}">vừa xong</a></yt-formatted-string>`}</div>
     <yt-formatted-string id="content-text">${esc(p.text)}</yt-formatted-string>
     ${(p.options || []).map((o, i) => `<div class="po">${String.fromCharCode(65 + i)}. ${esc(o.text || o)}</div>`).join('')}
     ${(p.answers || []).map((o, i) => `<div class="po">${String.fromCharCode(65 + i)}. ${esc(o.text)}</div>`).join('')}

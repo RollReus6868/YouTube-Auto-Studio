@@ -1,7 +1,7 @@
 // Trang Gemini gia (thay cho https://gemini.google.com): /gemini/app (chat moi), /gemini/app/<id> (sau khi gui).
 // Cau truc DOM chep theo trang that do ngay 11/11/2026 (xem app.html).
 // Bai kiem dieu khien qua may chu:
-//   server.geminiFlags = { signedOut, blockedDialog, limit, slow: ms, pendingStuck, chunkMs, imageMs }  (doc luc tai trang)
+//   server.geminiFlags = { signedOut, blockedDialog, consentFrame, discoveryTooltip, tooltipDelay, tooltipSticky, limit, slow: ms, pendingStuck, chunkMs, imageMs }  (doc luc tai trang)
 //   server.geminiQueue = [{ text } | { image: true, text? } | { error: 'limit' | 'signin' }, ...]  (het hang -> echo)
 //   server.geminiPrompts: loi nhac trang da nhan; server.geminiImages[n]: byte anh gia thu n; server.geminiImgHits: [{ n, cookie }]
 const fs = require('fs')
@@ -36,6 +36,15 @@ module.exports = [
     const html = fs.readFileSync(path.join(__dirname, 'app.html'), 'utf8').replace('/*FLAGS*/', `window.FLAGS = ${JSON.stringify(flags)};`)
     res.end(html)
   }],
+  // khung hoi dong y gia (thay consent.google.com/signedin/landing): bam "Tiep tuc" -> bao trang me go khung
+  [/^\/gemini\/__consent(\?|$)/, (req, res, m, server) => {
+    res.setHeader('content-type', 'text/html; charset=utf-8')
+    res.end(`<!doctype html><meta charset="utf-8"><body style="margin:0;background:rgba(0,0,0,.6);font:16px Arial;color:#e3e3e3">
+<div role="dialog" style="width:560px;margin:15vh auto;background:#2b2c2f;border-radius:28px;padding:24px"><h2>Kết nối những ứng dụng Google này với Gemini?</h2>
+<p>Gemini có thể dùng Gmail, Lịch, Drive... để giúp bạn.</p><button id="ok">Tiếp tục</button></div>
+<script>document.getElementById('ok').onclick = () => { fetch('/gemini/__consent-ok'); parent.postMessage('consent-ok', '*') }</script>`)
+  }],
+  [/^\/gemini\/__consent-ok/, (req, res, m, server) => { server.geminiConsentOk = (server.geminiConsentOk || 0) + 1; res.end('ok') }],
   [/^\/gemini\/__ask$/, (req, res, m, server) => {
     let body = ''
     req.setEncoding('utf8') // ghep chu dung UTF-8 khi than yeu cau den thanh nhieu manh (ky tu nhieu byte bi cat)

@@ -79,6 +79,53 @@ module.exports = [
       assert.equal(ctx.mock.server.geminiPrompts.length, 0)
     })
   }],
+  // Loi 0.7.0 tren may that: khung consent.google.com (iframe co dinh che ca trang) -> go vao o nhap "nhan 0/22990 ky tu"
+  ['khung hoi dong y (iframe che trang), khong cho -> GEMINI_BLOCKED ro rang, khong go / gui gi', async (ctx) => {
+    await withMock(ctx, { flags: { consentFrame: true } }, async (base) => {
+      await assert.rejects(ask(ctx.page, { prompt: 'Xin chào', base }), (e) => code('GEMINI_BLOCKED')(e) && /hỏi đồng ý/.test(e.message) && !/nhận 0/.test(e.message))
+      assert.equal(ctx.mock.server.geminiPrompts.length, 0)
+      assert(!ctx.mock.server.geminiConsentOk, 'tool khong tu bam Tiep tuc')
+    })
+  }],
+  ['khung hoi dong y + cho nguoi dung: bao mot lan, nguoi dung bam Tiep tuc trong khung -> chay tiep, tra loi dung', async (ctx) => {
+    await withMock(ctx, { flags: { consentFrame: true }, queue: [{ text: 'Đã xong.' }] }, async (base) => {
+      const asked = []
+      const user = async () => {
+        // "nguoi dung" bam Tiep tuc ben trong khung (frame khac nguon goc cung trang gia)
+        const f = ctx.page.wc.mainFrame.frames.find((x) => /__consent/.test(x.url))
+        await f.executeJavaScript("document.getElementById('ok').click()")
+      }
+      const text = await ask(ctx.page, { prompt: 'Viết một câu', base, stableMs: 800, waitUserMs: 20000, onWaitUser: (m) => { asked.push(m); setTimeout(() => user().catch((e) => asked.push(`LOI ${e.message}`)), 1500) } })
+      assert.equal(text, 'Đã xong.')
+      assert.equal(asked.length, 1, asked.join('\n'))
+      assert(/hỏi đồng ý/.test(asked[0]) && /không tự chọn thay bạn/.test(asked[0]), asked[0])
+      assert.equal(ctx.mock.server.geminiConsentOk, 1, 'chi nguoi dung bam')
+      assert.deepEqual(ctx.mock.server.geminiPrompts, ['Viết một câu'])
+    })
+  }],
+  ['khung hoi dong y + cho nguoi dung nhung khong ai xu ly -> GEMINI_BLOCKED sau thoi gian cho', async (ctx) => {
+    await withMock(ctx, { flags: { consentFrame: true } }, async (base) => {
+      const t0 = Date.now()
+      await assert.rejects(ask(ctx.page, { prompt: 'Xin chào', base, waitUserMs: 2500 }), (e) => code('GEMINI_BLOCKED')(e) && /chưa được xử lý/.test(e.message))
+      assert(Date.now() - t0 >= 2500)
+      assert.equal(ctx.mock.server.geminiPrompts.length, 0)
+    })
+  }],
+  ['hop thoai chan + cho nguoi dung: nguoi dung bam Continue -> chay tiep', async (ctx) => {
+    await withMock(ctx, { flags: { blockedDialog: true }, queue: [{ text: 'Ổn.' }] }, async (base) => {
+      const text = await ask(ctx.page, { prompt: 'Thử', base, stableMs: 800, waitUserMs: 20000, onWaitUser: () => setTimeout(() => ctx.page.eval(() => { document.querySelector('mat-dialog-container button').click() }), 1000) })
+      assert.equal(text, 'Ổn.')
+    })
+  }],
+  // Loi 0.7.0 tren may that: goi y "Giao viec can lam" (lop nen trong suot) -> bao nham "hop thoai chan (lop phu che o nhap)"
+  ...[['luc mo trang', {}], ['chi tat duoc bang bam nen', { tooltipSticky: true }], ['hien giua luc tra loi', { tooltipDelay: 1500, slow: 1200 }]].map(([name, more]) => [
+    `goi y nho (gem-discovery-tooltip) ${name} -> tu tat, khong bao chan`, async (ctx) => {
+      await withMock(ctx, { flags: { discoveryTooltip: true, ...more }, queue: [{ text: 'Câu trả lời.' }] }, async (base) => {
+        const text = await ask(ctx.page, { prompt: 'Viết đi', base, stableMs: 1500 })
+        assert.equal(text, 'Câu trả lời.')
+        assert.deepEqual(ctx.mock.server.geminiPrompts, ['Viết đi'])
+      })
+    }]),
   ['het luot -> GEMINI_LIMIT (bien the limit va cau tra loi bao het luot)', async (ctx) => {
     await withMock(ctx, { flags: { limit: true } }, async (base) => {
       await assert.rejects(ask(ctx.page, { prompt: 'Viết bài', base, stableMs: 800 }), (e) => code('GEMINI_LIMIT')(e) && /reached your limit/.test(e.message))

@@ -1,3 +1,14 @@
+## YT Auto Studio 0.7.1
+
+### Gemini trên trình duyệt
+- **Sửa lỗi "Ô nhập của Gemini không nhận đủ lời nhắc (nhận 0/… ký tự)".** Nguyên nhân: Google hiện khung hỏi "Kết nối những ứng dụng Google này với Gemini?" che cả trang, tool vẫn gõ vào ô nhập bị che. Giờ tool nhận ra khung này trước khi gõ, mở cửa sổ Gemini, ghi rõ trong nhật ký và **chờ bạn tự chọn** (tối đa 5 phút), xong thì chạy tiếp. Tool không tự bấm đồng ý thay bạn. Hộp thoại chặn khác (điều khoản, chọn quốc gia…) cũng được chờ như vậy.
+- **Sửa lỗi báo nhầm "Gemini đang hiện hộp thoại chặn (lớp phủ che ô nhập)".** Đó chỉ là gợi ý nhỏ "Giao việc cần làm" của Gemini. Tool tự tắt gợi ý này (phím Esc / bấm ra ngoài), kể cả khi nó hiện giữa lúc Gemini đang trả lời.
+
+### Đăng bài AI
+- **Kênh bị YouTube khoá đăng bài ("Channel owner needs to verify")**: tool báo lỗi ngay, ghi rõ chủ sở hữu kênh cần tự xác minh (YouTube Studio → Cài đặt → Kênh → Điều kiện sử dụng tính năng), đóng hộp thoại và **dừng các bài còn lại của kênh đó**. Trước đây mỗi bài chờ 45 giây rồi báo "không thấy dấu hiệu đăng xong". Tool không tự xác minh thay bạn.
+- **Chọn ngày lên lịch bằng cách bấm ô ngày trong lịch** (như bạn tự làm), không còn chỉ gõ ngày vào ô nhập. Không bấm được thì mới gõ ngày như cũ.
+- **Kiểm tra giờ YouTube ghi trên bài sau khi lên lịch**: đọc được cả "Scheduled for Nov 12, 2026, 12:00 AM" lẫn "00:00 12 thg 11, 2026". Bản 0.7.0 so sai định dạng nên bài đúng giờ cũng bị cảnh báo "khác giờ mong muốn", và có thể đọc nhầm giờ của bài khác trong danh sách. Nay nếu YouTube ghi giờ khác giờ bạn chọn, bài được đánh dấu lỗi kèm giờ YouTube ghi, để bạn sửa trong tab Đã lên lịch của kênh.
+
 ## YT Auto Studio 0.7.0
 
 ### Gemini trên trình duyệt (không cần API key)

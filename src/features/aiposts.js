@@ -212,11 +212,13 @@ module.exports = (ctx) => {
     for (const d of list) setDraft(d.id, { status: 'queued', error: '' })
     push()
     let ok = 0
+    const blocked = {} // kenh bi YouTube khoa dang bai (chu so huu can xac minh): bo qua cac bai con lai cua kenh
     try {
       for (const d0 of list) {
         if (ctx.stopped()) { setDraft(d0.id, { status: 'draft' }); continue }
         const d = S.drafts.find((x) => x.id === d0.id)
         if (!d) continue
+        if (blocked[d.channelKey]) { setDraft(d.id, { status: 'error', step: '', error: `Chưa đăng: ${blocked[d.channelKey]}` }); continue }
         const ch = channels().find((c) => c.key === d.channelKey)
         if (!ch) { setDraft(d.id, { status: 'error', error: 'Kênh không còn ở trang Tài khoản (đã bỏ tick?).' }); continue }
         // gio da qua (ban nhap cu) -> dang ngay
@@ -234,6 +236,14 @@ module.exports = (ctx) => {
             log: (level, msg) => ctx.log(level, `Bài Gemini (${ch.name}): ${msg}`),
             onStep: (step) => { setDraft(d.id, { step }); ctx.push() },
           }), { label: `dang-bai-ai-${ch.name}`, shouldStop: () => ctx.stopped() })
+          if (r.mismatch) {
+            // da len lich nhung YouTube ghi sai gio: bao loi de nguoi dung sua (dang lai se bi coi la trung bai)
+            setDraft(d.id, { status: 'error', step: '', url: r.url || '', line: r.line || '', result: r.status, error: r.mismatch })
+            remember(ch.key, d)
+            ctx.log('error', `Kênh "${ch.name}": bài ${AI.TYPE_LABEL[d.type]} ${r.mismatch}`)
+            push()
+            continue
+          }
           setDraft(d.id, { status: 'done', step: '', url: r.url || '', line: r.line || '', result: r.status })
           remember(ch.key, d)
           ok++
@@ -241,6 +251,11 @@ module.exports = (ctx) => {
         } catch (e) {
           setDraft(d.id, { status: ctx.stopped() ? 'draft' : 'error', step: '', error: e.message })
           ctx.log('error', `Kênh "${ch.name}": chưa đăng được bài ${AI.TYPE_LABEL[d.type]}: ${e.message}`)
+          if (e.code === 'OWNER_VERIFY') {
+            blocked[d.channelKey] = `YouTube yêu cầu chủ sở hữu kênh "${ch.name}" xác minh trước khi đăng bài (xem lỗi bài trước).`
+            const rest = list.filter((x) => x.channelKey === d.channelKey && S.drafts.some((y) => y.id === x.id && y.status === 'queued')).length
+            if (rest) ctx.log('warn', `Kênh "${ch.name}": dừng ${rest} bài còn lại của kênh này cho tới khi chủ sở hữu xác minh.`)
+          }
         }
         push()
       }

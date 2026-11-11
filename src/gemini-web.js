@@ -47,7 +47,7 @@ function geminiScan(inputSelectors) {
     return st.visibility !== 'hidden' && st.display !== 'none' && Number(st.opacity) !== 0
   }
   const inside = (el, sel) => !!(el.closest && el.closest(sel))
-  const out = { url: location.href, input: '', inputText: '', signin: false, blocked: '', stop: false, send: false, turns: 0, queries: 0, text: '', raw: 0, images: [], alert: '' }
+  const out = { url: location.href, input: '', inputText: '', signin: false, blocked: '', consent: '', tooltip: '', stop: false, send: false, turns: 0, queries: 0, text: '', raw: 0, images: [], alert: '' }
 
   for (const sel of inputSelectors) {
     const el = [...document.querySelectorAll(sel)].find((x) => shown(x) && !x.classList.contains('ql-clipboard'))
@@ -68,7 +68,30 @@ function geminiScan(inputSelectors) {
     return r.width >= 200 && r.height >= 100
   })
   if (dialogs.length) out.blocked = norm(dialogs[0].textContent).slice(0, 200) || 'hộp thoại'
-  if (!out.blocked && out.input) {
+
+  // Google hoi dong y (that 11/2026: <iframe src="https://consent.google.com/signedin/landing?origin=...gemini..."> position
+  // fixed, z-index 5000, che ca trang - "Ket noi nhung ung dung Google nay voi Gemini?"): o nhap van "hien" nhung go vao
+  // khong an. Ca trang consent.google.com hoac khung lon co dinh che trang deu tinh.
+  if (/^https:\/\/consent\.google\.com\//.test(location.href)) out.consent = 'trang consent.google.com'
+  for (const f of document.querySelectorAll('iframe')) {
+    if (out.consent || !shown(f)) continue
+    const src = f.getAttribute('src') || ''
+    const r = f.getBoundingClientRect()
+    const big = r.width >= innerWidth * 0.6 && r.height >= innerHeight * 0.6 && getComputedStyle(f).position === 'fixed'
+    if (/^https:\/\/consent\.google\.com\//.test(src)) out.consent = 'khung consent.google.com'
+    else if (big) out.consent = `khung ${src.split('?')[0].slice(0, 80) || 'iframe'} che trang`
+  }
+
+  // Goi y nho (that 11/2026: .cdk-overlay-container > .cdk-overlay-backdrop-showing trong suot + gem-discovery-tooltip
+  // "Giao viec can lam"): lop nen trong suot che o nhap nhung chi can Esc / bam ra ngoai la tat - khong phai hop thoai chan.
+  const ov = document.querySelector('.cdk-overlay-container')
+  if (ov && !out.blocked) {
+    const bd = ov.querySelector('.cdk-overlay-backdrop.cdk-overlay-backdrop-showing')
+    const panes = [...ov.querySelectorAll('.cdk-overlay-pane')].filter((x) => x.children.length)
+    const light = panes.filter((x) => x.querySelector('gem-discovery-tooltip, [role="tooltip"], mat-tooltip-component, .mat-mdc-tooltip, .mat-mdc-menu-panel, [role="menu"]'))
+    if (bd && light.length === panes.length) out.tooltip = norm(ov.textContent).slice(0, 120) || 'lớp phủ trong suốt'
+  }
+  if (!out.blocked && !out.tooltip && out.input) {
     const el = document.querySelector(out.input)
     const r = el.getBoundingClientRect()
     const top = document.elementFromPoint(r.left + Math.min(r.width / 2, 40), r.top + r.height / 2)
@@ -179,6 +202,15 @@ function geminiScan(inputSelectors) {
   return out
 }
 
+// tat goi y nho / menu: bam lop nen cua cdk-overlay (CDK dong overlay khi bam nen)
+function geminiDismiss() {
+  const ov = document.querySelector('.cdk-overlay-container')
+  const bd = ov && ov.querySelector('.cdk-overlay-backdrop-showing, .cdk-overlay-backdrop')
+  if (!bd) return false
+  bd.click()
+  return true
+}
+
 // bam nut Dung cua Gemini (khi nguoi dung bam Dung trong tool)
 function geminiPressStop() {
   const area = document.querySelector('input-area-v2, input-container, fieldset.input-area-fieldset') || document
@@ -206,20 +238,63 @@ function checkStop(stopIf) {
   if (stopIf()) throw fail('GEMINI_STOPPED', 'Đã dừng theo yêu cầu.')
 }
 
+// Don duong toi o nhap: goi y nho (tooltip / menu) -> tu tat (Esc, bam nen). Hop thoai chan / Google hoi dong y -> KHONG
+// bam thay nguoi dung: bao (o.onWaitUser - dich vu hien cua so Gemini) va cho nguoi dung tu xu ly toi da o.waitUserMs
+// (0 = bao loi GEMINI_BLOCKED ngay). Thoi gian cho nguoi dung duoc cong them vao han cua yeu cau (clock.deadline).
+async function clearWay(page, s, o) {
+  const { stopIf, clock, waitUserMs = 0, onWaitUser } = o
+  let asked = 0
+  let dismissed = 0
+  for (;;) {
+    checkStop(stopIf)
+    if (s) {
+      if (/^https:\/\/accounts\.google\.com\//.test(s.url)) throw fail('GEMINI_SIGNIN', 'Gemini chuyển sang trang đăng nhập Google: tài khoản dùng cho Gemini chưa đăng nhập.')
+      if (s.tooltip && !s.blocked && !s.consent && dismissed < 4) {
+        dismissed++
+        await page.press('Escape').catch(() => {})
+        await sleep(300)
+        const again = await scan(page)
+        if (again && again.tooltip) { await page.eval(geminiDismiss).catch(() => {}); await sleep(400) }
+        s = await scan(page)
+        continue
+      }
+      const why = s.consent ? `Google đang hỏi đồng ý trong cửa sổ Gemini (${s.consent}, vd "Kết nối những ứng dụng Google này với Gemini?")`
+        : s.blocked ? `Gemini đang hiện hộp thoại chặn ("${cut(s.blocked, 120)}")`
+          : s.tooltip ? `Gemini đang hiện lớp phủ che ô nhập ("${cut(s.tooltip, 80)}") mà tool không tắt được` : ''
+      if (!why) {
+        if (asked) clock.deadline += Date.now() - asked
+        return s
+      }
+      const mins = Math.max(1, Math.round(waitUserMs / 60000))
+      if (!waitUserMs) throw fail('GEMINI_BLOCKED', `${why}: hãy xử lý trong cửa sổ Gemini rồi chạy lại.`)
+      if (!asked) {
+        asked = Date.now()
+        if (onWaitUser) onWaitUser(`${why}. Tool không tự chọn thay bạn: hãy tự xử lý trong cửa sổ Gemini vừa mở, tool chờ tối đa ${mins} phút rồi chạy tiếp.`)
+      } else if (Date.now() - asked > waitUserMs) throw fail('GEMINI_BLOCKED', `${why}: chưa được xử lý sau ${mins} phút. Hãy xử lý trong cửa sổ Gemini rồi chạy lại.`)
+    }
+    await sleep(asked ? 1000 : 400)
+    s = await scan(page)
+  }
+}
+
 // Mo chat moi va cho o nhap (hoac dau hieu chua dang nhap / hop thoai chan)
-async function openChat(page, { base, stopIf, deadline }) {
+async function openChat(page, o) {
+  const { base, stopIf, clock } = o
   checkStop(stopIf)
   await page.goto(`${base}/app`)
-  const ready = Math.min(deadline, Date.now() + 45000)
+  let ready = Math.min(clock.deadline, Date.now() + 45000)
   let seen = 0
   for (;;) {
     checkStop(stopIf)
-    const s = await scan(page)
+    let s = await scan(page)
     if (s) {
-      if (/^https:\/\/accounts\.google\.com\//.test(s.url)) throw fail('GEMINI_SIGNIN', 'Gemini chuyển sang trang đăng nhập Google: tài khoản dùng cho Gemini chưa đăng nhập.')
-      if (/^https:\/\/consent\.google\.com\//.test(s.url)) throw fail('GEMINI_BLOCKED', 'Google hỏi đồng ý điều khoản trước khi mở Gemini: hãy xử lý trong cửa sổ Gemini rồi chạy lại.')
       if (s.signin) throw fail('GEMINI_SIGNIN', 'Gemini chưa đăng nhập Google (trang hiện nút "Sign in"). Hãy mở cửa sổ Gemini và đăng nhập tài khoản dùng cho Gemini.')
-      if (s.blocked) throw fail('GEMINI_BLOCKED', `Gemini đang hiện hộp thoại chặn ("${cut(s.blocked, 120)}"): hãy xử lý trong cửa sổ Gemini rồi chạy lại.`)
+      if (/^https:\/\/accounts\.google\.com\//.test(s.url) || s.blocked || s.consent || s.tooltip) {
+        const d0 = clock.deadline
+        s = await clearWay(page, s, o)
+        ready += clock.deadline - d0
+        if (!s) continue
+      }
       if (s.input) {
         // dau hieu dang nhap / hop thoai co the hien sau o nhap mot chut: xem lai mot lan
         if (!seen) { seen = Date.now(); await sleep(800); continue }
@@ -233,12 +308,16 @@ async function openChat(page, { base, stopIf, deadline }) {
 
 // Go loi nhac (selectAll + insertText - khong Backspace) va kiem o nhan du chu (bo qua khoang trang / xuong dong:
 // Quill tach dong thanh <p>, textContent mat \n)
-async function typePrompt(page, sel, prompt, stopIf) {
+async function typePrompt(page, sel, prompt, o) {
+  const { stopIf } = o
   const T = { selector: sel }
   const want = strip(prompt)
   const got = () => page.eval((s) => { const el = document.querySelector(s); return el ? el.textContent : '' }, sel).catch(() => '')
   for (let attempt = 0; attempt < 2; attempt++) {
     checkStop(stopIf)
+    // khung hoi dong y / goi y co the hien sau khi o nhap da hien (loi 0.7.0: go vao o bi khung consent che -> nhan 0 ky tu)
+    const s = await scan(page)
+    if (s && (s.blocked || s.consent || s.tooltip)) await clearWay(page, s, o)
     await page.click(T, { after: 150 })
     await page.eval((x) => window.__ya.focus(x), T)
     await page.eval(() => window.__ya.selectAll())
@@ -275,6 +354,7 @@ async function send(page, before, stopIf) {
       const s = await scan(page)
       if (sent(s)) return
       if (s && s.blocked) throw fail('GEMINI_BLOCKED', `Gemini đang hiện hộp thoại chặn ("${cut(s.blocked, 120)}"): hãy xử lý trong cửa sổ Gemini rồi chạy lại.`)
+      if (s && s.tooltip) { await page.press('Escape').catch(() => {}); await page.eval(geminiDismiss).catch(() => {}) }
       await sleep(250)
     }
     if (!i) {
@@ -287,7 +367,7 @@ async function send(page, before, stopIf) {
 
 // Cho cau tra loi xong: KHONG con nut Dung + co chu + chu khong doi stableMs (aria-busy / .pending co the ket khi
 // trang khong duoc ve, nen khong dua vao chung). mode 'image': xong khi co anh (hoac het cho anh).
-async function waitAnswer(page, before, { stopIf, deadline, stableMs, emptyMs, mode }) {
+async function waitAnswer(page, before, { stopIf, clock, stableMs, emptyMs, mode }) {
   let lastText = null
   let since = Date.now()
   let emptySince = 0
@@ -298,7 +378,7 @@ async function waitAnswer(page, before, { stopIf, deadline, stableMs, emptyMs, m
       await page.eval(geminiPressStop).catch(() => {})
       throw fail('GEMINI_STOPPED', 'Đã dừng theo yêu cầu.')
     }
-    if (Date.now() > deadline) {
+    if (Date.now() > clock.deadline) {
       if (s && s.stop) await page.eval(geminiPressStop).catch(() => {})
       throw fail('GEMINI_TIMEOUT', `Gemini trả lời quá lâu${s && s.text ? ` (mới có ${s.text.length} ký tự)` : ''}.`)
     }
@@ -306,6 +386,7 @@ async function waitAnswer(page, before, { stopIf, deadline, stableMs, emptyMs, m
     if (s) {
       if (/^https:\/\/accounts\.google\.com\//.test(s.url)) throw fail('GEMINI_SIGNIN', 'Gemini chuyển sang trang đăng nhập Google: tài khoản dùng cho Gemini chưa đăng nhập.')
       if (s.blocked) throw fail('GEMINI_BLOCKED', `Gemini đang hiện hộp thoại chặn ("${cut(s.blocked, 120)}"): hãy xử lý trong cửa sổ Gemini rồi chạy lại.`)
+      if (s.tooltip) await page.eval(geminiDismiss).catch(() => {}) // goi y nho hien giua chung: tat, khong anh huong cau tra loi
       if (LIMIT_RE.test(s.alert)) throw fail('GEMINI_LIMIT', `Gemini báo hết lượt: "${cut(s.alert)}"`)
       if (s.turns > before.turns || s.stop) started = true
       if (started) {
@@ -335,15 +416,17 @@ function answerError(s, mode) {
 }
 
 // Mot yeu cau viet chu tren page (cua so / khung bat ky dang dung phien Google can dung)
-async function askOn(page, { prompt, base = geminiBase(), shouldStop, timeoutMs = 180000, stableMs = 2500, emptyMs = 15000, mode = 'text' } = {}) {
+// waitUserMs / onWaitUser: Gemini hien hop thoai can nguoi dung tu chon (dong y, xac nhan...) -> bao va cho (xem clearWay)
+async function askOn(page, { prompt, base = geminiBase(), shouldStop, timeoutMs = 180000, stableMs = 2500, emptyMs = 15000, mode = 'text', waitUserMs = 0, onWaitUser } = {}) {
   const stopIf = () => !!(shouldStop && shouldStop())
   prompt = String(prompt || '')
   if (!prompt.trim()) throw fail('GEMINI_EMPTY', 'Lời nhắc cho Gemini trống.')
-  const deadline = Date.now() + timeoutMs
-  const before = await openChat(page, { base, stopIf, deadline })
-  await typePrompt(page, before.input, prompt, stopIf)
+  const clock = { deadline: Date.now() + timeoutMs }
+  const o = { base, stopIf, clock, waitUserMs, onWaitUser }
+  const before = await openChat(page, o)
+  await typePrompt(page, before.input, prompt, o)
   await send(page, before, stopIf)
-  const s = await waitAnswer(page, before, { stopIf, deadline, stableMs, emptyMs, mode })
+  const s = await waitAnswer(page, before, { stopIf, clock, stableMs, emptyMs, mode })
   const err = mode === 'image' && s.images.length ? null : answerError(s, mode)
   if (err) throw err
   return s
@@ -394,9 +477,9 @@ async function imageBytes(page, src) {
 }
 
 // Mot yeu cau ve anh tren page -> luu vao dir
-async function imageOn(page, { prompt, dir, base = geminiBase(), shouldStop, timeoutMs = 240000, stableMs = 2500, emptyMs = 15000 } = {}) {
+async function imageOn(page, { prompt, dir, base = geminiBase(), shouldStop, timeoutMs = 240000, stableMs = 2500, emptyMs = 15000, waitUserMs = 0, onWaitUser } = {}) {
   if (!dir) throw new Error('Thiếu thư mục lưu ảnh.')
-  const s = await askOn(page, { prompt, base, shouldStop, timeoutMs, stableMs, emptyMs, mode: 'image' })
+  const s = await askOn(page, { prompt, base, shouldStop, timeoutMs, stableMs, emptyMs, mode: 'image', waitUserMs, onWaitUser })
   if (!s.images.length) {
     const t = s.text.trim()
     if (SIGNIN_TEXT_RE.test(t)) throw fail('GEMINI_SIGNIN', `Gemini cần đăng nhập Google để tạo ảnh: "${cut(t)}"`)
@@ -505,7 +588,9 @@ function createGeminiWeb(ctx, opts = {}) {
       if (!w.isVisible()) w.showInactive()
       const { Page } = require('./studio/driver')
       page = new Page(w.webContents, { timeout: 20000, shotDir: ctx.logFile('loi-trang'), shouldStop: () => stopIf() || w.isDestroyed() })
-      const common = { base: base(), shouldStop: o.shouldStop, ...(o.timeoutMs ? { timeoutMs: o.timeoutMs } : {}) }
+      // hop thoai can nguoi dung tu chon (Google hoi dong y...): hien cua so Gemini, bao trong nhat ky va cho toi da 5 phut
+      const onWaitUser = (msg) => { open(); ctx.log('warn', `Gemini (trình duyệt):${what} ${msg}`) }
+      const common = { base: base(), shouldStop: o.shouldStop, waitUserMs: opts.waitUserMs !== undefined ? opts.waitUserMs : 5 * 60000, onWaitUser, ...(o.timeoutMs ? { timeoutMs: o.timeoutMs } : {}) }
       let r
       if (kind === 'image') {
         r = await imageOn(page, { ...common, prompt: o.prompt, dir: o.dir || ctx.logFile(path.join('ai-posts', 'anh')) })
@@ -588,4 +673,4 @@ function createGeminiWeb(ctx, opts = {}) {
   return gw
 }
 
-module.exports = { createGeminiWeb, askOn, imageOn, ask, fullSizeUrl, geminiScan, LIMIT_RE, SIGNIN_TEXT_RE, TITLE }
+module.exports = { createGeminiWeb, askOn, imageOn, ask, fullSizeUrl, geminiScan, geminiDismiss, LIMIT_RE, SIGNIN_TEXT_RE, TITLE }
