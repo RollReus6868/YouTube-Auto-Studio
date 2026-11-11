@@ -657,6 +657,9 @@ for (const name of FEATURES) {
   Object.assign(commands, f.commands || {})
   if (f.start) started.push(f.start)
 }
+// Gemini tren trinh duyet (cua so rieng, khong dung khung Studio): ctx.geminiWeb.ask / image (src/gemini-web.js)
+ctx.geminiWeb = require('./gemini-web').createGeminiWeb(ctx)
+Object.assign(commands, ctx.geminiWeb.commands)
 
 // nut "Mở Gemini" (Cai dat, Dang bai AI, hop thoai mo ta): src/gemini-web.js thuong tu dang ky lenh nay
 const geminiOpen = commands.gemini_web_open
@@ -681,7 +684,7 @@ function createWindow() {
   win.setMenuBarVisibility(false)
   win.loadFile(path.join(__dirname, '..', 'ui_dist', 'index.html'))
   createStudioView((ctx.accounts && ctx.accounts.panePartition()) || 'persist:youtube')
-  win.on('closed', () => { win = null })
+  win.on('closed', () => { win = null; ctx.geminiWeb.close() }) // cua so Gemini khong giu app chay sau khi dong cua so chinh
   // thu nho luc tool dang chay trong khung: Windows dung ve trang -> menu / hop thoai Studio hong
   win.on('minimize', () => { if (state.studio.job) log('warn', `Đừng thu nhỏ cửa sổ khi tool đang chạy ("${state.studio.job}"): YouTube Studio sẽ ngừng chạy đúng. Có thể để cửa sổ khác che lên.`) })
 }

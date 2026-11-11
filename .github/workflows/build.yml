@@ -93,6 +93,7 @@ jobs:
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-inbox.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-aiposts.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-aiposts.js web
+          xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-gemini.js
 
   # ------------------------------------------------------------------ 1b. Linux: luong tu dong tren YouTube gia
   flows:
@@ -107,7 +108,7 @@ jobs:
           cache: npm
       - name: Cai thu vien
         run: npm ci --no-audit --no-fund
-      - name: Tai khoan, dang video, toi uu video, dang bai, trang chu kenh, tra loi binh luan (tests/flows)
+      - name: Tai khoan, dang video, toi uu video, dang bai, trang chu kenh, tra loi binh luan, Gemini tren trinh duyet (tests/flows)
         run: xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/flows/run.js
 
   # ------------------------------------------------------------------ 2. Windows

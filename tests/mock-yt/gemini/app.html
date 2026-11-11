@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Google Gemini</title>
+<!--
+  Trang Gemini gia. Cau truc (ten the, class, aria-label) chep theo trang that gemini.google.com/app do
+  ngay 11/11/2026 (giao dien tieng Anh): o nhap rich-textarea > div.ql-editor (+ div.ql-clipboard KHONG phai
+  o nhap), nut gem-icon-button.send-button "Send message" <-> "Stop response", user-query / pending-request /
+  thinking-dots-animation, model-response > ... > structured-content-container.model-response-text >
+  message-content#message-content-id-r_... > div.markdown.markdown-main-panel[aria-busy] > p > span.pending.
+  Phan DOAN (chua do duoc vi can dang nhap): anh generated-image > single-image > img.image, hop thoai chan,
+  thong bao het luot.
+  Bien the (window.FLAGS, may chu chen vao): signedOut, blockedDialog, limit, slow (ms), pendingStuck
+  (aria-busy + span.pending khong bao gio het, innerText = "" nhu trang khong duoc ve), chunkMs, imageMs.
+-->
+<style>
+  * { box-sizing: border-box }
+  html, body { margin: 0; height: 100%; background: #131314; color: #e3e3e3; font: 16px "Google Sans", Arial, sans-serif }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer }
+  [hidden] { display: none !important }
+  chat-app, infinite-scroller, input-container, input-area-v2, rich-textarea, gem-icon-button, user-query, pending-request, model-response,
+  structured-content-container, message-content, response-element, code-block, generated-image, single-image, sources-list, thinking-overlay,
+  model-response-content, thinking-dots-animation, mat-dialog-container, download-generated-image-button { display: block }
+  mat-icon { display: inline-block; width: 24px; height: 24px }
+  .top-bar { height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px }
+  .sign-in-button { background: #a8c7fa; color: #062e6f; border-radius: 20px; padding: 10px 24px; text-decoration: none; font-weight: 500 }
+  .avatar { display: inline-block; width: 32px; height: 32px; border-radius: 50%; background: #c58af9 }
+  chat-app { display: flex; flex-direction: column; height: 100% }
+  .chat-container { flex: 1; overflow: auto }
+  infinite-scroller { max-width: 760px; margin: 0 auto; padding: 16px }
+  user-query { margin: 24px 0 24px auto; max-width: 70%; background: #282a2c; border-radius: 24px 4px 24px 24px; padding: 12px 16px; white-space: pre-wrap }
+  model-response { margin: 16px 0 }
+  .markdown p { margin: 0 0 12px; line-height: 1.6 }
+  span.pending { animation: fade .4s ease-in }
+  @keyframes fade { from { opacity: .2 } to { opacity: 1 } }
+  body.stuck span.pending { visibility: hidden } /* trang khong duoc ve: chu co trong DOM nhung innerText rong */
+  code-block { background: #1e1f20; border-radius: 12px; margin: 0 0 12px }
+  .code-block-decoration { display: flex; justify-content: space-between; padding: 8px 16px; font-size: 13px }
+  pre { margin: 0; padding: 12px 16px; overflow: auto }
+  .image-container img.image { width: 512px; height: 512px; border-radius: 16px; display: block }
+  thinking-overlay { color: #8e918f; font-size: 13px }
+  input-container { padding: 0 16px 24px }
+  input-area-v2 { max-width: 760px; margin: 0 auto }
+  fieldset.input-area-fieldset { border: 0; margin: 0; padding: 0 }
+  .text-input-field { display: flex; align-items: flex-end; background: #1e1f20; border-radius: 28px; padding: 12px 12px 12px 24px; min-height: 64px }
+  .text-input-field_textarea-wrapper { flex: 1; max-height: 200px; overflow: auto }
+  rich-textarea { position: relative }
+  .ql-editor { outline: none; min-height: 24px; white-space: pre-wrap; word-break: break-word }
+  .ql-editor p { margin: 0 }
+  .ql-editor.ql-blank::before { content: attr(data-placeholder); color: #8e918f; position: absolute; pointer-events: none }
+  .ql-clipboard { position: absolute; left: -100000px; height: 1px; overflow-y: hidden; top: 50% }
+  gem-icon-button button { width: 40px; height: 40px; border-radius: 50%; background: #a8c7fa; color: #062e6f }
+  .cdk-overlay-container { position: fixed; inset: 0; pointer-events: none; z-index: 1000 }
+  .cdk-overlay-container:empty { display: none }
+  .cdk-overlay-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.6); pointer-events: auto }
+  .cdk-global-overlay-wrapper { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center }
+  .cdk-overlay-pane { pointer-events: auto }
+  mat-dialog-container { width: 520px; background: #2b2c2f; border-radius: 28px; padding: 24px }
+</style></head>
+<body>
+<chat-app id="app-root">
+  <div class="top-bar">
+    <span class="brand">Gemini</span>
+    <div id="account"></div>
+  </div>
+  <div class="chat-container"><infinite-scroller class="chat-history" id="chat-history"></infinite-scroller></div>
+  <input-container class="input-container">
+    <input-area-v2>
+      <fieldset class="input-area-fieldset">
+        <div class="text-input-field">
+          <div class="text-input-field_textarea-wrapper">
+            <div class="text-input-field-main-area">
+              <div class="text-input-field_textarea-inner">
+                <rich-textarea class="text-input-field_textarea ql-container ql-bubble" enterkeyhint="send">
+                  <div class="ql-editor ql-blank textarea new-input-ui" data-gramm="false" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Enter a prompt for Gemini" data-placeholder="Ask Gemini"><p><br></p></div>
+                  <div class="ql-clipboard" contenteditable="true" tabindex="-1"></div>
+                </rich-textarea>
+              </div>
+            </div>
+          </div>
+          <div class="trailing-actions-wrapper">
+            <div class="send-button-container">
+              <gem-icon-button class="send-button" id="send" hidden><button class="mdc-icon-button" aria-label="Send message"><mat-icon fonticon="send"></mat-icon></button></gem-icon-button>
+            </div>
+          </div>
+        </div>
+      </fieldset>
+    </input-area-v2>
+  </input-container>
+</chat-app>
+<div class="cdk-overlay-container" id="overlay"></div>
+<script>/*FLAGS*/</script>
+<script>
+// Trusted Types nhu trang that: chinh sach "default" chi cho createHTML; eval(chuoi) cua ma ngoai bi chan
+if (window.trustedTypes && trustedTypes.createPolicy) trustedTypes.createPolicy('default', { createHTML: (s) => s })
+const F = window.FLAGS || {}
+const $ = (s, r = document) => r.querySelector(s)
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag)
+  for (const [k, v] of Object.entries(attrs)) { if (k === 'class') e.className = v; else e.setAttribute(k, v) }
+  for (const k of kids) e.append(k)
+  return e
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const log = (evt) => fetch('/__log', { method: 'POST', body: JSON.stringify(evt) })
+if (F.pendingStuck) document.body.classList.add('stuck')
+
+const LIMIT_TEXT = "You've reached your limit for Gemini 3 Pro for now. Your limit resets tomorrow at 9:00 AM. Try again later."
+const SIGNIN_TEXT = "Are you signed in? I can search for images, but can't seem to create any for you right now. It's also possible that image creation isn't available in your location yet."
+
+// tai khoan: chua dang nhap -> nut "Sign in"; da dang nhap -> avatar (link SignOutOptions, KHONG phai dang nhap)
+$('#account').append(F.signedOut
+  ? el('a', { class: 'gb_A sign-in-button', href: 'https://accounts.google.com/ServiceLogin?passive=1209600&continue=https://gemini.google.com/app&followup=https://gemini.google.com/app', 'aria-label': 'Sign in' }, 'Sign in')
+  : el('a', { class: 'gb_B', href: 'https://accounts.google.com/SignOutOptions?hl=en&continue=https://gemini.google.com/app', 'aria-label': 'Google Account: Mock User' }, el('span', { class: 'avatar' })))
+
+// hop thoai chan (dieu khoan) che ca trang
+if (F.blockedDialog) {
+  const ok = el('button', { class: 'mdc-button' }, 'Continue')
+  $('#overlay').append(el('div', { class: 'cdk-overlay-backdrop cdk-overlay-dark-backdrop cdk-overlay-backdrop-showing' }),
+    el('div', { class: 'cdk-global-overlay-wrapper' }, el('div', { class: 'cdk-overlay-pane' },
+      el('mat-dialog-container', { role: 'dialog', 'aria-modal': 'true', class: 'mat-mdc-dialog-container' },
+        el('h2', {}, 'Gemini Apps Privacy Notice'), el('p', {}, 'Before you start, review how Google uses your data. Choose a country to continue.'), ok))))
+  ok.onclick = () => { $('#overlay').textContent = '' }
+}
+
+const editor = $('.ql-editor')
+const sendWrap = $('#send')
+const sendBtn = $('#send button')
+const icon = $('#send mat-icon')
+let generating = false
+let stopped = false
+
+// chu trong o nhap: moi <p> mot dong, <br> = xuong dong
+function readEditor() {
+  const lines = []
+  for (const c of editor.childNodes) {
+    if (c.nodeType === 3) lines.push(c.nodeValue)
+    else if (c.nodeType === 1 && /^(P|DIV)$/.test(c.tagName)) {
+      let s = ''
+      for (const n of c.childNodes) s += n.nodeType === 1 && n.tagName === 'BR' ? (n === c.lastChild ? '' : '\n') : n.textContent
+      lines.push(s)
+    } else if (c.nodeType === 1 && c.tagName === 'BR') lines.push('')
+    else lines.push(c.textContent)
+  }
+  return lines.join('\n').replace(/\n+$/, '')
+}
+const hasText = () => editor.textContent.trim().length > 0
+
+function refresh() {
+  editor.classList.toggle('ql-blank', !hasText())
+  sendWrap.hidden = !generating && !hasText()
+  sendWrap.classList.toggle('stop', generating)
+  sendBtn.setAttribute('aria-label', generating ? 'Stop response' : 'Send message')
+  icon.setAttribute('fonticon', generating ? 'stop' : 'send')
+}
+editor.addEventListener('input', refresh)
+editor.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!generating) send() }
+})
+sendBtn.addEventListener('click', () => { if (generating) stop(); else send() })
+
+function stop() {
+  stopped = true
+  generating = false
+  log({ type: 'gemini-stop' })
+  refresh()
+}
+
+// van ban tra loi -> DOM kieu Gemini (doan p > span.pending, danh sach, khoi code code-block)
+function render(md, text, done) {
+  md.textContent = ''
+  const lines = text.split('\n')
+  let i = 0
+  let node = 0
+  const span = (s) => { const sp = el('span', done ? {} : { class: 'pending' }); sp.append(s); return sp }
+  while (i < lines.length) {
+    const line = lines[i]
+    if (/^```/.test(line)) {
+      const lang = line.slice(3).trim()
+      const body = []
+      i++
+      while (i < lines.length && !/^```/.test(lines[i])) body.push(lines[i++])
+      i++
+      md.append(el('code-block', { 'data-path-to-node': String(node++) }, el('div', { class: 'code-block' },
+        el('div', { class: 'code-block-decoration header-formatted' }, el('span', {}, (lang || 'code').toUpperCase()),
+          el('div', { class: 'buttons' }, el('button', { 'aria-label': 'Copy code' }, el('mat-icon', { fonticon: 'content_copy' }, 'content_copy')))),
+        el('div', { class: 'formatted-code-block-internal-container' }, el('div', { class: 'animated-opacity' },
+          el('pre', {}, el('code', { role: 'text', 'data-test-id': 'code-content', class: `code-container formatted${lang ? ` language-${lang}` : ''}` }, body.join('\n'))))))))
+      continue
+    }
+    if (!line.trim()) { i++; continue }
+    if (/^- /.test(line)) {
+      const ul = el('ul', { 'data-path-to-node': String(node++) })
+      while (i < lines.length && /^- /.test(lines[i])) ul.append(el('li', {}, el('p', {}, span(lines[i++].slice(2)))))
+      md.append(ul)
+      continue
+    }
+    const p = el('p', { dir: 'ltr', 'data-path-to-node': String(node++), ...(done ? {} : { class: 'pending' }) })
+    let first = true
+    while (i < lines.length && lines[i].trim() && !/^(```|- )/.test(lines[i])) {
+      if (!first) p.append(el('br'))
+      p.append(span(lines[i++]))
+      first = false
+    }
+    md.append(p)
+  }
+}
+
+async function send() {
+  const prompt = readEditor()
+  if (!prompt.trim()) return
+  editor.textContent = ''
+  editor.append(el('p', {}, el('br')))
+  stopped = false
+  generating = true
+  refresh()
+  if (/\/app\/?$/.test(location.pathname)) history.pushState({}, '', location.pathname.replace(/\/?$/, '/') + Math.random().toString(16).slice(2, 18))
+  const hist = $('#chat-history')
+  hist.append(el('user-query', {}, el('div', { class: 'query-text' }, el('p', { class: 'query-text-line' }, prompt.slice(0, 300)))))
+  const pending = el('pending-request', {}, el('thinking-dots-animation', {}, '...'))
+  hist.append(pending)
+  const item = await fetch('/gemini/__ask', { method: 'POST', body: JSON.stringify({ prompt }) }).then((r) => r.json())
+  await sleep(F.slow || 300)
+  if (stopped) { pending.remove(); return }
+  pending.remove()
+  let text = item.text || ''
+  if (item.error === 'limit' || F.limit) text = LIMIT_TEXT
+  else if (item.error === 'signin') text = SIGNIN_TEXT
+  else if (item.image && !text) text = "Here's your image:"
+  const md = el('div', { class: 'markdown markdown-main-panel', 'aria-busy': 'true', dir: 'ltr', 'aria-live': 'polite' })
+  const scc = el('structured-content-container', { class: 'model-response-text processing-state-visible' },
+    el('message-content', { id: `message-content-id-r_${Math.random().toString(16).slice(2, 18)}`, class: 'model-response-text' }, md))
+  const content = el('div', { class: 'response-content' }, scc)
+  hist.append(el('model-response', {},
+    el('div', { class: 'response-container' },
+      el('thinking-overlay', {}, el('button', {}, 'Show thinking'), el('div', { class: 'markdown' }, el('p', {}, 'Thinking about the request…'))),
+      el('div', { class: 'response-container-content' }, el('model-response-content', {}, content))),
+    el('div', { class: 'response-footer' }, el('sources-list', {}, el('p', {}, 'Sources: example.com')), el('button', { 'aria-label': 'Copy response' }, el('mat-icon', { fonticon: 'content_copy' }, 'content_copy')))))
+  // chu chay dan tung manh
+  const steps = 8
+  for (let k = 1; k <= steps; k++) {
+    if (stopped) return
+    render(md, text.slice(0, Math.ceil(text.length * k / steps)), false)
+    await sleep(F.chunkMs || 120)
+  }
+  if (item.image) {
+    await sleep(F.imageMs || 600)
+    if (stopped) return
+    content.append(el('generated-image', {}, el('single-image', { class: 'generated-image large' },
+      el('div', { class: 'image-container' }, el('button', { class: 'image-button' }, el('img', { class: 'image loaded', src: item.src, alt: 'Generated image' })),
+        el('div', { class: 'generated-image-controls' }, el('download-generated-image-button', {}, el('button', { 'aria-label': 'Download full size image' }, el('mat-icon', { fonticon: 'download' }))))))))
+  }
+  if (stopped) return
+  if (!F.pendingStuck) {
+    render(md, text, true)
+    md.setAttribute('aria-busy', 'false')
+    scc.classList.remove('processing-state-visible')
+  }
+  generating = false
+  refresh()
+  log({ type: 'gemini-done', length: text.length })
+}
+refresh()
+</script>
+</body></html>
