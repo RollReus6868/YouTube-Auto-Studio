@@ -8,7 +8,7 @@ const { pathToFileURL } = require('url')
 
 const updater = require('./updater')
 const scanner = require('./scanner')
-const { buildVideoMeta, validateMeta, planSchedule, applyVisibility, VIS_MODES, CATEGORIES, DESC_POSITIONS } = require('./metadata')
+const { buildVideoMeta, validateMeta, titleErrors, planSchedule, applyVisibility, VIS_MODES, CATEGORIES, DESC_POSITIONS } = require('./metadata')
 const { readScript, SCRIPT_EXT } = require('./docx')
 const { Store, dropApiData } = require('./store')
 const { endpoints, gemini, geminiModels, GEMINI_MODELS, descriptionPrompt } = require('./google')
@@ -453,6 +453,28 @@ function saveDescription({ id, text }) {
   runScan(true)
 }
 
+// Sua tieu de mot video (trang Dang video): ghi dong "Tiêu đề:" vao file thong tin cua video ("Ten video.txt" / info.txt).
+// Scanner da doc tieu de tu file nay nen quet lai van giu, file di theo video vao da-dang/, va Gemini viet mo ta
+// (item.meta.title) dung tieu de moi. title rong hoac bang tieu de goc = bo dong do (ve tieu de goc: ten file / mau).
+function saveTitle({ id, title }) {
+  const item = raw.get(id)
+  if (!item) return
+  const job = state.jobs[id]
+  if (job && ['queued', 'run', 'done'].includes(job.status)) return log('warn', `"${item.meta.title}" đang đăng hoặc đã đăng, không sửa tiêu đề được nữa.`)
+  let t = String(title || '').replace(/\s+/g, ' ').trim()
+  if (t === item.meta.titleBase) t = ''
+  const bad = t ? titleErrors(t) : []
+  if (bad.length) return log('warn', `Chưa lưu tiêu đề: ${bad[0]}`)
+  const file = item.infoFile || path.join(item.folder, 'info.txt')
+  const before = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
+  const text = scanner.setInfoTitle(before, t)
+  if (text) fs.writeFileSync(file, text)
+  else if (before) fs.rmSync(file, { force: true }) // file chi co dong tieu de: bo luon file trong
+  const where = path.relative(videoDir(), file) || path.basename(file)
+  log('ok', t ? `Đã đổi tiêu đề thành "${t}" (lưu trong ${where}).` : `Đã trả về tiêu đề gốc "${item.meta.titleBase}".`)
+  runScan(true)
+}
+
 // Binh luan duoi video: tra loi qua hop thu Studio (src/features/inbox.js, trang Cong dong).
 // Trang "Binh luan" (lay qua API) da bo tu 0.4.1 vi trung voi Cong dong (tranh tra loi 2 lan).
 
@@ -510,6 +532,7 @@ const commands = {
   script_attach: (id) => attachScript(id),
   script_remove: (id) => setScript(id, ''),
   save_description: (p) => !busy && saveDescription(p || {}),
+  video_title: (p) => p && p.id && saveTitle(p), // { id, title } - title rong = ve tieu de goc
   pane: (r) => setPane(r),
   clear: () => { state.logs = [] },
   scan: () => runScan(),

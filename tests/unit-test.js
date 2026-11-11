@@ -318,6 +318,49 @@ test('thu muc video: van doc thu muc con kieu cu va <goc>/videos/', () => {
   assert.equal(v9.layout, 'folder')
 })
 
+test('sua tieu de tung video: dong "Tiêu đề:" trong file .txt, quet lai van giu, ve tieu de goc', () => {
+  // ghi / thay / bo dong tieu de o phan dau, khong dong vao phan mo ta sau ---
+  assert.equal(sc.setInfoTitle('', 'Tiêu đề mới'), 'Tiêu đề: Tiêu đề mới\r\n')
+  assert.equal(sc.setInfoTitle('﻿---\r\nMô tả\r\n', 'A: b'), 'Tiêu đề: A: b\r\n---\r\nMô tả\r\n')
+  const old = 'Thẻ: a\nTitle: cũ\nTiêu đề: cũ 2\n---\nTiêu đề: dòng trong mô tả\n'
+  assert.equal(sc.setInfoTitle(old, '  Mới\r\n  hai dòng\t'), 'Thẻ: a\r\nTiêu đề: Mới hai dòng\r\n---\r\nTiêu đề: dòng trong mô tả\r\n')
+  assert.equal(sc.setInfoTitle(old, ''), 'Thẻ: a\r\n---\r\nTiêu đề: dòng trong mô tả\r\n')
+  assert.equal(sc.setInfoTitle('Thẻ: a\nMô tả:\nTiêu đề: trong mô tả\n', 'X'), 'Tiêu đề: X\r\nThẻ: a\r\nMô tả:\r\nTiêu đề: trong mô tả\r\n')
+  assert.equal(sc.setInfoTitle('Tiêu đề: chỉ có dòng này\n', null), '')
+  assert.equal(sc.parseInfo(sc.setInfoTitle(old, 'Mới')).info.tieu_de, 'Mới')
+  assert.equal(sc.parseInfo(sc.setInfoTitle(old, 'Mới')).info.mo_ta, 'Tiêu đề: dòng trong mô tả')
+  // gioi han cua YouTube
+  assert.deepEqual(md.titleErrors('ok'), [])
+  assert.match(md.titleErrors('a'.repeat(101))[0], /101 ký tự.*100/)
+  assert.equal(md.titleErrors('a'.repeat(100)).length, 0)
+  assert.match(md.titleErrors('a <b>')[0], /< hoặc >/)
+  assert.match(md.titleErrors('')[0], /Thiếu tiêu đề/)
+
+  // thu muc phang: tieu de goc = ten file; sua -> ghi "Ten.txt" canh video -> quet lai lay tieu de da sua
+  const d = tmp()
+  write(path.join(d, 'Bí ẩn tập 7.mp4'))
+  const preset = { ...md.defaultPreset(), title: '{ten_video} | Tập {so_tap}' }
+  const metaOf = () => md.buildVideoMeta(sc.scanVideos(d).videos[0], preset)
+  let m = metaOf()
+  assert.deepEqual([m.title, m.titleBase, m.titleOwn], ['Bí ẩn tập 7', 'Bí ẩn tập 7', ''])
+  const item = sc.scanVideos(d).videos[0]
+  fs.writeFileSync(item.infoFile, sc.setInfoTitle('', 'Bí ẩn tập 7: Ngôi đền cổ'))
+  m = metaOf()
+  assert.deepEqual([m.title, m.titleBase, m.titleOwn], ['Bí ẩn tập 7: Ngôi đền cổ', 'Bí ẩn tập 7', 'Bí ẩn tập 7: Ngôi đền cổ'])
+  assert.equal(m.description.split('\n')[0], 'Bí ẩn tập 7', 'mo ta mau dung {ten_video}')
+  assert.equal(md.buildVideoMeta(sc.scanVideos(d).videos[0], { ...preset, description: '{tieu_de}' }).description, 'Bí ẩn tập 7: Ngôi đền cổ', '{tieu_de} = tieu de da sua')
+  fs.writeFileSync(item.infoFile, sc.setInfoTitle(fs.readFileSync(item.infoFile, 'utf8'), ''))
+  assert.deepEqual([metaOf().title, metaOf().titleOwn], ['Bí ẩn tập 7', ''])
+
+  // thu muc con kieu cu: tieu de goc = mau; info.txt duoc nho de ghi vao
+  write(path.join(d, 'Tập 3 cũ', 'video.mp4'))
+  write(path.join(d, 'Tập 3 cũ', 'Info.txt'), 'Tiêu đề: Riêng tập {so_tap}\n---\nMô tả\n')
+  const f = sc.scanVideos(d).videos.find((v) => v.layout === 'folder')
+  assert.equal(f.infoFile, path.join(d, 'Tập 3 cũ', 'Info.txt'))
+  m = md.buildVideoMeta(f, preset)
+  assert.deepEqual([m.title, m.titleBase, m.titleOwn], ['Riêng tập 3', 'Tập 3 cũ | Tập 3', 'Riêng tập {so_tap}'])
+})
+
 test('chuyen file da dang vao da-dang/ (thu muc phang)', () => {
   const up = require('../src/uploader')
   const d = tmp()

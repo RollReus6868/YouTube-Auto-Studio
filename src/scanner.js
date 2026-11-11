@@ -77,6 +77,29 @@ function parseInfo(text) {
   return { info, warnings }
 }
 
+// Ghi dong "Tiêu đề: ..." vao phan dau cua info.txt / "Ten video.txt" (truoc dong --- hoac "Mô tả:" dung mot minh,
+// giong parseInfo), giu nguyen cac dong khac va phan mo ta. Da co dong tieu de thi thay tai cho (bo dong trung).
+// title rong / null = bo dong tieu de (ve tieu de goc: ten file / mau). Tra ve noi dung moi (\r\n, khong BOM).
+function setInfoTitle(text, title) {
+  const lines = String(text || '').replace(/^﻿/, '').split(/\r?\n/)
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop()
+  const keyOf = (l) => { const m = /^\s*([^:#][^:]{0,40}):\s*(.*)$/.exec(l); return m ? { field: ALIASES[key(m[1])], v: m[2].trim() } : null }
+  let end = lines.findIndex((l) => /^\s*-{3,}\s*(mô tả|mo ta)?\s*-*\s*$/i.test(l) || ((k) => k && k.field === 'mo_ta' && !k.v)(keyOf(l)))
+  if (end === -1) end = lines.length
+  const t = String(title || '').replace(/\s+/g, ' ').trim()
+  const head = []
+  let put = false
+  for (const l of lines.slice(0, end)) {
+    const k = keyOf(l)
+    if (!k || k.field !== 'tieu_de') { head.push(l); continue }
+    if (t && !put) head.push(`Tiêu đề: ${t}`)
+    put = true
+  }
+  if (t && !put) head.unshift(`Tiêu đề: ${t}`)
+  const out = [...head, ...lines.slice(end)]
+  return out.length ? `${out.join('\r\n')}\r\n` : ''
+}
+
 // "2026-10-28_19h00_ten-video" -> { date, time, name }
 function parseFolderName(dir) {
   const m = /^(\d{4}-\d{2}-\d{2})(?:[ _](\d{1,2})[h:](\d{2}))?[ _-]+(.+)$/.exec(dir)
@@ -124,6 +147,7 @@ function scanVideo(root, dir) {
 
   const infoFile = files.find((f) => /^(info|thong[-_ ]?tin|mo[-_ ]?ta)\.txt$/i.test(f))
   if (infoFile) {
+    item.infoFile = path.join(folder, infoFile) // sua tieu de tren trang Dang video ghi vao file nay
     const { info, warnings } = parseInfo(fs.readFileSync(path.join(folder, infoFile), 'utf8'))
     item.info = info
     item.warnings.push(...warnings)
@@ -518,4 +542,4 @@ function createSkeleton(root) {
   }
 }
 
-module.exports = { scriptOf, VIDEO_EXT, IMAGE_EXT, THUMB_EXT, DIRS, POST_TYPE_LABEL, POST_IMAGES_MAX, parseWhen, parseInfo, parseFolderName, parsePostText, videoId, imageSize, scan, scanVideo, scanVideos, scanPost, createSkeleton }
+module.exports = { scriptOf, VIDEO_EXT, IMAGE_EXT, THUMB_EXT, DIRS, POST_TYPE_LABEL, POST_IMAGES_MAX, parseWhen, parseInfo, setInfoTitle, parseFolderName, parsePostText, videoId, imageSize, scan, scanVideo, scanVideos, scanPost, createSkeleton }

@@ -1,6 +1,6 @@
 import {
   AlertTriangle, ArrowUpCircle, BookOpen, CalendarClock, Clapperboard, Copy, Download, Eraser, ExternalLink, FileText, FileVideo, FolderOpen, FolderPlus, Globe, Home,
-  ImageIcon, LayoutTemplate, Palette, Paperclip, Plus, RefreshCw, Save, ScrollText, Settings, Sparkles,
+  ImageIcon, LayoutTemplate, Palette, Paperclip, PenLine, Plus, RefreshCw, RotateCcw, Save, ScrollText, Settings, Sparkles,
   Square, Subtitles, Trash2, Upload, X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -143,6 +143,52 @@ function VisPicker({ v, disabled, send }: { v: VideoItem; disabled: boolean; sen
   )
 }
 
+// Sua tieu de cua mot video: luu thanh dong "Tiêu đề:" trong file .txt cua video (backend: video_title).
+// Gioi han cua YouTube: toi da 100 ky tu, khong co < >. "Về tiêu đề gốc" bo dong do (ten file / theo mau).
+const TITLE_MAX = 100
+function titleProblem(t: string) {
+  const n = chars(t)
+  if (!t) return 'Tiêu đề không được để trống.'
+  if (n > TITLE_MAX) return `Tiêu đề dài ${n} ký tự, YouTube chỉ cho tối đa ${TITLE_MAX}. Bớt ${n - TITLE_MAX} ký tự.`
+  if (/[<>]/.test(t)) return 'YouTube không cho dấu < hoặc > trong tiêu đề.'
+  return ''
+}
+function TitleEditor({ v, disabled, send }: { v: VideoItem; disabled: boolean; send: Backend['send'] }) {
+  const own = v.meta.titleOwn ?? ''
+  const base = v.meta.titleBase ?? v.name
+  const saved = own || v.meta.title
+  const [text, setText] = useState(saved)
+  useEffect(() => setText(saved), [saved])
+  const t = text.replace(/\s+/g, ' ').trim()
+  const n = chars(t)
+  const err = titleProblem(t)
+  const dirty = t !== saved
+  const file = v.infoFile || 'info.txt'
+  const save = () => { if (!disabled && dirty && !err) send('video_title', { id: v.id, title: t }) }
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <label htmlFor={`tieu-de-${v.id}`} className="text-xs font-bold text-muted-foreground">Tiêu đề</label>
+        <span className={cn('text-[11px] tabular-nums', n > TITLE_MAX ? 'font-semibold text-red-600 dark:text-red-400' : 'text-muted-foreground')}>{n}/{TITLE_MAX} ký tự</span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <TextInput id={`tieu-de-${v.id}`} aria-label="Tiêu đề video" value={text} disabled={disabled} aria-invalid={!!err}
+          className={cn('min-w-0 flex-1 basis-60', err && 'border-red-500/60 focus-visible:ring-red-500/30')}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') save(); else if (e.key === 'Escape') setText(saved) }} />
+        <Button variant="outline" className="h-9 px-3 text-xs" disabled={disabled || !dirty || !!err} onClick={save}><Save /> Lưu tiêu đề</Button>
+        {own && <Button variant="subtle" className="h-9 px-3 text-xs" disabled={disabled} onClick={() => send('video_title', { id: v.id, title: '' })} title={`Trở về: ${base}`}><RotateCcw /> Về tiêu đề gốc</Button>}
+      </div>
+      {err ? <p role="alert" className="text-[11px] font-semibold text-red-600 dark:text-red-400">{err}</p>
+        : <p className="break-words text-[11px] text-muted-foreground">
+            {disabled ? 'Video đang đăng hoặc đã đăng: không sửa tiêu đề được nữa.'
+              : own ? <>Tiêu đề riêng, lưu trong {file}. Tiêu đề gốc: <i>{base}</i></>
+              : <>Đang theo {v.layout === 'folder' ? 'mẫu' : 'tên file'}. Sửa rồi bấm Lưu (hoặc Enter): tool ghi dòng “Tiêu đề:” vào {file}, quét lại vẫn giữ.</>}
+          </p>}
+    </div>
+  )
+}
+
 /* ================= Dang video ================= */
 // cac buoc cua src/flows/upload.js (hop thoai tai len cua Studio)
 const STEPS: Record<string, string> = {
@@ -189,6 +235,7 @@ function VideoCard({ v, job, open, onToggle, busy, connected, send }: {
           <h3 className="line-clamp-2 text-sm font-bold leading-snug">{v.meta.title || v.name}</h3>
           <div className="flex flex-wrap gap-1">
             <Chip icon={LayoutTemplate} tone="active">{v.preset}</Chip>
+            {v.meta.titleOwn && <Chip icon={PenLine} tone="active">Tiêu đề riêng</Chip>}
             {v.meta.publishAt ? <Chip icon={CalendarClock} tone={v.vis ? 'active' : undefined}>{fmtWhen(v.meta.publishAt)}</Chip> : <Chip tone={v.vis ? 'active' : undefined}>{PRIVACY[v.meta.privacy]} ngay</Chip>}
             {(v.meta.premiere || (v.meta.publishAt && v.meta.schedulePremiere)) && <Chip icon={Clapperboard}>Công chiếu</Chip>}
             {v.video && <Chip icon={FileVideo}>{v.video}</Chip>}
@@ -207,6 +254,7 @@ function VideoCard({ v, job, open, onToggle, busy, connected, send }: {
       </div>
       {open && (
         <div className="space-y-3 border-t border-border/50 p-3 text-sm">
+          <TitleEditor v={v} disabled={!!active || job?.status === 'done'} send={send} />
           <div>
             <p className="mb-1 text-xs font-bold text-muted-foreground">Mô tả sẽ đăng</p>
             <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted/40 p-2.5 font-sans text-[13px]">{v.meta.description || '(trống)'}</pre>
@@ -304,7 +352,7 @@ function FlatHelp() {
   return (
     <Card title="Cách xếp file" hint="một thư mục, không cần thư mục con">
       <pre className="overflow-x-auto rounded-lg bg-muted/40 p-2.5 font-mono text-[12px] leading-relaxed">{`Video cần đăng/
-  Bí ẩn rừng sâu tập 1.mp4     ← video (tiêu đề = tên file)
+  Bí ẩn rừng sâu tập 1.mp4     ← video (tiêu đề = tên file, sửa được trong tool)
   Bí ẩn rừng sâu tập 1.jpg     ← thumbnail cùng tên (.jpg .jpeg .png .webp)
   Bí ẩn rừng sâu tập 1.vi.srt  ← phụ đề (tùy chọn)
   Bí ẩn rừng sâu tập 1.txt     ← mô tả riêng (tùy chọn, Gemini lưu vào đây)
@@ -327,7 +375,7 @@ function VideosPage({ state, send, go }: Backend & { go: (p: string) => void }) 
       <PageHeader
         icon={Upload}
         title="Đăng video"
-        description="Chọn một thư mục chứa video và ảnh thumbnail cùng tên. Tiêu đề là tên file; mô tả, thẻ, chế độ hiển thị và lịch lấy theo mẫu mặc định. Tool đăng bằng hộp thoại tải lên của YouTube Studio."
+        description="Chọn một thư mục chứa video và ảnh thumbnail cùng tên. Tiêu đề là tên file (sửa được trên từng video); mô tả, thẻ, chế độ hiển thị và lịch lấy theo mẫu mặc định. Tool đăng bằng hộp thoại tải lên của YouTube Studio."
         actions={<>
           <UpdateBadge state={state} go={() => go('update')} />
           {up.channels.length ? (
@@ -371,7 +419,7 @@ function VideosPage({ state, send, go }: Backend & { go: (p: string) => void }) 
           </div>
         ) : (
           <>
-            <p className="text-xs text-muted-foreground">{state.scan.videos.length} video · {ready.length} sẵn sàng · bấm vào một video để xem mô tả, nhờ Gemini viết (tùy chọn), hoặc đăng riêng</p>
+            <p className="text-xs text-muted-foreground">{state.scan.videos.length} video · {ready.length} sẵn sàng · bấm vào một video để sửa tiêu đề, xem mô tả, nhờ Gemini viết (tùy chọn), hoặc đăng riêng</p>
             {state.scan.videos.map((v) => (
               <VideoCard key={v.id} v={v} job={state.jobs[v.id]} open={open === v.id} onToggle={() => setOpen(open === v.id ? null : v.id)} busy={busy} connected={connected} send={send} />
             ))}

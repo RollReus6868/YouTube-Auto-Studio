@@ -99,15 +99,18 @@ function buildVideoMeta(item, preset, extra = {}) {
     hashtag: tags.slice(0, 3).map((t) => `#${t.replace(/\s+/g, '')}`).join(' '),
     playlist: info.playlist || p.playlist,
   }
-  // thu muc phang: tieu de = ten file (tru khi file .txt rieng co "Tieu de:")
-  const title = (item.titleFromName && !info.tieu_de ? String(item.name || '') : render(info.tieu_de || p.title, vars)).trim()
+  // tieu de goc: thu muc phang = ten file, thu muc con kieu cu = mau. Dong "Tieu de:" trong file .txt rieng (nguoi dung
+  // viet tay hoac sua tren trang Dang video) duoc uu tien.
+  const titleBase = (item.titleFromName ? String(item.name || '') : render(p.title, vars)).trim()
+  const titleOwn = info.tieu_de ? String(info.tieu_de) : ''
+  const title = titleOwn ? render(titleOwn, vars).trim() : titleBase
   vars.tieu_de = title
   const settings = extra.settings || {}
   const fixed = render(settings.descDefault || '', vars).trim()
   const description = composeDescription(render(info.mo_ta || p.description, vars), fixed, settings.descPosition)
   const privacy = ['public', 'unlisted', 'private'].includes(info.hien_thi) ? info.hien_thi : p.privacy
   return {
-    title, description, tags,
+    title, titleBase, titleOwn, description, tags,
     // co phan mo ta mac dinh: khi dang, thay mo ta Studio dien san (mo ta mac dinh cua kenh) de khong lap dong
     descReplace: !!fixed,
     playlist: info.playlist || p.playlist,
@@ -123,12 +126,19 @@ function buildVideoMeta(item, preset, extra = {}) {
   }
 }
 
+// Gioi han tieu de cua YouTube: khong trong, toi da 100 ky tu, khong co < >. Tra ve danh sach loi.
+function titleErrors(title) {
+  const t = String(title || '')
+  const errs = []
+  if (!t) errs.push('Thiếu tiêu đề.')
+  if ([...t].length > LIMITS.title) errs.push(`Tiêu đề dài ${[...t].length} ký tự, YouTube chỉ cho tối đa ${LIMITS.title}.`)
+  if (/[<>]/.test(t)) errs.push('Tiêu đề không được chứa dấu < hoặc >.')
+  return errs
+}
+
 // Kiem tra theo gioi han cua YouTube (tieu de, mo ta, the). Tra ve danh sach loi (rong = hop le).
 function validateMeta(m) {
-  const errs = []
-  if (!m.title) errs.push('Thiếu tiêu đề.')
-  if ([...m.title].length > LIMITS.title) errs.push(`Tiêu đề dài ${[...m.title].length} ký tự, YouTube chỉ cho tối đa ${LIMITS.title}.`)
-  if (/[<>]/.test(m.title)) errs.push('Tiêu đề không được chứa dấu < hoặc >.')
+  const errs = titleErrors(m.title)
   if (/[<>]/.test(m.description)) errs.push('Mô tả không được chứa dấu < hoặc >.')
   const bytes = Buffer.byteLength(m.description, 'utf8')
   if (bytes > LIMITS.descriptionBytes) errs.push(`Mô tả dài ${bytes} byte${m.descReplace ? ' (tính cả phần mô tả mặc định trong Cài đặt)' : ''}, YouTube chỉ cho tối đa ${LIMITS.descriptionBytes}.`)
@@ -206,4 +216,4 @@ function applyVisibility(meta, ov, now = new Date()) {
   return { meta: { ...out, privacy: 'private', publishAt: at.toISOString(), schedulePremiere: !!ov.premiere }, warning: '' }
 }
 
-module.exports = { CATEGORIES, LIMITS, SCHEDULE_MODES, DESC_POSITIONS, VIS_MODES, composeDescription, defaultPreset, normalizePreset, splitTags, render, buildVideoMeta, validateMeta, planSchedule, applyVisibility }
+module.exports = { CATEGORIES, LIMITS, SCHEDULE_MODES, DESC_POSITIONS, VIS_MODES, composeDescription, defaultPreset, normalizePreset, splitTags, render, buildVideoMeta, titleErrors, validateMeta, planSchedule, applyVisibility }
