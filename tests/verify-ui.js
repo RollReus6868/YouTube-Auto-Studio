@@ -45,6 +45,12 @@ function findBrowser() {
     for (const [width, height] of [[1440, 900], [1100, 680]]) {
       const ctx = await browser.newContext({ viewport: { width, height } })
       await ctx.addInitScript(`localStorage.setItem('yt-auto-studio-mode', '${mode}')`)
+      // ?demo&rec: backend gia, ghi lai lenh gui xuong main (window.__sent), state van la du lieu mau
+      await ctx.addInitScript(() => {
+        if (!location.search.includes('rec')) return
+        window.__sent = []
+        window.ya = { call: (c, p) => { window.__sent.push([c, p]); return Promise.resolve(null) }, onState() {} }
+      })
       const page = await ctx.newPage()
       page.on('console', (m) => m.type() === 'error' && problems.push(`console: ${m.text()}`))
       page.on('pageerror', (e) => problems.push(`pageerror: ${e}`))
@@ -95,6 +101,62 @@ function findBrowser() {
       await page.getByRole('button', { name: /3\. Tuỳ chọn/ }).click()
       await page.getByRole('radiogroup', { name: 'Nguồn ảnh' }).waitFor()
       await check('aiposts-tuy-chon')
+      // doi ngay + gio cua mot bai bang ban phim va chuot (loi cu: o datetime-local bi state cua main ghi de moi phim,
+      // go do dang gui ca gia tri rong) -> o hien gia tri moi, moi lan chon gui dung 1 aipost_update
+      {
+        const p2 = (n) => String(n).padStart(2, '0')
+        const at = (n, h, m) => { const d = new Date(); d.setDate(d.getDate() + n); d.setHours(h, m, 0, 0); return d }
+        const vnDay = (d) => `${d.getDate()} thg ${d.getMonth() + 1}, ${d.getFullYear()}`
+        const sentOf = async (cmd) => (await page.evaluate(() => window.__sent)).filter(([c]) => c === cmd).map(([, p]) => p)
+        await page.goto(`${URL}?demo&rec#aiposts`)
+        const card = page.getByRole('article').first()
+        // ngay: mo lich, go "dd/mm/yyyy" + Enter
+        const d9 = at(9, 9, 0)
+        await card.getByRole('button', { name: /^Ngày đăng:/ }).click()
+        const cal = card.getByRole('dialog', { name: 'Chọn ngày' })
+        await cal.waitFor()
+        await check('aiposts-chon-ngay')
+        await cal.getByLabel('Ngày', { exact: true }).click()
+        await page.keyboard.press('Control+A')
+        await page.keyboard.type(`${p2(d9.getDate())}/${p2(d9.getMonth() + 1)}/${d9.getFullYear()}`)
+        await page.keyboard.press('Enter')
+        await card.getByRole('button', { name: `Ngày đăng: ${vnDay(d9)}`, exact: true }).waitFor()
+        // gio: go 21:07 + Tab -> lam tron len 21:15 nhu YouTube
+        const time = card.getByLabel('Giờ đăng', { exact: true })
+        await time.click()
+        await page.keyboard.press('Control+A')
+        await page.keyboard.type('21:07')
+        await page.keyboard.press('Tab')
+        await page.waitForFunction(() => document.querySelector('article input[aria-label="Giờ đăng"]').value === '21:15')
+        // ngay bang chuot: bam ngay khac trong lich (giu gio 21:15); ngay da qua bi khoa
+        const d10 = at(10, 21, 15)
+        await card.getByRole('button', { name: /^Ngày đăng:/ }).click()
+        const past = cal.getByRole('button', { name: vnDay(at(-1, 0, 0)), exact: true })
+        if (await past.count()) assert(await past.isDisabled(), `${tag}: ngay da qua bi khoa`)
+        await cal.getByRole('button', { name: vnDay(d10), exact: true }).click()
+        await card.getByRole('button', { name: `Ngày đăng: ${vnDay(d10)}`, exact: true }).waitFor()
+        assert.equal(await time.inputValue(), '21:15')
+        assert.deepEqual(await sentOf('aipost_update'), [
+          { id: 'a1', patch: { when: d9.toISOString() } },
+          { id: 'a1', patch: { when: at(9, 21, 15).toISOString() } },
+          { id: 'a1', patch: { when: d10.toISOString() } },
+        ], `${tag}: lenh aipost_update`)
+        // Tu ngay / Den ngay (khung 2): chon bang chuot; Den ngay khoa cac ngay truoc Tu ngay
+        const d3 = at(3, 0, 0)
+        const d5 = at(5, 0, 0)
+        await page.getByRole('button', { name: /^Từ ngày:/ }).click()
+        await page.getByRole('dialog', { name: 'Chọn ngày' }).getByRole('button', { name: vnDay(d3), exact: true }).click()
+        await page.getByRole('button', { name: `Từ ngày: ${vnDay(d3)}`, exact: true }).waitFor()
+        await page.getByRole('button', { name: /^Đến ngày:/ }).click()
+        const cal2 = page.getByRole('dialog', { name: 'Chọn ngày' })
+        await cal2.waitFor()
+        const before = cal2.getByRole('button', { name: vnDay(at(2, 0, 0)), exact: true })
+        if (await before.count()) assert(await before.isDisabled(), `${tag}: Den ngay truoc Tu ngay bi khoa`)
+        await cal2.getByRole('button', { name: vnDay(d5), exact: true }).click()
+        await page.getByRole('button', { name: `Đến ngày: ${vnDay(d5)}`, exact: true }).waitFor()
+        const ymd = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
+        assert.deepEqual(await sentOf('aipost_save'), [{ from: ymd(d3) }, { to: ymd(d5) }], `${tag}: lenh aipost_save`)
+      }
       // trang chu kenh: kenh co anh dai dien hien anh that (nhu trang Tai khoan), khong anh / anh loi -> chu cai
       await page.goto(`${URL}?demo#hometab`)
       const homeRow = (name) => page.locator('li', { has: page.getByLabel(`Chọn kênh ${name}`) })

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { ActionBar, Button, Card, Choice, EmptyState, Field, PageBody, PageHeader, Pill, Select, TextArea, TextInput, ToggleRow, cn, type Tone } from '../kit'
+import { DatePicker, TimePicker } from '../VisibilityCard'
 import type { PageProps } from './index'
 
 type AiType = 'text' | 'image' | 'poll' | 'quiz' | 'image_poll'
@@ -43,9 +44,39 @@ const RESULT: Record<string, string> = { posted: 'Đã đăng', scheduled: 'Đã
 
 const p2 = (n: number) => String(n).padStart(2, '0')
 const ymd = (d: Date) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
-const local = (iso: string | null) => { if (!iso) return ''; const d = new Date(iso); return `${ymd(d)}T${p2(d.getHours())}:${p2(d.getMinutes())}` }
+const hm = (d: Date) => `${p2(d.getHours())}:${p2(d.getMinutes())}`
 const fmtWhen = (iso: string | null) => { if (!iso) return 'Đăng ngay'; const d = new Date(iso); return `${p2(d.getHours())}:${p2(d.getMinutes())} ${p2(d.getDate())}/${p2(d.getMonth() + 1)}` }
 const timesOf = (s: string) => [...new Set((s.match(/\d{1,2}\s*[:hg.]\s*\d{0,2}|\b\d{1,2}\b/g) || []))].length
+
+// Gia tri hien ngay khi nguoi dung chon (khong cho main tra state ve); main day gia tri khac thi lay theo main
+function useLocal<T>(value: T): [T, (v: T) => void] {
+  const [v, setV] = useState(value)
+  useEffect(() => setV(value), [value])
+  return [v, setV]
+}
+
+// Ngay + gio dang cua mot bai. Truoc day la <input type="datetime-local"> dieu khien boi state cua main va gui
+// aipost_update moi lan go mot phim: React tra o ve gia tri cu ngay sau moi phim (Chrome mat phan dang go),
+// go do dang thi gui ca gia tri do dang / rong (when = null) -> khong sua duoc ngay thang.
+// Nay dung o ngay kieu Studio (DatePicker, khoa ngay da qua) + o gio moc 15 phut nhu trang Dang video; chon xong moi gui 1 lenh.
+function WhenPicker({ when, onChange }: { when: string | null; onChange: (iso: string) => void }) {
+  const [v, setV] = useLocal(when)
+  const d = v ? new Date(v) : null
+  const tomorrow = () => { const t = new Date(); t.setDate(t.getDate() + 1); return ymd(t) }
+  const set = (day: string, time: string) => {
+    const iso = new Date(`${day}T${time}:00`).toISOString()
+    setV(iso)
+    if (iso !== when) onChange(iso)
+  }
+  const day = d ? ymd(d) : ''
+  const time = d ? hm(d) : ''
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="w-[136px]"><DatePicker compact label="Ngày đăng" value={day} onChange={(x) => set(x, time || '09:00')} /></span>
+      <span className="w-[92px]"><TimePicker compact round label="Giờ đăng" value={time} onChange={(t) => set(day || tomorrow(), t)} /></span>
+    </span>
+  )
+}
 
 // O nhap giu chu dang go; gui khi roi o (khong bi state moi ghi de luc dang go)
 function Saved({ value, onSave, area, ...p }: { value: string; onSave: (v: string) => void; area?: boolean } & Record<string, unknown>) {
@@ -80,8 +111,7 @@ function DraftCard({ d, busy, send }: { d: AiDraft; busy: boolean; send: PagePro
         {locked ? (
           <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary"><CalendarClock className="h-3 w-3" />{fmtWhen(d.when)}</span>
         ) : (
-          <input type="datetime-local" step={900} aria-label="Giờ đăng" value={local(d.when)} onChange={(e) => upd({ when: e.target.value ? new Date(e.target.value).toISOString() : null })}
-            className="h-7 rounded-md border border-input bg-background/50 px-2 text-xs" />
+          <WhenPicker when={d.when} onChange={(when) => upd({ when })} />
         )}
         <span className="flex-1" />
         <Pill tone={tone}>{d.status === 'run' && d.step ? STEP[d.step] || label : d.status === 'done' && d.result ? RESULT[d.result] || label : label}</Pill>
@@ -153,6 +183,8 @@ function Section({ title, hint, children, open: start = true }: { title: string;
 
 export function AiPostsPage({ state, send, go }: PageProps) {
   const s = state.f.aiposts as AiPostsState | undefined
+  const [fromV, setFromV] = useLocal(s?.opts.from || '')
+  const [toV, setToV] = useLocal(s?.opts.to || '')
   if (!s) return null
   const o = s.opts
   const save = (patch: Partial<AiOpts>) => send('aipost_save', patch)
@@ -167,9 +199,9 @@ export function AiPostsPage({ state, send, go }: PageProps) {
   const noKey = !state.secrets?.gemini
   const canWrite = !s.busy && picked.length > 0 && o.types.length > 0 && !noKey
   const today = ymd(new Date())
-  const from = o.from && o.from >= today ? o.from : today
-  const to = o.to && o.to >= from ? o.to : ymd(new Date(new Date(from + 'T00:00').getTime() + 6 * 864e5))
-  const setRange = (days: number) => { const a = new Date(); const b = new Date(); b.setDate(a.getDate() + days - 1); save({ from: ymd(a), to: ymd(b) }) }
+  const from = fromV && fromV >= today ? fromV : today
+  const to = toV && toV >= from ? toV : ymd(new Date(new Date(from + 'T00:00').getTime() + 6 * 864e5))
+  const setRange = (days: number) => { const a = new Date(); const b = new Date(); b.setDate(a.getDate() + days - 1); setFromV(ymd(a)); setToV(ymd(b)); save({ from: ymd(a), to: ymd(b) }) }
   const perDay = timesOf(o.times)
   return (
     <>
@@ -246,10 +278,10 @@ export function AiPostsPage({ state, send, go }: PageProps) {
               <Saved value={String(o.count)} type="number" min={1} max={60} aria-label="Số bài mỗi kênh" onSave={(v) => save({ count: Number(v) || 1 })} />
             </Field>
             <Field label="Từ ngày">
-              <TextInput type="date" aria-label="Từ ngày" min={today} value={from} onChange={(e) => save({ from: e.target.value })} />
+              <DatePicker label="Từ ngày" value={from} onChange={(x) => { setFromV(x); save({ from: x }) }} />
             </Field>
             <Field label="Đến ngày">
-              <TextInput type="date" aria-label="Đến ngày" min={from} value={to} onChange={(e) => save({ to: e.target.value })} />
+              <DatePicker label="Đến ngày" min={from} value={to} onChange={(x) => { setToV(x); save({ to: x }) }} />
             </Field>
             <Field label="Giờ đăng mỗi ngày" hint="Mốc 15 phút, cách nhau dấu phẩy">
               <Saved value={o.times} aria-label="Giờ đăng mỗi ngày" placeholder="09:00, 20:00" onSave={(times) => save({ times })} />
