@@ -17,6 +17,7 @@ const waitFor = async (fn, what, ms = 60000) => {
 }
 const p2 = (n) => String(n).padStart(2, '0')
 const ymd = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
+const vnDay = (d) => `${d.getDate()} thg ${d.getMonth() + 1}, ${d.getFullYear()}`
 
 ;(async () => {
   const yt = await startMockYt()
@@ -31,6 +32,15 @@ const ymd = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())
     const st = () => call('hello')
     const pages = () => browser.contexts().flatMap((c) => c.pages())
     const posts = () => yt.server.postsDb || []
+    // o ngay kieu Studio (DatePicker): bam o -> go "dd/mm/yyyy" vao o Ngay cua lich -> Enter
+    const typeDay = async (scope, label, d) => {
+      await scope.getByRole('button', { name: new RegExp(`^${label}:`) }).click()
+      await scope.getByRole('dialog', { name: 'Chọn ngày' }).getByLabel('Ngày', { exact: true }).click()
+      await ui.keyboard.press('Control+A')
+      await ui.keyboard.type(`${p2(d.getDate())}/${p2(d.getMonth() + 1)}/${d.getFullYear()}`)
+      await ui.keyboard.press('Enter')
+      await scope.getByRole('button', { name: `${label}: ${vnDay(d)}`, exact: true }).waitFor()
+    }
 
     await ui.getByRole('heading', { name: 'Đăng video' }).waitFor()
     await ui.getByRole('button', { name: 'Đăng bài AI', exact: true }).click()
@@ -65,8 +75,9 @@ const ymd = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())
     const KEY = (await st()).f.aiposts.opts.channels[0]
     const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
     const after = new Date(); after.setDate(after.getDate() + 2)
-    await ui.getByLabel('Từ ngày').fill(ymd(tomorrow))
-    await ui.getByLabel('Đến ngày').fill(ymd(after))
+    await typeDay(ui, 'Từ ngày', tomorrow)
+    await waitFor(async () => (await st()).f.aiposts.opts.from === ymd(tomorrow), 'luu tu ngay')
+    await typeDay(ui, 'Đến ngày', after)
     const count = ui.getByLabel('Số bài mỗi kênh')
     await count.fill('4')
     await count.blur()
@@ -91,6 +102,18 @@ const ymd = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())
     await box.fill('Edited: God is close to the brokenhearted. #faith')
     await box.blur()
     await waitFor(async () => (await st()).f.aiposts.drafts[0].text.startsWith('Edited:'), 'luu chu da sua')
+    // doi ngay + gio bai dau bang ban phim (loi cu: o datetime-local bi state cua main ghi de moi phim, khong sua duoc ngay)
+    const later = new Date(); later.setDate(later.getDate() + 3); later.setHours(21, 15, 0, 0)
+    const card0 = ui.getByRole('article').first()
+    await typeDay(card0, 'Ngày đăng', later)
+    const t0 = card0.getByLabel('Giờ đăng', { exact: true })
+    await t0.click()
+    await ui.keyboard.press('Control+A')
+    await ui.keyboard.type('21:07')
+    await ui.keyboard.press('Tab')
+    await waitFor(async () => (await st()).f.aiposts.drafts[0].when === later.toISOString(), 'luu ngay gio moi (21:07 -> 21:15)')
+    assert.equal(await t0.inputValue(), '21:15')
+    await card0.getByRole('button', { name: `Ngày đăng: ${vnDay(later)}`, exact: true }).waitFor()
 
     // Dang 4 bai: len lich tren tab Bai dang cua kenh
     await ui.getByRole('button', { name: 'Đăng 4 bài', exact: true }).click()
@@ -106,6 +129,7 @@ const ymd = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())
     assert.equal(posts()[1].images.length, 1, 'bai anh co anh')
     const w0 = new Date(s.drafts[0].when)
     assert.equal(posts()[0].scheduledAt, `${ymd(w0)}T${p2(w0.getHours())}:${p2(w0.getMinutes())}`)
+    assert.equal(posts()[0].scheduledAt, `${ymd(later)}T21:15`, 'len lich theo ngay gio da sua')
     const hist = JSON.parse(fs.readFileSync(path.join(dataDir, 'ai-posts-history.json'), 'utf8'))
     assert.equal(hist[KEY].posts.length, 4, 'nho bai da dang')
 

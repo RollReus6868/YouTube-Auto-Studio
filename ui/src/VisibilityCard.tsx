@@ -53,11 +53,14 @@ function usePopover() {
   return { open, setOpen, ref }
 }
 
-function Month({ y, m, value, onPick }: { y: number; m: number; value: string; onPick: (d: string) => void }) {
+// ngay som nhat chon duoc: hom nay, hoac `min` (YYYY-MM-DD) neu muon hon
+const minDay = (min?: string) => { const t = today(); const m = min ? parseIso(min) : null; return m && m > t ? m : t }
+
+function Month({ y, m, value, onPick, min: minIso }: { y: number; m: number; value: string; onPick: (d: string) => void; min?: string }) {
   const first = new Date(y, m, 1)
   const blanks = (first.getDay() + 6) % 7 // T2 dau tuan
   const days = new Date(y, m + 1, 0).getDate()
-  const min = today()
+  const min = minDay(minIso)
   return (
     <div role="listitem" aria-label={`thg ${m + 1} ${y}`}>
       <p className="mb-1 px-1 text-[11px] font-bold uppercase text-muted-foreground">THG {m + 1} {y}</p>
@@ -77,7 +80,7 @@ function Month({ y, m, value, onPick }: { y: number; m: number; value: string; o
               aria-pressed={on}
               onClick={() => onPick(k)}
               className={cn('h-7 rounded-full text-xs font-semibold transition-colors disabled:cursor-default disabled:opacity-30',
-                on ? 'bg-primary text-primary-foreground' : !past && 'hover:bg-muted', +d === +min && !on && 'text-primary')}
+                on ? 'bg-primary text-primary-foreground' : !past && 'hover:bg-muted', +d === +today() && !on && 'text-primary')}
             >{i + 1}</button>
           )
         })}
@@ -87,7 +90,8 @@ function Month({ y, m, value, onPick }: { y: number; m: number; value: string; o
 }
 
 // O ngay kieu Studio: hien "30 thg 10, 2026", bam mo lich (T2..CN, thang "THG 10 2026", mui ten thang truoc / sau, ngay da qua bi khoa)
-export function DatePicker({ value, onChange }: { value: string; onChange: (d: string) => void }) {
+// min: khoa them cac ngay truoc ngay nay; label: ten o (doc man hinh); compact: o thap (the bai dang)
+export function DatePicker({ value, onChange, min, label, compact }: { value: string; onChange: (d: string) => void; min?: string; label?: string; compact?: boolean }) {
   const { open, setOpen, ref } = usePopover()
   const base = parseIso(value) || today()
   const [view, setView] = useState({ y: base.getFullYear(), m: base.getMonth() })
@@ -98,7 +102,7 @@ export function DatePicker({ value, onChange }: { value: string; onChange: (d: s
   const next = new Date(view.y, view.m + 1, 1)
   const canPrev = new Date(view.y, view.m, 1) > new Date(today().getFullYear(), today().getMonth(), 1)
   const pick = (d: string) => { onChange(d); setOpen(false) }
-  const commit = () => { const d = parseDay(text); if (d && parseIso(d)! >= today()) onChange(d); else setText(fmtDay(value)) }
+  const commit = () => { const d = parseDay(text); if (d && parseIso(d)! >= minDay(min)) onChange(d); else setText(fmtDay(value)) }
   return (
     <div ref={ref} className="relative">
       <button
@@ -106,13 +110,15 @@ export function DatePicker({ value, onChange }: { value: string; onChange: (d: s
         onClick={() => setOpen(!open)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="flex h-9 w-full items-center gap-2 rounded-md border border-input bg-background/50 px-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={label ? `${label}: ${fmtDay(value) || 'Chọn ngày'}` : undefined}
+        className={cn('flex w-full items-center gap-2 rounded-md border border-input bg-background/50 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          compact ? 'h-7 px-2 text-xs' : 'h-9 px-3 text-sm')}
       >
         <span className={cn('min-w-0 flex-1 truncate', !value && 'text-muted-foreground')}>{fmtDay(value) || 'Chọn ngày'}</span>
         <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
       </button>
       {open && (
-        <div role="dialog" aria-label="Chọn ngày" className="absolute left-0 top-10 z-30 w-[280px] max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card p-3 shadow-xl">
+        <div role="dialog" aria-label="Chọn ngày" className={cn('absolute left-0 z-30 w-[280px] max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card p-3 shadow-xl', compact ? 'top-8' : 'top-10')}>
           <div className="mb-2 flex items-center gap-1">
             <TextInput
               aria-label="Ngày"
@@ -130,8 +136,8 @@ export function DatePicker({ value, onChange }: { value: string; onChange: (d: s
             {WEEK.map((w) => <span key={w}>{w}</span>)}
           </div>
           <div role="list" className="max-h-[300px] space-y-3 overflow-y-auto">
-            <Month y={view.y} m={view.m} value={value} onPick={pick} />
-            <Month y={next.getFullYear()} m={next.getMonth()} value={value} onPick={pick} />
+            <Month y={view.y} m={view.m} value={value} onPick={pick} min={min} />
+            <Month y={next.getFullYear()} m={next.getMonth()} value={value} onPick={pick} min={min} />
           </div>
         </div>
       )}
@@ -139,8 +145,8 @@ export function DatePicker({ value, onChange }: { value: string; onChange: (d: s
   )
 }
 
-// O gio: go tu do hoac chon moc 15 phut trong danh sach
-export function TimePicker({ value, onChange, label = 'Giờ' }: { value: string; onChange: (t: string) => void; label?: string }) {
+// O gio: go tu do hoac chon moc 15 phut trong danh sach (round: gio go tay lam tron len moc 15 phut, nhu YouTube)
+export function TimePicker({ value, onChange, label = 'Giờ', round, compact }: { value: string; onChange: (t: string) => void; label?: string; round?: boolean; compact?: boolean }) {
   const { open, setOpen, ref } = usePopover()
   const [text, setText] = useState(value)
   const list = useRef<HTMLDivElement>(null)
@@ -150,10 +156,16 @@ export function TimePicker({ value, onChange, label = 'Giờ' }: { value: string
     const el = list.current.querySelector<HTMLElement>(`[data-t="${roundTime(value || '09:00')}"]`)
     if (el) list.current.scrollTop = el.offsetTop - 60
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
-  const commit = () => { const t = parseTime(text); if (t) onChange(t); else setText(value) }
+  const commit = () => {
+    const t = parseTime(text)
+    if (!t) return setText(value)
+    const r = round ? roundTime(t) : t
+    if (round) setText(r)
+    if (r !== value) onChange(r)
+  }
   return (
     <div ref={ref} className="relative">
-      <div className="flex h-9 items-center rounded-md border border-input bg-background/50 focus-within:ring-2 focus-within:ring-ring">
+      <div className={cn('flex items-center rounded-md border border-input bg-background/50 focus-within:ring-2 focus-within:ring-ring', compact ? 'h-7' : 'h-9')}>
         <input
           aria-label={label}
           value={text}
@@ -163,12 +175,12 @@ export function TimePicker({ value, onChange, label = 'Giờ' }: { value: string
           onBlur={commit}
           onKeyDown={(e) => { if (e.key === 'Enter') { commit(); setOpen(false) } }}
           placeholder="09:00"
-          className="h-full min-w-0 flex-1 bg-transparent px-3 text-sm outline-none"
+          className={cn('h-full min-w-0 flex-1 bg-transparent outline-none', compact ? 'w-14 px-2 text-xs' : 'px-3 text-sm')}
         />
-        <button type="button" aria-label="Chọn giờ" onClick={() => setOpen(!open)} className="px-2 text-muted-foreground"><Clock className="h-4 w-4" /></button>
+        <button type="button" aria-label="Chọn giờ" onClick={() => setOpen(!open)} className="px-2 text-muted-foreground"><Clock className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} /></button>
       </div>
       {open && (
-        <div ref={list} role="listbox" aria-label="Giờ" className="absolute left-0 top-10 z-30 max-h-56 w-full min-w-[110px] overflow-y-auto rounded-xl border border-border bg-card py-1 shadow-xl">
+        <div ref={list} role="listbox" aria-label="Giờ" className={cn('absolute left-0 z-30', compact ? 'top-8' : 'top-10', 'max-h-56 w-full min-w-[110px] overflow-y-auto rounded-xl border border-border bg-card py-1 shadow-xl')}>
           {TIMES.map((t) => (
             <button
               key={t}
