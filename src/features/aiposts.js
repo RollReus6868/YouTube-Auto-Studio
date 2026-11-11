@@ -14,9 +14,12 @@ const DEFAULTS = {
   review: true, perChannel: {},
 }
 const MAX_HISTORY = 60
+// loi Gemini tren trinh duyet ma thu lai ngay cung vo ich (nguoi dung phai dang nhap / xu ly hop thoai / cho)
+const HARD = ['GEMINI_STOPPED', 'GEMINI_SIGNIN', 'GEMINI_BLOCKED', 'GEMINI_LIMIT', 'GEMINI_UNAVAILABLE']
 
 module.exports = (ctx) => {
-  const S = ctx.state.f.aiposts = { busy: '', progress: '', drafts: [], warnings: [], imageModels: AI.IMAGE_MODELS, langs: Object.entries(AI.LANGS), channels: [], opts: { ...DEFAULTS } }
+  // aiError: { code, message } loi Gemini gan nhat (giao dien hien huong dan + nut "Mở Gemini")
+  const S = ctx.state.f.aiposts = { busy: '', progress: '', drafts: [], warnings: [], aiError: null, imageModels: AI.IMAGE_MODELS, langs: Object.entries(AI.LANGS), channels: [], opts: { ...DEFAULTS } }
   const draftsFile = () => ctx.logFile('ai-posts.json')
   const historyFile = () => ctx.logFile('ai-posts-history.json')
   const imgDir = () => ctx.logFile(path.join('ai-posts', 'anh'))
@@ -29,6 +32,7 @@ module.exports = (ctx) => {
     return o
   }
   const channels = () => (ctx.accounts ? ctx.accounts.channels() : [])
+  const via = () => (ctx.ai.provider() === 'api' ? 'Gemini API' : 'Gemini trên trình duyệt')
   const syncChannels = () => {
     const list = channels().map((c) => ({ key: c.key, name: c.name, handle: c.handle || '', ucId: c.ucId || '', avatar: c.avatar || '' }))
     if (JSON.stringify(list) !== JSON.stringify(S.channels)) { S.channels = list; ctx.push() }
@@ -63,7 +67,8 @@ module.exports = (ctx) => {
   }
 
   // ---- anh cho mot ban nhap (Gemini tao hoac lay trong thu muc). Loi -> bai ha cap (anh -> chu, tham do anh -> tham do) ----
-  async function addImages(d, o, ch) {
+  // round.imageBlock: Gemini da bao chua dang nhap / het luot / bi chan trong lan viet nay -> khong ve tiep (ha cap ngay)
+  async function addImages(d, o, ch, round = {}) {
     const pc = o.perChannel[ch.key] || {}
     const need = d.type === 'image' ? [d.imagePrompt || d.text] : d.type === 'image_poll' ? d.options.map((x) => x.imagePrompt || x.text) : []
     if (!need.length) return d
@@ -82,27 +87,28 @@ module.exports = (ctx) => {
         d = { ...d, folderImages: files }
         if (r.reused) d.warnings = [...(d.warnings || []), 'Thư mục ảnh đã hết ảnh mới: dùng lại ảnh cũ.']
       } else {
-        fs.mkdirSync(imgDir(), { recursive: true })
+        if (round.imageBlock) throw round.imageBlock
         files = []
         for (const [i, desc] of need.entries()) {
           S.progress = `Gemini đang vẽ ảnh ${i + 1}/${need.length} cho kênh "${ch.name}"…`
           ctx.push()
-          const img = await AI.geminiImage({ key: ctx.store.getSecret('gemini'), model: o.imageModel, prompt: AI.imagePrompt(desc, pc.imageStyle || o.imageStyle) })
-          const f = path.join(imgDir(), `${d.id}-${i + 1}${img.ext}`)
-          fs.writeFileSync(f, img.data)
-          files.push(f)
+          // provider api: model anh trong tuy chon; trinh duyet: Gemini tu chon
+          const img = await ctx.ai.image({ prompt: AI.imagePrompt(desc, pc.imageStyle || o.imageStyle), aspect: '1:1', model: o.imageModel, dir: imgDir(), label: `${d.id}-${i + 1}`, shouldStop: () => ctx.stopped() })
+          files.push(img.file)
         }
       }
       if (d.type === 'image') return { ...d, images: files }
       return { ...d, options: d.options.map((x, i) => ({ ...x, image: files[i] || '' })) }
     } catch (e) {
+      if (e.code === 'GEMINI_STOPPED' || ctx.stopped()) throw e
+      if (HARD.includes(e.code) && !round.imageBlock) { round.imageBlock = e; S.aiError = { code: e.code, message: e.message } }
       ctx.log('warn', `Kênh "${ch.name}": chưa có ảnh cho bài ${AI.TYPE_LABEL[d.type]} (${e.message}).`)
       return downgrade(`Chưa có ảnh (${e.message}): đăng thành bài ${d.type === 'image' ? 'chữ' : 'thăm dò chữ'}.`)
     }
   }
 
   // Gemini viet `slots` bai cho kenh ch -> ban nhap (co anh)
-  async function writeFor(ch, slots, o) {
+  async function writeFor(ch, slots, o, round = {}) {
     const pc = o.perChannel[ch.key] || {}
     const h = history()[ch.key] || {}
     const recent = [...(h.posts || []).map((p) => p.text), ...S.drafts.filter((x) => x.channelKey === ch.key).map((x) => x.text)]
@@ -114,12 +120,13 @@ module.exports = (ctx) => {
     S.progress = `Gemini đang viết ${slots.length} bài cho kênh "${ch.name}"…`
     ctx.push()
     let posts
+    const shouldStop = () => ctx.stopped()
     for (let attempt = 0; ; attempt++) {
       try {
-        posts = AI.parsePosts(await ctx.gemini({ prompt, json: true }), types)
+        posts = AI.parsePosts(await ctx.ai.text({ prompt, json: true, label: `bai-ai-${ch.name}`, shouldStop }), types)
         break
       } catch (e) {
-        if (attempt >= 1 || /API key|hạn mức|model/i.test(e.message)) throw e
+        if (attempt >= 1 || shouldStop() || HARD.includes(e.code) || /API key|hạn mức|model/i.test(e.message)) throw e
         ctx.log('warn', `Kênh "${ch.name}": ${e.message} Thử lại một lần.`)
       }
     }
@@ -128,7 +135,7 @@ module.exports = (ctx) => {
       if (ctx.stopped()) break
       if (!p) { ctx.log('warn', `Kênh "${ch.name}": Gemini bỏ trống bài ${i + 1} (${AI.TYPE_LABEL[types[i]]}).`); continue }
       let d = { id: newId(), channelKey: ch.key, channelName: ch.name, when: slots[i].when, origType: types[i], status: 'draft', error: '', url: '', line: '', images: [], options: [], answers: [], explanation: '', ...p }
-      d = await addImages(d, o, ch)
+      d = await addImages(d, o, ch, round)
       S.drafts.push(withUrls(d))
       push()
       out.push(d)
@@ -147,15 +154,20 @@ module.exports = (ctx) => {
 
   async function generate({ post = false } = {}) {
     if (S.busy) return ctx.log('warn', 'Đang làm việc khác ở trang Đăng bài tự động, chờ xong đã.')
-    if (!ctx.store.getSecret('gemini')) return ctx.log('warn', 'Chưa nhập Gemini API key (Cài đặt).')
+    // Gemini tren trinh duyet khong can key; chi chan khi dung Gemini API
+    if (ctx.ai.provider() === 'api' && !ctx.store.getSecret('gemini')) return ctx.log('warn', 'Chưa nhập Gemini API key (Cài đặt → Gemini), hoặc chọn dùng Gemini qua trình duyệt.')
     const o = opts()
     const list = channels().filter((c) => o.channels.includes(c.key))
     if (!list.length) return ctx.log('warn', 'Chọn ít nhất một kênh để Gemini viết bài.')
     if (!ctx.isBusy()) ctx.resetStop()
     S.busy = 'generate'
     S.warnings = []
+    S.aiError = null
     const made = []
+    const round = {} // mot lan bam Viet bai
+    ctx.log('info', `Đăng bài AI: viết bằng ${via()} cho ${list.length} kênh, lần lượt từng kênh.`)
     try {
+      // tung kenh mot (Gemini tren trinh duyet chi lam mot yeu cau mot luc)
       for (const ch of list) {
         if (ctx.stopped()) break
         // tiep noi loai bai sau ban nhap cu cua kenh (xoay vong deu)
@@ -164,14 +176,23 @@ module.exports = (ctx) => {
         for (const w of warnings) { S.warnings.push(`${ch.name}: ${w}`); ctx.log('warn', `Kênh "${ch.name}": ${w}`) }
         if (!slots.length) continue
         try {
-          const ds = await writeFor(ch, slots, o)
+          const ds = await writeFor(ch, slots, o, round)
           made.push(...ds)
           ctx.log('ok', `Gemini đã viết ${ds.length} bài cho kênh "${ch.name}".`)
         } catch (e) {
+          if (e.code === 'GEMINI_STOPPED' || ctx.stopped()) break
           S.warnings.push(`${ch.name}: ${e.message}`)
+          if (e.code) S.aiError = { code: e.code, message: e.message }
           ctx.log('error', `Kênh "${ch.name}": Gemini chưa viết được bài: ${e.message}`)
+          // chua dang nhap / bi chan / het luot: cac kenh sau cung loi -> dung
+          if (['GEMINI_SIGNIN', 'GEMINI_BLOCKED', 'GEMINI_LIMIT', 'GEMINI_UNAVAILABLE'].includes(e.code)) {
+            const rest = list.slice(list.indexOf(ch) + 1)
+            if (rest.length) S.warnings.push(`Chưa viết cho ${rest.length} kênh còn lại (${rest.map((c) => c.name).join(', ')}): xử lý lỗi Gemini ở trên rồi bấm Viết bài lại.`)
+            break
+          }
         }
       }
+      if (ctx.stopped()) ctx.log('warn', `Đăng bài AI: đã dừng theo yêu cầu (đã viết ${made.length} bài).`)
     } finally {
       S.busy = ''
       S.progress = ''
@@ -266,7 +287,10 @@ module.exports = (ctx) => {
       const d = S.drafts.find((x) => x.id === id)
       const ch = d && channels().find((c) => c.key === d.channelKey)
       if (!d || !ch || d.status === 'done') return
+      if (ctx.ai.provider() === 'api' && !ctx.store.getSecret('gemini')) return ctx.log('warn', 'Chưa nhập Gemini API key (Cài đặt → Gemini).')
+      if (!ctx.isBusy()) ctx.resetStop()
       S.busy = 'generate'
+      S.aiError = null
       const i = S.drafts.indexOf(d)
       S.drafts.splice(i, 1)
       try {
@@ -278,7 +302,8 @@ module.exports = (ctx) => {
         ctx.log('ok', `Gemini đã viết lại bài cho kênh "${ch.name}".`)
       } catch (e) {
         if (!S.drafts.includes(d)) S.drafts.splice(i, 0, d)
-        ctx.log('error', `Chưa viết lại được bài: ${e.message}`)
+        if (e.code && e.code !== 'GEMINI_STOPPED') S.aiError = { code: e.code, message: e.message }
+        ctx.log(e.code === 'GEMINI_STOPPED' ? 'warn' : 'error', `Chưa viết lại được bài: ${e.message}`)
       } finally {
         S.busy = ''
         S.progress = ''

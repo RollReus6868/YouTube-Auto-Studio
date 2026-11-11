@@ -368,7 +368,7 @@ export function Dialog({ open, onClose, title, children, actions }: { open: bool
   if (!open) return null
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center rounded-2xl bg-black/50 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl border border-border/50 bg-popover p-5 text-popover-foreground shadow-2xl">
+      <div role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()} className="max-h-full w-full max-w-md overflow-y-auto rounded-2xl border border-border/50 bg-popover p-5 text-popover-foreground shadow-2xl">
         <h2 className="text-base font-extrabold">{title}</h2>
         <div className="mt-3 space-y-2 text-sm text-muted-foreground">{children}</div>
         <div className="mt-5 flex flex-wrap justify-end gap-2">{actions}</div>

@@ -4,12 +4,13 @@ import {
   Square, Subtitles, Trash2, Upload, X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { call, demoState, emptyState, isDemo, newPreset, type Job, type Preset, type Settings as SettingsT, type State, type VideoItem, type VideoVis } from './api'
+import { call, demoName, demoState, emptyState, isDemo, newPreset, type Job, type Preset, type Settings as SettingsT, type State, type VideoItem, type VideoVis } from './api'
 import {
   ActionBar, AppShell, BrowserPane, Button, Card, Choice, Dialog, EmptyState, Field, GradientProgress, PageBody, PageHeader, Pill, Select,
   Sidebar, TextArea, TextInput, ThemeGrid, ToggleRow, cn, useStickToBottom, type Tone,
 } from './kit'
 import { LogDock, LogLine } from './LogDock'
+import { GeminiErrorHelp, GeminiWebPill, aiProviderOf, geminiAccountOf, geminiVia } from './GeminiHelp'
 import { GuidePage } from './GuidePage'
 import { FEATURE_PAGES } from './pages'
 import { StudioPicker, type AccountsState } from './pages/AccountsPage'
@@ -32,7 +33,18 @@ function useBackend() {
   return { state, send }
 }
 type Backend = ReturnType<typeof useBackend>
-const withDemo = (s: State): State => ({ ...s, f: { ...s.f, ...Object.fromEntries(FEATURE_PAGES.filter((p) => p.demo).map((p) => [p.id, p.demo])) } })
+const withDemo = (s: State): State => geminiErrorDemo({ ...s, f: { ...s.f, ...Object.fromEntries(FEATURE_PAGES.filter((p) => p.demo).map((p) => [p.id, p.demo])) } })
+// ?demo=gemini-loi: tai khoan dung cho Gemini chua dang nhap -> loi o Dang bai AI va hop thoai mo ta (xem huong dan + nut "Mở Gemini")
+function geminiErrorDemo(s: State): State {
+  if (demoName() !== 'gemini-loi') return s
+  const message = 'Chưa đăng nhập Google trong tài khoản dùng cho Gemini.'
+  return {
+    ...s,
+    geminiWeb: { busy: false, accountId: 'thang', signedIn: false, lastError: message },
+    draft: { id: 'v1', text: '', loading: false, error: message, code: 'GEMINI_SIGNIN', script: 'Bí ẩn rừng sâu tập 1.kich-ban.docx', request: '', via: 'web' },
+    f: { ...s.f, aiposts: { ...(s.f.aiposts as object), aiError: { code: 'GEMINI_SIGNIN', message: `${message} Bấm “Mở Gemini” để đăng nhập.` }, warnings: [`Dark Bible Stories: ${message}`] } },
+  }
+}
 // chen trang tinh nang vao danh sach thanh ben (sau trang `after`, hoac cuoi nhom)
 type NavItem = { id: string; label: string; icon: typeof Home; dot?: boolean }
 function withFeatures(items: NavItem[], bottom: boolean) {
@@ -253,7 +265,7 @@ function VideoCard({ v, job, open, onToggle, busy, connected, send }: {
   )
 }
 
-function DraftDialog({ state, send }: Backend) {
+function DraftDialog({ state, send, go }: Backend & { go: (p: string) => void }) {
   const d = state.draft
   const [text, setText] = useState('')
   useEffect(() => setText(d?.text ?? ''), [d?.text])
@@ -276,7 +288,10 @@ function DraftDialog({ state, send }: Backend) {
         </>
       }
     >
-      {d?.script && <p className="mb-2"><Pill tone="active" className="max-w-full">Theo kịch bản: {d.script}</Pill></p>}
+      <p className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
+        <span className="text-muted-foreground">Viết bằng:</span> <b>{geminiVia(state, d?.via ?? aiProviderOf(state))}</b>
+        {d?.script && <Pill tone="active" className="max-w-full">Theo kịch bản: {d.script}</Pill>}
+      </p>
       <div className="mb-3 space-y-1">
         <p className="text-xs font-bold text-muted-foreground">Yêu cầu của bạn cho Gemini</p>
         <TextArea rows={2} className="min-h-[56px] text-foreground" value={req} onChange={(e) => setReq(e.target.value)} aria-label="Yêu cầu của bạn cho Gemini"
@@ -288,8 +303,8 @@ function DraftDialog({ state, send }: Backend) {
           )}
         </div>
       </div>
-      {d?.loading ? <p className="animate-pulse">Gemini đang viết…</p>
-        : d?.error ? <p className="text-red-600 dark:text-red-400">{d.error}</p>
+      {d?.loading ? <p className="animate-pulse">Gemini đang viết…{(d.via ?? aiProviderOf(state)) === 'web' ? ' (trên trình duyệt, có thể mất 1–2 phút; bấm Đóng để dừng)' : ''}</p>
+        : d?.error ? <GeminiErrorHelp code={d.code} message={d.error} send={send} go={(p) => { send('draft_close'); go(p) }} />
         : <>
             <TextArea rows={10} value={text} onChange={(e) => setText(e.target.value)} aria-label="Mô tả Gemini viết" className="text-foreground" />
             <p className="text-[11px]">Sửa lại nếu cần. Bấm lưu sẽ thay phần mô tả (sau dòng ---) trong {file}{file === 'info.txt' ? ' của video này' : ' (chưa có thì tạo mới), đặt cạnh file video'}.</p>
@@ -390,7 +405,7 @@ function VideosPage({ state, send, go }: Backend & { go: (p: string) => void }) 
           <LayoutTemplate />
         </Button>
       </ActionBar>
-      <DraftDialog state={state} send={send} />
+      <DraftDialog state={state} send={send} go={go} />
     </>
   )
 }
@@ -602,11 +617,12 @@ function LogsPage({ state, send }: Backend) {
 }
 
 /* ================= Cai dat ================= */
-type Draft = Pick<SettingsT, 'channel' | 'runInPane' | 'geminiModel' | 'geminiThinking' | 'replyStyle' | 'replyMode' | 'replyPerHour' | 'skipWords'> & { descDefault: string; descPosition: 'above' | 'below'; descRequest: string }
+type Draft = Pick<SettingsT, 'channel' | 'runInPane' | 'geminiModel' | 'geminiThinking' | 'replyStyle' | 'replyMode' | 'replyPerHour' | 'skipWords'> & { descDefault: string; descPosition: 'above' | 'below'; descRequest: string; aiProvider: 'web' | 'api'; aiFallbackApi: boolean; geminiAccount: string }
 const pickDraft = (s: SettingsT | null): Draft => ({
   channel: s?.channel ?? '', runInPane: s?.runInPane ?? true, geminiModel: s?.geminiModel ?? 'gemini-3.8-flash', geminiThinking: s?.geminiThinking ?? 'low', replyStyle: s?.replyStyle ?? '',
   replyMode: s?.replyMode ?? 'review', replyPerHour: s?.replyPerHour ?? 20, skipWords: s?.skipWords ?? '',
   descDefault: s?.descDefault ?? '', descPosition: s?.descPosition === 'below' ? 'below' : 'above', descRequest: s?.descRequest ?? '',
+  aiProvider: s?.aiProvider === 'api' ? 'api' : 'web', aiFallbackApi: !!s?.aiFallbackApi, geminiAccount: s?.geminiAccount ?? '',
 })
 
 function SettingsPage({ state, send }: Backend) {
@@ -634,9 +650,22 @@ function SettingsPage({ state, send }: Backend) {
   const models = all.some(([v]) => v === d.geminiModel) ? all : [[d.geminiModel, d.geminiModel] as [string, string], ...all]
   // Gemini 1.x / 2.x khong co cap do tu duy
   const thinks = !/^gemini-(1|2)\./.test(d.geminiModel)
+  // tai khoan Google cho Gemini tren trinh duyet (trang Tai khoan); '' = tai khoan dau tien
+  const accList = (state.f.accounts as AccountsState | undefined)?.list ?? []
+  const first = geminiAccountOf(state, '')
+  const accountOptions: [string, string][] = [
+    ['', accList.length ? `Tài khoản đầu tiên (${first.label})` : 'Chưa có tài khoản: thêm ở trang Tài khoản'],
+    ...accList.map((a) => [a.id, a.email && a.email !== a.label ? `${a.label} (${a.email})` : a.label || a.id] as [string, string]),
+    ...(d.geminiAccount && !accList.some((a) => a.id === d.geminiAccount) ? [[d.geminiAccount, `${d.geminiAccount} (không còn ở trang Tài khoản)`] as [string, string]] : []),
+  ]
+  // Mo Gemini dung tai khoan dang chon (luu truoc neu vua doi)
+  const openGemini = async () => {
+    if (d.geminiAccount !== savedDraft.geminiAccount) await send('settings_save', { geminiAccount: d.geminiAccount })
+    send('gemini_web_open')
+  }
   return (
     <>
-      <PageHeader icon={Settings} title="Cài đặt" description="Thư mục làm việc, Gemini API, cách trả lời bình luận. Kênh YouTube đăng nhập ở trang Tài khoản." actions={dirty ? <Pill tone="warning">Chưa lưu</Pill> : undefined} />
+      <PageHeader icon={Settings} title="Cài đặt" description="Thư mục làm việc, Gemini (trình duyệt hoặc API key), cách trả lời bình luận. Kênh YouTube đăng nhập ở trang Tài khoản." actions={dirty ? <Pill tone="warning">Chưa lưu</Pill> : undefined} />
       <PageBody>
         <div className="grid gap-3 xl:grid-cols-2">
           <div className="space-y-3">
@@ -685,29 +714,59 @@ function SettingsPage({ state, send }: Backend) {
                 </Field>
               </div>
             </Card>
-            <Card title="Gemini API" hint={<Sparkles className="inline h-3.5 w-3.5" />}>
+            <Card title="Gemini (viết mô tả, Đăng bài AI)" hint={<Sparkles className="inline h-3.5 w-3.5" />}>
               <div className="space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  {state.secrets.gemini ? <Pill tone="success">Đã lưu API key{state.secrets.geminiEncrypted ? ' (mã hóa)' : ''}</Pill> : <Pill tone="muted">Chưa có API key</Pill>}
-                  {state.secrets.gemini && <Button variant="subtle" className="h-8 px-3" onClick={() => send('gemini_clear')}><Trash2 /> Xóa</Button>}
+                <div className="space-y-1.5">
+                  <p className="text-xs font-bold text-muted-foreground">Gemini dùng qua</p>
+                  <Choice
+                    name="Gemini dùng qua"
+                    value={d.aiProvider}
+                    onChange={(aiProvider) => set({ aiProvider })}
+                    options={[
+                      { value: 'web', label: 'Trình duyệt (miễn phí, mặc định)', hint: 'Tool tự mở Gemini (gemini.google.com) bằng tài khoản Google bên dưới và viết trên đó, như bạn tự gõ. Không cần API key, không tốn phí.' },
+                      { value: 'api', label: 'API key', hint: 'Gọi Gemini API bằng key của bạn: nhanh hơn nhưng có hạn mức và có thể tốn phí.' },
+                    ]}
+                  />
                 </div>
-                <div className="flex gap-2">
-                  <TextInput type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder={state.secrets.gemini ? 'Nhập key mới để thay' : 'Dán Gemini API key (AIza…)'} aria-label="Gemini API key" />
-                  <Button variant="outline" className="h-9 shrink-0 px-3" disabled={!key.trim()} onClick={() => { send('gemini_set', key); setKey('') }}><Save /> Lưu key</Button>
+                {d.aiProvider === 'web' && (
+                  <div className="space-y-2 rounded-xl border border-border/60 p-3">
+                    <Field label="Tài khoản Google dùng cho Gemini" hint="Danh sách tài khoản ở trang Tài khoản. Tài khoản phải đăng nhập Gemini thì mới vẽ được ảnh.">
+                      <Select label="Tài khoản Google dùng cho Gemini" value={d.geminiAccount} onChange={(geminiAccount) => set({ geminiAccount })} options={accountOptions} />
+                    </Field>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <GeminiWebPill status={state.geminiWeb} />
+                      <Button variant="outline" className="h-8 px-3 text-xs" onClick={openGemini}><ExternalLink /> Mở Gemini</Button>
+                      <span className="min-w-0 flex-1 basis-40 text-[11px] text-muted-foreground">Mở cửa sổ Gemini để đăng nhập, đồng ý điều khoản hoặc xem tool đang viết.</span>
+                    </div>
+                    {state.geminiWeb?.lastError && <p className="break-words text-xs text-red-600 dark:text-red-400">Lần gần nhất: {state.geminiWeb.lastError}</p>}
+                    <ToggleRow title="Dùng API khi trình duyệt lỗi" hint="Cần API key bên dưới. Gemini trên trình duyệt lỗi (chưa đăng nhập, hết lượt, bị chặn…) thì tool thử lại bằng Gemini API và ghi vào nhật ký." checked={d.aiFallbackApi} onChange={(aiFallbackApi) => set({ aiFallbackApi })} />
+                  </div>
+                )}
+                <div className="space-y-3 rounded-xl border border-border/60 p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="min-w-0 flex-1 text-xs font-bold text-muted-foreground">{d.aiProvider === 'api' ? 'Gemini API key' : 'Gemini API key (tuỳ chọn: dự phòng và trả lời bình luận)'}</p>
+                    {state.secrets.gemini ? <Pill tone="success">Đã lưu API key{state.secrets.geminiEncrypted ? ' (mã hóa)' : ''}</Pill> : <Pill tone="muted">Chưa có API key</Pill>}
+                    {state.secrets.gemini && <Button variant="subtle" className="h-8 px-3" onClick={() => send('gemini_clear')}><Trash2 /> Xóa</Button>}
+                  </div>
+                  <div className="flex gap-2">
+                    <TextInput type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder={state.secrets.gemini ? 'Nhập key mới để thay' : 'Dán Gemini API key (AIza…)'} aria-label="Gemini API key" />
+                    <Button variant="outline" className="h-9 shrink-0 px-3" disabled={!key.trim()} onClick={() => { send('gemini_set', key); setKey('') }}><Save /> Lưu key</Button>
+                  </div>
+                  <Field label="Model"><Select label="Model" value={d.geminiModel} onChange={(v) => set({ geminiModel: v })} options={models} /></Field>
+                  {thinks && <Field label="Cấp độ tư duy" hint="Cao thì kỹ hơn nhưng chậm và tốn hạn mức hơn."><Select label="Cấp độ tư duy" value={d.geminiThinking ?? 'low'} onChange={(v) => set({ geminiThinking: v as Draft['geminiThinking'] })} options={THINKING} /></Field>}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button variant="outline" className="h-8 px-3 text-xs" disabled={!state.secrets.gemini || state.gemini?.loading} onClick={() => send('gemini_models')}><RefreshCw /> {state.gemini?.loading ? 'Đang tải…' : 'Tải danh sách model mới nhất'}</Button>
+                    {state.gemini?.at && !state.gemini.error && <span className="text-xs text-muted-foreground">{state.gemini.models.length} model</span>}
+                    {state.gemini?.error && <span className="text-xs text-red-600 dark:text-red-400">{state.gemini.error}</span>}
+                  </div>
+                  <Button variant="subtle" className="h-8 px-3 text-xs" onClick={() => send('open_url', 'https://aistudio.google.com/apikey')}><ExternalLink /> Lấy key ở Google AI Studio</Button>
+                  <p className="text-[11px] text-muted-foreground">Trả lời bình luận (trang Cộng đồng) vẫn dùng Gemini API key như cũ, kể cả khi chọn trình duyệt.</p>
                 </div>
-                <Field label="Model"><Select label="Model" value={d.geminiModel} onChange={(v) => set({ geminiModel: v })} options={models} /></Field>
-                {thinks && <Field label="Cấp độ tư duy" hint="Cao thì kỹ hơn nhưng chậm và tốn hạn mức hơn."><Select label="Cấp độ tư duy" value={d.geminiThinking ?? 'low'} onChange={(v) => set({ geminiThinking: v as Draft['geminiThinking'] })} options={THINKING} /></Field>}
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button variant="outline" className="h-8 px-3 text-xs" disabled={!state.secrets.gemini || state.gemini?.loading} onClick={() => send('gemini_models')}><RefreshCw /> {state.gemini?.loading ? 'Đang tải…' : 'Tải danh sách model mới nhất'}</Button>
-                  {state.gemini?.at && !state.gemini.error && <span className="text-xs text-muted-foreground">{state.gemini.models.length} model</span>}
-                  {state.gemini?.error && <span className="text-xs text-red-600 dark:text-red-400">{state.gemini.error}</span>}
-                </div>
-                <Button variant="subtle" className="h-8 px-3 text-xs" onClick={() => send('open_url', 'https://aistudio.google.com/apikey')}><ExternalLink /> Lấy key ở Google AI Studio</Button>
               </div>
             </Card>
           </div>
           <div className="space-y-3">
-            <Card title="Trả lời bình luận">
+            <Card title="Trả lời bình luận" hint="dùng Gemini API key">
               <div className="space-y-3">
                 <Choice
                   name="Chế độ trả lời"

@@ -71,6 +71,24 @@ test('parsePosts: cat gon theo gioi han YouTube, ha cap bai hong, sua dap an dun
   assert.deepEqual([a.type, b.type], ['text', 'quiz'])
 })
 
+test('parsePosts: cau tra loi cua Gemini tren trinh duyet (chu thua truoc / sau, khoi code giua chung)', () => {
+  const body = JSON.stringify({ posts: [{ type: 'text', text: 'A {curly} [bracket] post' }, { type: 'poll', text: 'Q?', options: ['x', 'y'] }] })
+  // chu thua co ngoac vuong / nhon sau khoi JSON (Gemini web hay them loi chao, ghi chu)
+  const chatty = `Sure! Here are the posts (in order):\n\`\`\`json\n${body}\n\`\`\`\nLet me know if you want changes [optional] {or more}.`
+  const [t, p] = AI.parsePosts(chatty, ['text', 'poll'])
+  assert.equal(t.text, 'A {curly} [bracket] post')
+  assert.deepEqual(p.options.map((o) => o.text), ['x', 'y'])
+  // khong co khoi code (trang Gemini bo dau ```), chu thua hai dau
+  const [t2] = AI.parsePosts(`Đây là bài viết: ${body} Chúc kênh bạn phát triển! :]`, ['text', 'poll'])
+  assert.equal(t2.text, 'A {curly} [bracket] post')
+})
+
+test('postsPrompt: doi dung mot khoi JSON (Gemini tren trinh duyet khong co che do JSON)', () => {
+  const p = AI.postsPrompt({ channel: { name: 'K' }, types: ['text'] })
+  assert.match(p, /ONE valid JSON object/)
+  assert.match(p, /no other text/i)
+})
+
 test('geminiImage: goi model anh, tra ve PNG; loi han muc -> bao ro', async () => {
   const m = await startMock()
   try {

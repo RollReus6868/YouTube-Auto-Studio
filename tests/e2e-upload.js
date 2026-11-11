@@ -93,7 +93,11 @@ const CHANNEL_DESC = 'Donate to Us: https://example.org/donate\nGet the ebook he
     await waitFor(async () => { const p = (await call('hello')).settings.presets[0]; return p.privacy === 'public' && p.premiere === true }, 'luu mau Cong khai + Cong chieu')
 
     // Gemini viet mo ta (tuy chon) -> sua -> luu vao "Bi an tap 7.txt" canh video
+    // (bai nay dung Gemini API: Cai dat -> "Gemini dùng qua" -> API key; mac dinh la trinh duyet)
     await ui.getByRole('button', { name: 'Cài đặt', exact: true }).click()
+    await ui.getByRole('radiogroup', { name: 'Gemini dùng qua' }).getByRole('radio', { name: /^API key/ }).click()
+    await ui.getByRole('button', { name: 'Lưu cài đặt' }).click()
+    await waitFor(async () => (await call('hello')).settings.aiProvider === 'api', 'chon Gemini API')
     await ui.getByLabel('Gemini API key').fill('gemini-ok')
     await ui.getByRole('button', { name: 'Lưu key' }).click()
     await ui.getByText(/Đã lưu API key/).waitFor()
@@ -106,6 +110,7 @@ const CHANNEL_DESC = 'Donate to Us: https://example.org/donate\nGet the ebook he
     await box.waitFor()
     assert.equal(await box.inputValue(), 'Mô tả do Gemini viết.\n\n#a #b #c')
     await ui.getByText(`Theo kịch bản: ${NAME}.kich-ban.txt`).waitFor()
+    await ui.getByText('Gemini API (gemini-3.8-flash)').waitFor()
     const prompt = gm.lastGemini.contents[0].parts[0].text
     assert(prompt.includes(NAME), 'ten video duoc gui cho Gemini')
     assert(prompt.includes('Cảnh 1: Đoàn thám hiểm vào rừng Amazon lúc bình minh.\nCảnh 2: Tìm thấy ngôi đền cổ.'), `kich ban duoc gui cho Gemini: ${prompt}`)

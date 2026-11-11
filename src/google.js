@@ -70,6 +70,42 @@ async function gemini({ key, model, prompt, system, json = false, thinking = '',
   return out
 }
 
+// Lay phan JSON dau tien trong cau tra loi cua Gemini (Gemini tren trinh duyet khong co che do JSON, hay them
+// loi chao / ghi chu): khoi ```json``` (hoac ``` ```) truoc, khong co thi tu dau { hoac [ toi dau dong tuong ung
+// (bo qua ngoac nam trong chuoi). Chi nhan doan JSON.parse duoc. Khong thay -> null.
+function extractJson(text) {
+  const s = String(text || '')
+  const ok = (t) => { try { JSON.parse(t); return true } catch (_) { return false } }
+  for (const m of s.matchAll(/```[\w-]*[ \t]*\r?\n?([\s\S]*?)```/g)) {
+    const t = m[1].trim()
+    if (/^[[{]/.test(t) && ok(t)) return t
+  }
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] !== '{' && s[i] !== '[') continue
+    const stack = []
+    let str = false
+    for (let j = i; j < s.length; j++) {
+      const c = s[j]
+      if (str) {
+        if (c === '\\') j++
+        else if (c === '"') str = false
+        continue
+      }
+      if (c === '"') str = true
+      else if (c === '{' || c === '[') stack.push(c === '{' ? '}' : ']')
+      else if (c === '}' || c === ']') {
+        if (stack.pop() !== c) break
+        if (!stack.length) {
+          const t = s.slice(i, j + 1)
+          if (ok(t)) return t
+          break
+        }
+      }
+    }
+  }
+  return null
+}
+
 // Loi nhac cho Gemini viet mo ta video. script: chu cua kich ban dinh kem (chi gui SCRIPT_MAX ky tu dau).
 const SCRIPT_MAX = 30000
 // request: yeu cau rieng cua chu kenh (go trong tool) - uu tien hon yeu cau mac dinh ve do dai / bo cuc / hashtag
@@ -134,4 +170,4 @@ async function geminiModels({ key, fetchFn = fetch, ep = endpoints() }) {
   return list.map(([id, name]) => [id, name && name !== id ? `${name} (${id})` : id])
 }
 
-module.exports = { ApiError, endpoints, explain, gemini, geminiModels, GEMINI_MODELS, GEMINI_DEFAULT, GEMINI_UPGRADE, THINKING, SCRIPT_MAX, descriptionPrompt, replyPrompt, parseReply, KINDS }
+module.exports = { ApiError, endpoints, explain, extractJson, gemini, geminiModels, GEMINI_MODELS, GEMINI_DEFAULT, GEMINI_UPGRADE, THINKING, SCRIPT_MAX, descriptionPrompt, replyPrompt, parseReply, KINDS }

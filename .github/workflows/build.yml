@@ -92,6 +92,7 @@ jobs:
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-accounts.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-inbox.js
           xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-aiposts.js
+          xvfb-run -a -s "-screen 0 1500x950x24" node tests/ci-run.js node tests/e2e-aiposts.js web
 
   # ------------------------------------------------------------------ 1b. Linux: luong tu dong tren YouTube gia
   flows:

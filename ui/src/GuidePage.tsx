@@ -1,7 +1,8 @@
-// Huong dan: lay Gemini API key (viet mo ta, tra loi binh luan) va cach tool dang video qua YouTube Studio.
+// Huong dan: Gemini (trinh duyet hoac API key) cho mo ta / Dang bai AI / tra loi binh luan, va cach tool dang video qua YouTube Studio.
 import { BookOpen, CheckCircle2, ExternalLink } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { State } from './api'
+import { GeminiWebPill, aiProviderOf, geminiVia } from './GeminiHelp'
 import { Button, Card, PageBody, PageHeader, Pill, cn } from './kit'
 
 type Send = (cmd: string, payload?: unknown) => Promise<unknown>
@@ -28,24 +29,35 @@ export function GuidePage({ state, send, go }: { state: State; send: Send; go: (
   const accounts = state.upload.channels.length > 0
   return (
     <>
-      <PageHeader icon={BookOpen} title="Hướng dẫn" description="Gemini API key cho mô tả và trả lời bình luận. Video đăng bằng YouTube Studio, không cần Google Cloud." />
+      <PageHeader icon={BookOpen} title="Hướng dẫn" description="Gemini trên trình duyệt (miễn phí) viết mô tả và bài Đăng bài AI; API key chỉ cần cho trả lời bình luận. Video đăng bằng YouTube Studio, không cần Google Cloud." />
       <PageBody>
         <div className="grid gap-3 xl:grid-cols-2">
-          <Card title="Gemini API (viết mô tả, trả lời bình luận)" hint={state.secrets.gemini ? <Pill tone="success">Đã có key</Pill> : undefined}>
-            <ol>
-              <Step n={1} title="Tạo API key ở Google AI Studio" done={state.secrets.gemini}>
-                <p>Đăng nhập Google AI Studio, bấm <b>Create API key</b>, chọn hoặc tạo một dự án rồi sao chép key dạng <code>AIza…</code>.</p>
-                <Link send={send} url="https://aistudio.google.com/apikey">Mở AI Studio</Link>
-              </Step>
-              <Step n={2} title="Dán vào tool">
-                <p>Vào <b>Cài đặt → Gemini API</b>, dán key, bấm <b>Lưu key</b>. Key được mã hóa và lưu trên máy bạn. Đừng gửi key cho người khác.</p>
-                <Button variant="default" className="mt-1 h-8 px-3 text-xs" onClick={() => go('settings')}>Mở Cài đặt</Button>
-              </Step>
-              <Step n={3} title="Chọn model">
-                <p><b>Gemini 2.5 Flash</b> nhanh, rẻ, đủ dùng cho mô tả và trả lời bình luận. Gói miễn phí có giới hạn số lần gọi mỗi phút và mỗi ngày. Nếu tool báo "hết hạn mức", hãy chờ ít phút hoặc bật thanh toán trong AI Studio.</p>
-              </Step>
-            </ol>
-          </Card>
+          <div className="space-y-3">
+            <Card title="Gemini trên trình duyệt (viết mô tả, Đăng bài AI)" hint={aiProviderOf(state) === 'web' ? <GeminiWebPill status={state.geminiWeb} /> : <Pill tone="muted">Đang dùng API key</Pill>}>
+              <ol>
+                <Step n={1} title="Đăng nhập Google ở trang Tài khoản" done={accounts}>
+                  <p>Gemini dùng chung tài khoản Google với YouTube Studio. Không cần API key, không tốn phí: tool tự mở <b>gemini.google.com</b> trong một cửa sổ riêng và viết trên đó như bạn tự gõ.</p>
+                  <Button variant="default" className="mt-1 h-8 px-3 text-xs" onClick={() => go('accounts')}>Mở Tài khoản</Button>
+                </Step>
+                <Step n={2} title="Chọn tài khoản cho Gemini và kiểm tra" done={state.geminiWeb?.signedIn === true}>
+                  <p>Vào <b>Cài đặt → Gemini</b>, để <b>Gemini dùng qua: Trình duyệt</b>, chọn tài khoản Google rồi bấm <b>Mở Gemini</b>. Nếu Gemini đòi đăng nhập, đồng ý điều khoản hay chọn quốc gia, hãy tự làm trong cửa sổ đó một lần. Đang dùng: <b>{geminiVia(state)}</b>.</p>
+                  <p>Gemini chỉ <b>vẽ ảnh</b> khi tài khoản đã đăng nhập. Gemini báo hết lượt thì chờ một lúc hoặc đổi tài khoản khác.</p>
+                  <Button variant="default" className="mt-1 h-8 px-3 text-xs" onClick={() => go('settings')}>Mở Cài đặt</Button>
+                </Step>
+              </ol>
+            </Card>
+            <Card title="Gemini API key (tuỳ chọn)" hint={state.secrets.gemini ? <Pill tone="success">Đã có key</Pill> : undefined}>
+              <ol>
+                <Step n={1} title="Khi nào cần API key" done={state.secrets.gemini}>
+                  <p>Chỉ cần key cho <b>trả lời bình luận</b> (trang Cộng đồng), khi chọn <b>Gemini dùng qua: API key</b>, hoặc khi bật <b>Dùng API khi trình duyệt lỗi</b>. Gói miễn phí có giới hạn số lần gọi; tool báo "hết hạn mức" thì chờ ít phút hoặc bật thanh toán trong AI Studio.</p>
+                </Step>
+                <Step n={2} title="Tạo key và dán vào tool">
+                  <p>Đăng nhập Google AI Studio, bấm <b>Create API key</b> rồi sao chép key dạng <code>AIza…</code>. Vào <b>Cài đặt → Gemini</b>, dán key, bấm <b>Lưu key</b>. Key được mã hóa và lưu trên máy bạn. Đừng gửi key cho người khác.</p>
+                  <Link send={send} url="https://aistudio.google.com/apikey">Mở AI Studio</Link>
+                </Step>
+              </ol>
+            </Card>
+          </div>
           <div className="space-y-3">
             <Card title="Đăng video qua YouTube Studio" hint={accounts ? <Pill tone="success">Đã có kênh</Pill> : undefined}>
               <ol>
@@ -55,7 +67,7 @@ export function GuidePage({ state, send, go }: { state: State; send: Send; go: (
                 </Step>
                 <Step n={2} title="Chọn thư mục video">
                   <p>Bỏ các video cần đăng vào <b>một thư mục</b>, mỗi video kèm ảnh thumbnail <b>cùng tên</b>: <code>Bí ẩn tập 7.mp4</code> + <code>Bí ẩn tập 7.jpg</code> (hoặc .jpeg, .png, .webp). Không cần thư mục con, không cần info.txt.</p>
-                  <p>Ở trang <b>Đăng video</b>, bấm <b>Chọn thư mục</b>. Tiêu đề là tên file; mô tả, thẻ, chế độ hiển thị và lịch lấy theo <b>Mẫu mặc định</b>. Muốn mô tả riêng, bấm <b>Gemini viết mô tả</b> (tùy chọn): mô tả được lưu vào <code>Bí ẩn tập 7.txt</code> cạnh video.</p>
+                  <p>Ở trang <b>Đăng video</b>, bấm <b>Chọn thư mục</b>. Tiêu đề là tên file; mô tả, thẻ, chế độ hiển thị và lịch lấy theo <b>Mẫu mặc định</b>. Muốn mô tả riêng, bấm <b>Gemini viết mô tả</b> (tùy chọn, Gemini trên trình duyệt, không cần API key): mô tả được lưu vào <code>Bí ẩn tập 7.txt</code> cạnh video.</p>
                   <p>Đăng xong, tool chuyển video, ảnh và file kèm theo vào thư mục con <code>da-dang</code> nên không bao giờ đăng lại.</p>
                 </Step>
                 <Step n={3} title="Chọn kênh và chế độ hiển thị">
