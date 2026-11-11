@@ -98,8 +98,15 @@ function findBrowser() {
       await page.getByLabel('Lựa chọn 2').waitFor()
       assert.equal(await page.getByRole('link', { name: 'Xem bài' }).count(), 1)
       await check('aiposts-ban-nhap')
+      // dang dung Gemini nao + trang thai dang nhap + nut Mo Gemini; trinh duyet: khong hien chon model ve anh
+      await page.getByText('Viết bằng: Gemini trên trình duyệt (tài khoản Nick Thắng)').waitFor()
+      await page.getByText('Đã đăng nhập Gemini').waitFor()
+      await page.getByRole('button', { name: 'Mở Gemini' }).waitFor()
+      assert.equal(await page.getByText(/cần Gemini API key/).count(), 0, `${tag}: trinh duyet khong can key`)
       await page.getByRole('button', { name: /3\. Tuỳ chọn/ }).click()
       await page.getByRole('radiogroup', { name: 'Nguồn ảnh' }).waitFor()
+      await page.getByText(/Gemini trên trình duyệt vẽ ảnh: cần tài khoản Google đã đăng nhập Gemini/).waitFor()
+      assert.equal(await page.getByLabel('Model vẽ ảnh').count(), 0, `${tag}: model ve anh chi cho API`)
       await check('aiposts-tuy-chon')
       // doi ngay + gio cua mot bai bang ban phim va chuot (loi cu: o datetime-local bi state cua main ghi de moi phim,
       // go do dang gui ca gia tri rong) -> o hien gia tri moi, moi lan chon gui dung 1 aipost_update
@@ -157,6 +164,20 @@ function findBrowser() {
         const ymd = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
         assert.deepEqual(await sentOf('aipost_save'), [{ from: ymd(d3) }, { to: ymd(d5) }], `${tag}: lenh aipost_save`)
       }
+      // loi Gemini (chua dang nhap): huong dan + nut "Mở Gemini" o Dang bai AI va hop thoai mo ta, canh bao anh
+      await page.goto(`${URL}?demo=gemini-loi#aiposts`)
+      const aiAlert = page.getByRole('alert')
+      await aiAlert.getByText(/Chưa đăng nhập Google trong tài khoản dùng cho Gemini/).waitFor()
+      await aiAlert.getByRole('button', { name: 'Mở Gemini' }).waitFor()
+      await aiAlert.getByRole('button', { name: 'Cài đặt Gemini' }).waitFor()
+      await page.getByText('Chưa đăng nhập Gemini').waitFor()
+      await page.getByText(/Ảnh: tài khoản dùng cho Gemini chưa đăng nhập/).waitFor()
+      await check('aiposts-gemini-loi')
+      await page.goto(`${URL}?demo=gemini-loi#videos`)
+      const dd = page.getByRole('dialog')
+      await dd.getByText('Gemini trên trình duyệt (tài khoản Nick Thắng)').waitFor()
+      await dd.getByRole('alert').getByRole('button', { name: 'Mở Gemini' }).waitFor()
+      await check('mo-ta-gemini-loi')
       // trang chu kenh: kenh co anh dai dien hien anh that (nhu trang Tai khoan), khong anh / anh loi -> chu cai
       await page.goto(`${URL}?demo#hometab`)
       const homeRow = (name) => page.locator('li', { has: page.getByLabel(`Chọn kênh ${name}`) })
@@ -258,6 +279,25 @@ function findBrowser() {
       await check('preset-xoa')
       await page.keyboard.press('Escape')
       assert.equal(await page.getByRole('dialog').count(), 0)
+      // cai dat Gemini: trinh duyet (mac dinh) + tai khoan + Mo Gemini + du phong API; API key tuy chon; tra loi binh luan dung API
+      await page.goto(`${URL}?demo#settings`)
+      const via = page.getByRole('radiogroup', { name: 'Gemini dùng qua' })
+      assert.equal(await via.getByRole('radio', { name: /^Trình duyệt/ }).getAttribute('aria-checked'), 'true')
+      const gAcc = page.getByLabel('Tài khoản Google dùng cho Gemini')
+      assert.equal(await gAcc.inputValue(), 'thang')
+      assert.deepEqual(await gAcc.locator('option').allTextContents(), ['Tài khoản đầu tiên (Nick Thắng)', 'Nick Thắng (athang@versee.net)', 'Leo Nguyen (rollreus94@gmail.com)'])
+      await page.getByRole('button', { name: 'Mở Gemini' }).waitFor()
+      await page.getByText('Đã đăng nhập Gemini').waitFor()
+      await page.getByRole('switch', { name: 'Dùng API khi trình duyệt lỗi' }).waitFor()
+      await page.getByText('Gemini API key (tuỳ chọn: dự phòng và trả lời bình luận)').waitFor()
+      await page.getByText(/Trả lời bình luận \(trang Cộng đồng\) vẫn dùng Gemini API key/).waitFor()
+      await page.getByText('Gemini (viết mô tả, Đăng bài AI)').scrollIntoViewIfNeeded()
+      await check('settings-gemini')
+      await via.getByRole('radio', { name: /^API key/ }).click()
+      await page.getByText('Chưa lưu').first().waitFor()
+      assert.equal(await page.getByLabel('Tài khoản Google dùng cho Gemini').count(), 0, 'API: an chon tai khoan')
+      await page.getByText('Gemini API key', { exact: true }).waitFor()
+      await check('settings-gemini-api')
       // cai dat: doi chu de + luu lai sau khi tai lai
       await page.goto(`${URL}?demo#settings`)
       await page.getByLabel('Tên kênh').fill('Kênh khác')

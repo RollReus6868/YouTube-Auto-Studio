@@ -12,6 +12,7 @@ const { buildVideoMeta, validateMeta, titleErrors, planSchedule, applyVisibility
 const { readScript, SCRIPT_EXT } = require('./docx')
 const { Store, dropApiData } = require('./store')
 const { endpoints, gemini, geminiModels, GEMINI_MODELS, descriptionPrompt } = require('./google')
+const { createAi } = require('./ai')
 const { CommentDesk } = require('./comments')
 const { uploadOne } = require('./uploader')
 const { googleSession, REJECTED, REJECTED_TEXT } = require('./studio/session')
@@ -390,12 +391,17 @@ async function runUploads(ids) {
 
 // ---- Gemini viet mo ta -------------------------------------------------------------
 // request: yeu cau rieng cua nguoi dung (o "Yêu cầu cho Gemini" trong hop thoai); khong co thi lay mac dinh o Cai dat
+// Gemini tren trinh duyet hoac API (ctx.ai, src/ai.js). Dong hop thoai luc dang viet = dung (khong ghi de hop thoai moi).
+let draftToken = null
 async function describe(id, request) {
   const item = raw.get(id)
   if (!item) return
   const file = item.script ? path.basename(item.script.path) : ''
   request = String(request === undefined ? store.settings.descRequest || '' : request).trim().slice(0, 2000)
-  state.draft = { id, text: '', loading: true, error: '', script: file, request }
+  const token = {}
+  draftToken = token
+  const via = ctx.ai.provider()
+  state.draft = { id, text: '', loading: true, error: '', code: '', script: file, request, via }
   push()
   try {
     let script = ''
@@ -404,13 +410,15 @@ async function describe(id, request) {
       if (!script.trim()) throw new Error(`Kịch bản "${file}" không có chữ.`)
       log('info', `Gemini viết mô tả cho "${item.meta.title}" theo kịch bản ${file} (${script.length.toLocaleString('vi-VN')} ký tự).`)
     }
-    const text = await gemini({
-      key: store.getSecret('gemini'), model: store.settings.geminiModel, thinking: store.settings.geminiThinking, fetchFn: net.fetch, ep: endpoints(),
+    const text = await ctx.ai.text({
       prompt: descriptionPrompt({ title: item.meta.title, name: item.name, notes: item.info.ghi_chu, channel: store.settings.channel, language: (store.presetFor({ info: item.info }).optimize || {}).language || '', current: item.info.mo_ta, script, request }),
+      label: `mo-ta-${item.name || id}`, shouldStop: () => draftToken !== token,
     })
-    state.draft = { id, text: text.replace(/[<>]/g, ''), loading: false, error: '', script: file, request }
+    if (draftToken !== token) return
+    state.draft = { id, text: text.replace(/[<>]/g, ''), loading: false, error: '', code: '', script: file, request, via }
   } catch (e) {
-    state.draft = { id, text: '', loading: false, error: e.message, script: file, request }
+    if (draftToken !== token) return
+    state.draft = { id, text: '', loading: false, error: e.message, code: e.code || '', script: file, request, via }
   }
   push()
 }
@@ -534,7 +542,7 @@ const commands = {
     refreshSettings()
     runScan(true)
   },
-  draft_close: () => { state.draft = null },
+  draft_close: () => { state.draft = null; draftToken = null },
   script_attach: (id) => attachScript(id),
   script_remove: (id) => setScript(id, ''),
   save_description: (p) => !busy && saveDescription(p || {}),
@@ -555,9 +563,13 @@ const commands = {
   open_url: (u) => /^https:\/\//.test(u) && shell.openExternal(u),
   settings_save: (patch) => {
     // chi nhan cac truong cai dat thuong; khoa bi mat di lenh rieng
-    const allowed = ['channel', 'presets', 'defaultPreset', 'runInPane', 'geminiModel', 'geminiThinking', 'replyStyle', 'replyMode', 'replyPerHour', 'skipWords', 'descDefault', 'descPosition', 'descRequest']
+    const allowed = ['channel', 'presets', 'defaultPreset', 'runInPane', 'geminiModel', 'geminiThinking', 'replyStyle', 'replyMode', 'replyPerHour', 'skipWords', 'descDefault', 'descPosition', 'descRequest',
+      'aiProvider', 'aiFallbackApi', 'geminiAccount']
     const clean = {}
     for (const k of allowed) if (patch && patch[k] !== undefined) clean[k] = patch[k]
+    if (clean.aiProvider !== undefined && !['web', 'api'].includes(clean.aiProvider)) clean.aiProvider = 'web'
+    if (clean.aiFallbackApi !== undefined) clean.aiFallbackApi = !!clean.aiFallbackApi
+    if (clean.geminiAccount !== undefined) clean.geminiAccount = String(clean.geminiAccount || '')
     if (clean.descDefault !== undefined) clean.descDefault = String(clean.descDefault).replace(/\r\n?/g, '\n')
     if (clean.descPosition !== undefined && !DESC_POSITIONS.includes(clean.descPosition)) clean.descPosition = 'above'
     const rescan = clean.presets || clean.defaultPreset || ['channel', 'descDefault', 'descPosition'].some((k) => clean[k] !== undefined && clean[k] !== store.settings[k])
@@ -636,6 +648,8 @@ const ctx = {
     jobs: ctx.accounts && ctx.accounts.jobs ? ctx.accounts.jobs() : 0, features: state.f,
   }),
 }
+// Dang bai AI + mo ta video: Gemini tren trinh duyet (ctx.geminiWeb) hoac API (src/ai.js)
+ctx.ai = createAi(ctx, { fetchFn: (u, o) => net.fetch(u, o) })
 const FEATURES = ['accounts', 'inbox', 'optimize', 'posts', 'aiposts', 'hometab']
 const started = []
 for (const name of FEATURES) {
@@ -643,6 +657,10 @@ for (const name of FEATURES) {
   Object.assign(commands, f.commands || {})
   if (f.start) started.push(f.start)
 }
+
+// nut "Mở Gemini" (Cai dat, Dang bai AI, hop thoai mo ta): src/gemini-web.js thuong tu dang ky lenh nay
+const geminiOpen = commands.gemini_web_open
+commands.gemini_web_open = () => ctx.ai.openWeb(geminiOpen)
 
 ipcMain.handle('call', async (_e, cmd, payload) => {
   const fn = commands[cmd]

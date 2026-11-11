@@ -16,6 +16,10 @@ const DEFAULTS = {
   runInPane: true, // chay viec tu dong trong khung trinh duyet cua tool (nguoi dung xem duoc); false = cua so chay ngam
   geminiModel: GEMINI_DEFAULT,
   geminiThinking: 'low', // cap do tu duy: low | medium | high
+  // Dang bai AI + viet mo ta: 'web' = Gemini tren trinh duyet (mien phi) | 'api' = Gemini API key (src/ai.js)
+  aiProvider: 'web',
+  aiFallbackApi: false, // trinh duyet loi + co key -> thu lai bang API
+  geminiAccount: '', // id tai khoan (trang Tai khoan) dung cho Gemini tren trinh duyet; trong = tai khoan dau tien
   replyStyle: 'Trả lời thân thiện, ngắn gọn (1–2 câu), xưng "mình", gọi khán giả là "bạn". Cảm ơn khi được khen, trả lời đúng trọng tâm câu hỏi. Không hứa hẹn điều kênh không làm.',
   replyMode: 'review', // review | auto | off
   replyPerHour: 20,

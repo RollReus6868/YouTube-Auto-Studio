@@ -72,6 +72,12 @@ run(9344, {}, async ({ ui, find, dataDir }) => {
 
   // 4) khoa Gemini: luu duoc, khong nam dang chu tran trong file, giao dien khong nhan lai khoa; khong con muc YouTube API
   await ui.getByRole('button', { name: 'Cài đặt', exact: true }).click()
+  // Gemini mac dinh qua trinh duyet (khong can key); API key la tuy chon, tra loi binh luan van dung API
+  const via = ui.getByRole('radiogroup', { name: 'Gemini dùng qua' })
+  assert.equal(await via.getByRole('radio', { name: /Trình duyệt/ }).getAttribute('aria-checked'), 'true')
+  await ui.getByRole('button', { name: 'Mở Gemini' }).waitFor()
+  await ui.getByText(/Trả lời bình luận \(trang Cộng đồng\) vẫn dùng Gemini API key/).waitFor()
+  assert.equal((await call('hello')).settings.aiProvider, 'web')
   await ui.getByLabel('Gemini API key').fill('AIzaKHOA-BI-MAT-123')
   await ui.getByRole('button', { name: 'Lưu key' }).click()
   await ui.getByText(/Đã lưu API key/).waitFor()

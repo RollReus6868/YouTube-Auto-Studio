@@ -7,6 +7,7 @@ import {
   ListChecks, LoaderCircle, RefreshCw, Send, Sparkles, Square, Trash2, TriangleAlert, Type, Users, Wand2, type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
+import { GeminiBar, GeminiErrorHelp, aiProviderOf } from '../GeminiHelp'
 import { ActionBar, Button, Card, Choice, EmptyState, Field, PageBody, PageHeader, Pill, Select, TextArea, TextInput, ToggleRow, cn, type Tone } from '../kit'
 import { DatePicker, TimePicker } from '../VisibilityCard'
 import type { PageProps } from './index'
@@ -26,6 +27,7 @@ export type AiDraft = {
 }
 export type AiPostsState = {
   busy: '' | 'generate' | 'post'; progress: string; drafts: AiDraft[]; warnings: string[]
+  aiError?: { code: string; message: string } | null // loi Gemini gan nhat (huong dan + nut "Mở Gemini")
   imageModels: [string, string][]; langs: [string, string][]
   channels: { key: string; name: string; handle: string; ucId: string }[]
   opts: AiOpts
@@ -196,7 +198,12 @@ export function AiPostsPage({ state, send, go }: PageProps) {
   const drafts = s.drafts
   const waiting = drafts.filter((d) => d.status === 'draft' || d.status === 'error')
   const done = drafts.filter((d) => d.status === 'done').length
-  const noKey = !state.secrets?.gemini
+  // Gemini tren trinh duyet (mac dinh) khong can key; chi can key khi chon Gemini API
+  const web = aiProviderOf(state) === 'web'
+  const noKey = !web && !state.secrets?.gemini
+  const gw = state.geminiWeb
+  // ve anh bang Gemini tren trinh duyet can tai khoan Google da dang nhap Gemini
+  const imgSignIn = web && o.imageSource === 'gemini' && gw?.signedIn !== true
   const canWrite = !s.busy && picked.length > 0 && o.types.length > 0 && !noKey
   const today = ymd(new Date())
   const from = fromV && fromV >= today ? fromV : today
@@ -212,9 +219,15 @@ export function AiPostsPage({ state, send, go }: PageProps) {
         actions={<Pill tone="muted">{drafts.length ? `${waiting.length} chờ đăng · ${done} xong` : 'Chưa có bài'}</Pill>}
       />
       <PageBody>
-        {noKey && (
-          <Card><div className="flex flex-wrap items-center gap-3"><CircleAlert className="h-5 w-5 text-amber-500" /><p className="min-w-0 flex-1 text-sm">Cần Gemini API key để viết bài.</p><Button variant="outline" className="h-8 px-3 text-xs" onClick={() => go('settings')}>Mở Cài đặt</Button></div></Card>
+        <GeminiBar state={state} send={send} go={go} />
+        {imgSignIn && gw?.signedIn === false && o.types.some((t) => t === 'image' || t === 'image_poll') && (
+          <p className="flex gap-1.5 px-1 text-xs text-amber-700 dark:text-amber-400"><TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>Ảnh: tài khoản dùng cho Gemini chưa đăng nhập nên Gemini không vẽ được ảnh (bài ảnh sẽ thành bài chữ). Bấm “Mở Gemini” để đăng nhập, hoặc chọn “Lấy ảnh trong thư mục” ở mục 3.</span></p>
         )}
+        {noKey && (
+          <Card><div className="flex flex-wrap items-center gap-3"><CircleAlert className="h-5 w-5 text-amber-500" /><p className="min-w-0 flex-1 text-sm">Đang chọn Gemini API: cần Gemini API key để viết bài (hoặc chọn Gemini trên trình duyệt, miễn phí).</p><Button variant="outline" className="h-8 px-3 text-xs" onClick={() => go('settings')}>Mở Cài đặt</Button></div></Card>
+        )}
+        {s.aiError && !s.busy && <GeminiErrorHelp code={s.aiError.code} message={s.aiError.message} send={send} go={go} />}
         <Section title="1. Kênh và yêu cầu cho Gemini" hint="Mỗi kênh một khung yêu cầu: chủ đề, đối tượng, giọng văn. Gemini viết theo đó.">
           <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Kênh đăng bài tự động">
             {s.channels.length === 0 ? (
@@ -309,12 +322,16 @@ export function AiPostsPage({ state, send, go }: PageProps) {
             </div>
             <div className="space-y-3">
               <Choice name="Nguồn ảnh" value={o.imageSource} onChange={(imageSource) => save({ imageSource })} options={[
-                { value: 'gemini', label: 'Gemini vẽ ảnh', hint: 'Cần key có quyền tạo ảnh (tài khoản trả phí).' },
+                { value: 'gemini', label: 'Gemini vẽ ảnh', hint: web ? 'Gemini trên trình duyệt vẽ ảnh: cần tài khoản Google đã đăng nhập Gemini.' : 'Gemini API: cần key có quyền tạo ảnh (tài khoản trả phí).' },
                 { value: 'folder', label: 'Lấy ảnh trong thư mục', hint: 'Mỗi kênh một thư mục, không dùng lại ảnh đã đăng.' },
                 { value: 'none', label: 'Không dùng ảnh', hint: 'Bài ảnh thành bài chữ, thăm dò ảnh thành thăm dò chữ.' },
               ]} />
+              {imgSignIn && (
+                <p className="flex gap-1.5 text-xs text-amber-700 dark:text-amber-400"><TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>{gw?.signedIn === false ? 'Tài khoản dùng cho Gemini chưa đăng nhập: Gemini không vẽ được ảnh (bài ảnh sẽ thành bài chữ).' : 'Chưa biết tài khoản dùng cho Gemini đã đăng nhập chưa: Gemini chỉ vẽ ảnh khi đã đăng nhập.'} Bấm “Mở Gemini” ở trên để kiểm tra.</span></p>
+              )}
               {o.imageSource === 'gemini' && <>
-                <Field label="Model vẽ ảnh"><Select label="Model vẽ ảnh" value={o.imageModel} onChange={(imageModel) => save({ imageModel })} options={s.imageModels} /></Field>
+                {!web && <Field label="Model vẽ ảnh"><Select label="Model vẽ ảnh" value={o.imageModel} onChange={(imageModel) => save({ imageModel })} options={s.imageModels} /></Field>}
                 <Field label="Phong cách ảnh chung"><Saved value={o.imageStyle} aria-label="Phong cách ảnh chung" placeholder="vd: cinematic, dark biblical oil painting" onSave={(imageStyle) => save({ imageStyle })} /></Field>
               </>}
             </div>

@@ -2,7 +2,10 @@
 // Dang nhap tai khoan -> tick kenh -> chon kenh + yeu cau cho Gemini, loai bai, so bai, ngay gio ->
 // "Viết bài" (Gemini viet + ve anh) -> sua mot bai -> "Đăng N bài" (len lich tren tab Bai dang) ->
 // lan sau Gemini nhan duoc bai cu (khong lap lai); tat "Duyệt trước khi đăng": mot nut viet va dang luon.
-//   xvfb-run -a node tests/e2e-aiposts.js
+//   xvfb-run -a node tests/e2e-aiposts.js        Gemini API (key, may chu Gemini gia)
+//   xvfb-run -a node tests/e2e-aiposts.js web    Gemini tren trinh duyet: ctx.geminiWeb gia (tests/gemini-web-fake.js)
+//     + loi chua dang nhap -> nut "Mở Gemini", du phong API, bam Dung luc Gemini dang viet.
+//   Khi ghep src/gemini-web.js that: co the thay YA_GEMINI_WEB_FAKE bang trang Gemini gia (YA_GEMINI_BASE) cua nhanh gemini-web.
 const assert = require('assert')
 const fs = require('fs')
 const os = require('os')
@@ -18,6 +21,7 @@ const waitFor = async (fn, what, ms = 60000) => {
 const p2 = (n) => String(n).padStart(2, '0')
 const ymd = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
 const vnDay = (d) => `${d.getDate()} thg ${d.getMonth() + 1}, ${d.getFullYear()}`
+const WEB = process.argv[2] === 'web'
 
 ;(async () => {
   const yt = await startMockYt()
@@ -26,8 +30,10 @@ const vnDay = (d) => `${d.getDate()} thg ${d.getMonth() + 1}, ${d.getFullYear()}
   const env = {
     YA_STUDIO_BASE: yt.urls.studio, YA_YOUTUBE_BASE: yt.urls.youtube, YA_STUDIO_URL: `${yt.urls.studio}/`,
     YA_GOOGLE_MOCK: gm.url, YA_NO_UPDATE_CHECK: '1', YA_LANE_IDLE_MS: '60000',
+    ...(WEB ? { YA_GEMINI_WEB_FAKE: gm.url } : {}),
   }
-  run(9451, env, async ({ ui, browser }) => {
+  const images = () => (WEB ? (gm.webImages || []).length : gm.images || 0)
+  run(WEB ? 9452 : 9451, env, async ({ ui, browser }) => {
     const call = (cmd, payload) => ui.evaluate(([c, p]) => window.ya.call(c, p), [cmd, payload])
     const st = () => call('hello')
     const pages = () => browser.contexts().flatMap((c) => c.pages())
@@ -43,9 +49,18 @@ const vnDay = (d) => `${d.getDate()} thg ${d.getMonth() + 1}, ${d.getFullYear()}
     }
 
     await ui.getByRole('heading', { name: 'Đăng video' }).waitFor()
+    // mac dinh: Gemini tren trinh duyet (khong can key); che do API: chon "API key" -> can key
+    assert.equal((await st()).settings.aiProvider, 'web')
+    if (!WEB) await call('settings_save', { aiProvider: 'api' })
     await ui.getByRole('button', { name: 'Đăng bài AI', exact: true }).click()
     await ui.getByRole('heading', { name: 'Đăng bài tự động' }).waitFor()
-    await ui.getByText('Cần Gemini API key để viết bài.').waitFor()
+    if (WEB) {
+      await ui.getByText(/Viết bằng:\s*Gemini trên trình duyệt/).waitFor()
+      assert.equal(await ui.getByText(/cần Gemini API key/).count(), 0, 'trinh duyet khong can key')
+    } else {
+      await ui.getByText(/Viết bằng:\s*Gemini API \(gemini-3\.8-flash\)/).waitFor()
+      await ui.getByText(/Đang chọn Gemini API: cần Gemini API key để viết bài/).waitFor()
+    }
     await ui.getByRole('button', { name: 'Thêm và tick kênh ở trang Tài khoản' }).waitFor()
 
     // dang nhap tai khoan gia o trang Tai khoan (co khung Studio), tick "Dark Faith 2nd"
@@ -60,9 +75,19 @@ const vnDay = (d) => `${d.getDate()} thg ${d.getMonth() + 1}, ${d.getFullYear()}
     await call('accounts_login_done')
     await waitFor(async () => ((await st()).f.accounts.list.find((a) => a.id === 'nick-thang') || { channels: [] }).channels.length === 7, 'doc kenh')
     await call('accounts_enable', { key: 'nick-thang:Dark Faith 2nd', enabled: true })
-    await call('gemini_set', 'gemini-ok')
+    if (!WEB) await call('gemini_set', 'gemini-ok')
+    else {
+      // Cai dat -> Gemini: chon tai khoan Google dung cho Gemini (mac dinh tai khoan dau tien)
+      await ui.getByRole('button', { name: 'Cài đặt', exact: true }).click()
+      const acc = ui.getByLabel('Tài khoản Google dùng cho Gemini')
+      assert.equal(await acc.inputValue(), '')
+      await acc.selectOption('nick-thang')
+      await ui.getByRole('button', { name: 'Lưu cài đặt' }).click()
+      await waitFor(async () => (await st()).settings.geminiAccount === 'nick-thang', 'luu tai khoan Gemini')
+    }
     await ui.getByRole('button', { name: 'Đăng bài AI', exact: true }).click()
     await ui.getByRole('heading', { name: 'Đăng bài tự động' }).waitFor()
+    if (WEB) await ui.getByText('Viết bằng: Gemini trên trình duyệt (tài khoản Nick Thắng)').waitFor()
 
     // chon kenh + yeu cau, loai bai (chu, anh, tham do, cau do), 4 bai, ngay mai -> ngay kia, 09:00 + 20:00
     const chip = ui.getByRole('group', { name: 'Kênh đăng bài tự động' }).getByRole('button', { name: 'Dark Faith 2nd' })
@@ -91,8 +116,17 @@ const vnDay = (d) => `${d.getDate()} thg ${d.getMonth() + 1}, ${d.getFullYear()}
     let s = (await st()).f.aiposts
     assert.deepEqual(s.drafts.map((d) => d.type), ['text', 'image', 'poll', 'quiz'])
     assert.deepEqual(s.drafts.map((d) => { const w = new Date(d.when); return `${w.getDate()} ${w.getHours()}` }), [`${tomorrow.getDate()} 9`, `${tomorrow.getDate()} 20`, `${after.getDate()} 9`, `${after.getDate()} 20`])
-    assert.equal(gm.images, 1, 'Gemini ve 1 anh')
+    assert.equal(images(), 1, 'Gemini ve 1 anh')
     assert(fs.existsSync(s.drafts[1].images[0]), 'anh da luu')
+    assert.equal(fs.readFileSync(s.drafts[1].images[0]).subarray(1, 4).toString(), 'PNG')
+    if (WEB) {
+      // Gemini tren trinh duyet: khong goi API; loi nhac doi mot khoi JSON; cau tra loi co chu thua van doc duoc
+      assert(!gm.calls.some((c) => /generateContent/.test(c.path)), 'khong goi Gemini API')
+      assert.match(gm.webPrompts[0], /ONE valid JSON object[\s\S]*Chỉ trả lời bằng một khối JSON hợp lệ/)
+      assert.match(gm.webImages[0], /Create an image[\s\S]*Aspect ratio 1:1[\s\S]*garden of Eden/)
+      assert.equal((await st()).geminiWeb.signedIn, true)
+      assert.equal((await st()).geminiWeb.accountId, 'nick-thang')
+    } else assert.equal((gm.webPrompts || []).length, 0, 'API: khong dung trinh duyet')
     assert.match(gm.postPrompts[0], /warm tone, scripture-based/)
     assert.match(gm.postPrompts[0], /Dark Faith 2nd/)
     assert.match(gm.postPrompts[0], /in this order of types: text, image, poll, quiz\./)
@@ -149,6 +183,49 @@ const vnDay = (d) => `${d.getDate()} thg ${d.getMonth() + 1}, ${d.getFullYear()}
     await ui.getByRole('button', { name: 'Ẩn bài đã đăng' }).click()
     await waitFor(async () => (await st()).f.aiposts.drafts.length === 0, 'an bai da dang')
     assert.equal(JSON.parse(fs.readFileSync(path.join(dataDir, 'ai-posts.json'), 'utf8')).length, 0, 'luu danh sach ban nhap')
-    console.log('E2E AIPOSTS PASSED')
+
+    if (WEB) {
+      // bat lai duyet de chi viet (khong dang)
+      await ui.getByRole('switch', { name: 'Duyệt trước khi đăng' }).click()
+      await waitFor(async () => (await st()).f.aiposts.opts.review === true, 'bat duyet')
+      const write = ui.getByRole('button', { name: 'Viết bài (1 kênh × 1)' })
+      // 1) chua dang nhap Gemini: bao loi + huong dan + nut "Mở Gemini" (mo cua so Gemini); khong goi API
+      gm.opts.webFail = 'GEMINI_SIGNIN'
+      const nApi = gm.calls.filter((c) => /generateContent/.test(c.path)).length
+      await write.click()
+      const alert = ui.getByRole('alert').filter({ hasText: 'Chưa đăng nhập Google trong tài khoản dùng cho Gemini.' })
+      await alert.waitFor({ timeout: 30000 })
+      await alert.getByText(/Bấm “Mở Gemini”, đăng nhập trong cửa sổ Gemini/).waitFor()
+      assert.equal((await st()).f.aiposts.aiError.code, 'GEMINI_SIGNIN')
+      assert.equal((await st()).geminiWeb.signedIn, false)
+      await ui.getByText('Chưa đăng nhập Gemini').first().waitFor()
+      await alert.getByRole('button', { name: 'Mở Gemini' }).click()
+      await waitFor(() => gm.webOpened === 1, 'nut Mo Gemini')
+      assert.equal(gm.calls.filter((c) => /generateContent/.test(c.path)).length, nApi, 'du phong tat: khong goi API')
+      assert.equal((await st()).f.aiposts.drafts.length, 0)
+      // 2) bat "Dùng API khi trình duyệt lỗi" + co key -> API viet thay, ghi nhat ky
+      await call('gemini_set', 'gemini-ok')
+      await call('settings_save', { aiFallbackApi: true })
+      await write.click()
+      await waitFor(async () => { const a = (await st()).f.aiposts; return !a.busy && a.drafts.length === 1 }, 'du phong API viet bai', 60000)
+      assert(gm.calls.filter((c) => /generateContent/.test(c.path)).length > nApi, 'da goi API du phong')
+      assert((await st()).logs.some((l) => l.level === 'warn' && /Gemini trên trình duyệt chưa viết được[\s\S]*thử lại bằng Gemini API/.test(l.msg)))
+      assert.equal(await ui.getByRole('alert').count(), 0, 'het loi thi an huong dan')
+      // 3) bam Dung luc Gemini (trinh duyet) dang viet: dung ngay, khong goi API du phong
+      gm.opts.webFail = null
+      gm.opts.webDelay = 20000
+      const nApi2 = gm.calls.filter((c) => /generateContent/.test(c.path)).length
+      const nWeb = gm.webPrompts.length
+      await write.click()
+      await waitFor(() => gm.webPrompts.length > nWeb, 'gui loi nhac cho Gemini', 10000)
+      await ui.getByRole('button', { name: 'Dừng' }).click()
+      const t0 = Date.now()
+      await waitFor(async () => !(await st()).f.aiposts.busy, 'dung viet bai', 10000)
+      assert(Date.now() - t0 < 5000, `dung cham ${Date.now() - t0} ms`)
+      assert.equal((await st()).f.aiposts.drafts.length, 1, 'khong them bai')
+      assert.equal(gm.calls.filter((c) => /generateContent/.test(c.path)).length, nApi2, 'Dung: khong du phong API')
+      assert((await st()).logs.some((l) => /đã dừng theo yêu cầu/.test(l.msg)), 'nhat ky dung')
+    }
+    console.log(`E2E AIPOSTS (${WEB ? 'GEMINI TRINH DUYET' : 'GEMINI API'}) PASSED`)
   }, dataDir)
 })()

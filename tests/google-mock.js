@@ -18,11 +18,49 @@ function startMock(opts = {}) {
   const json = (res, code, obj, headers = {}) => { res.writeHead(code, { 'content-type': 'application/json', ...headers }); res.end(JSON.stringify(obj)) }
   const readBody = (req) => new Promise((r) => { const parts = []; req.on('data', (d) => parts.push(d)); req.on('end', () => r(Buffer.concat(parts))) })
 
+  // bai dang Cong dong: dung so bai + loai trong loi nhac (API va Gemini tren trinh duyet dung chung bo dem)
+  const postsJson = (c) => {
+    const types = (/in this order of types: ([a-z_, ]+)\./.exec(c) || [, 'text'])[1].split(',').map((x) => x.trim())
+    m.postPrompts = [...(m.postPrompts || []), c]
+    return m.opts.postsReply || JSON.stringify({ posts: types.map((t, i) => POST(t, i + (m.postPrompts.length - 1) * 10)) })
+  }
+  // Gemini tren trinh duyet gia (tests/gemini-web-fake.js): opts.webFail = ma loi, opts.webDelay = ms cho,
+  // opts.webImageFail = ma loi rieng cho anh, opts.webReply = chu tra loi khac
+  const WEB_ERR = {
+    GEMINI_SIGNIN: 'Chưa đăng nhập Google trong tài khoản dùng cho Gemini.',
+    GEMINI_BLOCKED: 'Gemini đang hiện hộp thoại cần bạn xử lý.',
+    GEMINI_LIMIT: 'Gemini báo đã hết lượt dùng.',
+    GEMINI_TIMEOUT: 'Gemini trả lời quá lâu.',
+  }
+  const webFail = (res, code) => json(res, 409, { code, message: WEB_ERR[code] || code })
+  async function geminiWeb(p, body, res) {
+    if (p === '/gemini-web/open') { m.webOpened = (m.webOpened || 0) + 1; return json(res, 200, {}) }
+    const j = JSON.parse(body.toString() || '{}')
+    const delay = () => m.opts.webDelay && new Promise((r) => setTimeout(r, m.opts.webDelay))
+    if (p === '/gemini-web/image') {
+      m.webImages = [...(m.webImages || []), j.prompt]
+      await delay()
+      const code = m.opts.webImageFail || m.opts.webFail
+      if (code) return webFail(res, code)
+      res.writeHead(200, { 'content-type': 'image/png' })
+      return res.end(Buffer.from(PNG1, 'base64'))
+    }
+    m.webPrompts = [...(m.webPrompts || []), j.prompt]
+    await delay()
+    if (m.opts.webFail) return webFail(res, m.opts.webFail)
+    // Gemini tren trinh duyet hay them loi chao / ghi chu quanh khoi JSON
+    const text = /You write Community posts/.test(j.prompt)
+      ? `Chắc chắn rồi! Đây là các bài viết [theo thứ tự]:\n\`\`\`json\n${postsJson(j.prompt)}\n\`\`\`\nBạn muốn mình sửa bài nào không? {:)}`
+      : m.opts.webReply || 'Mô tả do Gemini trên trình duyệt viết.\n\n#a #b'
+    return json(res, 200, { text })
+  }
+
   const server = http.createServer(async (req, res) => {
     const u = new URL(req.url, 'http://x')
     const body = await readBody(req)
     m.calls.push({ method: req.method, path: u.pathname, query: Object.fromEntries(u.searchParams), headers: req.headers, size: body.length })
     const p = u.pathname
+    if (p.startsWith('/gemini-web/')) return geminiWeb(p, body, res)
 
     // danh sach model cua key (GET /models): co ca model nhung / giong noi phai bi bo
     if (p === '/gemini/models' && req.method === 'GET') {
@@ -52,12 +90,8 @@ function startMock(opts = {}) {
       let text = m.opts.geminiReply
       if (gc.responseMimeType === 'application/json') {
         const c = m.lastGemini.contents[0].parts[0].text
-        if (/You write Community posts/.test(c)) {
-          // bai dang Cong dong: dung so bai + loai trong loi nhac
-          const types = (/in this order of types: ([a-z_, ]+)\./.exec(c) || [, 'text'])[1].split(',').map((x) => x.trim())
-          m.postPrompts = [...(m.postPrompts || []), c]
-          text = m.opts.postsReply || JSON.stringify({ posts: types.map((t, i) => POST(t, i + (m.postPrompts.length - 1) * 10)) })
-        } else text = /\?/.test(c) ? '{"loai":"hoi","tra_loi":"Tuần sau nhé bạn!"}' : '{"loai":"khen","tra_loi":"Cảm ơn bạn nhiều <3"}'
+        if (/You write Community posts/.test(c)) text = postsJson(c)
+        else text = /\?/.test(c) ? '{"loai":"hoi","tra_loi":"Tuần sau nhé bạn!"}' : '{"loai":"khen","tra_loi":"Cảm ơn bạn nhiều <3"}'
       }
       return json(res, 200, { candidates: [{ content: { parts: [{ text }] } }] })
     }

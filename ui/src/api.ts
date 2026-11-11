@@ -72,7 +72,12 @@ export type Settings = {
   descDefault?: string // phan mo ta mac dinh them vao mo ta moi video (link donate, ebook...)
   descPosition?: 'above' | 'below' // phan Gemini viet / mo ta rieng cua video nam tren | duoi phan mac dinh
   descRequest?: string // yeu cau mac dinh cho Gemini khi viet mo ta
+  aiProvider?: 'web' | 'api' // Dang bai AI + viet mo ta: Gemini tren trinh duyet (mac dinh) | Gemini API key
+  aiFallbackApi?: boolean // trinh duyet loi + co key -> thu lai bang API
+  geminiAccount?: string // id tai khoan (trang Tai khoan) dung cho Gemini tren trinh duyet; trong = tai khoan dau tien
 }
+// trang thai Gemini tren trinh duyet (src/gemini-web.js status())
+export type GeminiWebStatus = { busy: boolean; accountId: string; signedIn: boolean | null; lastError: string }
 export type VideoMeta = {
   title: string
   titleBase?: string // tieu de goc (thu muc phang: ten file; kieu cu: theo mau)
@@ -130,7 +135,8 @@ export type PostItem = {
 export type Job = { status: 'queued' | 'run' | 'done' | 'error' | 'stopped'; title?: string; step: string; progress: number; error: string; url: string; warnings?: string[] }
 export type UploadChannel = { key: string; name: string; handle: string; ucId: string; avatar: string }
 export type Comment = { id: string; videoId: string; videoTitle: string; author: string; text: string; publishedAt: string; likeCount: number; status: 'new' | 'ready' | 'sent' | 'skipped' | 'error'; kind: string; draft: string; error: string; note: string }
-export type Draft = { id: string; text: string; loading: boolean; error: string; script?: string; request?: string } // script: ten file kich ban da gui cho Gemini; request: yeu cau rieng da gui
+// script: ten file kich ban da gui cho Gemini; request: yeu cau rieng da gui; code: ma loi Gemini (GEMINI_SIGNIN...); via: web | api
+export type Draft = { id: string; text: string; loading: boolean; error: string; script?: string; request?: string; code?: string; via?: 'web' | 'api' }
 export type State = {
   status: 'idle' | 'run' | 'update'
   version: string
@@ -138,6 +144,7 @@ export type State = {
   settings: Settings | null
   secrets: { gemini: boolean; geminiEncrypted: boolean }
   gemini?: { models: [string, string][]; loading: boolean; error: string; at: string } // model Gemini de chon
+  geminiWeb?: GeminiWebStatus // Gemini tren trinh duyet (chua co = ban nay chua co dich vu)
   scan: { root: string; videoDir?: string; videos: VideoItem[]; posts: PostItem[]; errors: string[]; at: string }
   studio: { channelId: string; channelName?: string; url: string; visible: boolean; job?: string } // job: viec tool dang chay trong khung
   upload: { channelKey: string; channels: UploadChannel[] } // kenh dang video = cac kenh da tick o trang Tai khoan
@@ -156,6 +163,8 @@ declare global {
 }
 
 export const isDemo = () => location.search.includes('demo')
+// ?demo=gemini-loi: du lieu mau co loi Gemini (chua dang nhap) de xem huong dan + nut "Mở Gemini"
+export const demoName = () => new URLSearchParams(location.search).get('demo') || ''
 
 const noUpdate: Update = { status: 'idle', latest: '', notes: '', progress: 0, error: '', manual: false }
 
@@ -189,6 +198,7 @@ const demoSettings: Settings = {
   replyStyle: 'Trả lời thân thiện, ngắn gọn (1–2 câu), xưng "mình", gọi khán giả là "bạn".',
   replyMode: 'review', replyPerHour: 20, skipWords: '', uploadChannel: 'UCxxxxxxxxxxxxxxxxxxxxxx',
   descDefault: 'Ủng hộ kênh: https://example.org/ung-ho\nSách điện tử: https://example.org/sach', descPosition: 'above',
+  aiProvider: 'web', aiFallbackApi: false, geminiAccount: 'thang',
 }
 
 const meta = (title: string, publishAt: string | null, premiere = false): VideoMeta => ({
@@ -203,6 +213,7 @@ export const demoState: State = {
   update: { ...noUpdate, status: 'available', latest: '0.2.0', notes: '- Đăng video bằng hộp thoại tải lên của YouTube Studio\n- Gemini viết mô tả' },
   settings: demoSettings,
   secrets: { gemini: true, geminiEncrypted: true },
+  geminiWeb: { busy: false, accountId: 'thang', signedIn: true, lastError: '' },
   scan: {
     root: demoSettings.root, videoDir: demoSettings.videoDir, errors: [], at: '2026-10-26T12:00:00Z',
     videos: [

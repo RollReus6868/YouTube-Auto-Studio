@@ -5,7 +5,7 @@
 //   pickFolderImages: lay anh chua dung trong thu muc anh cua kenh.
 const fs = require('fs')
 const path = require('path')
-const { ApiError, endpoints } = require('./google')
+const { ApiError, endpoints, extractJson } = require('./google')
 
 const TYPES = ['text', 'image', 'poll', 'quiz', 'image_poll']
 const TYPE_LABEL = { text: 'Chữ', image: 'Ảnh', poll: 'Thăm dò', quiz: 'Câu đố', image_poll: 'Thăm dò ảnh' }
@@ -100,7 +100,8 @@ function postsPrompt({ channel = {}, request = '', style = '', language = 'en', 
     videos.length ? `Recent videos of the channel (you may reference their topics, never invent new titles):\n${videos.slice(0, 8).map((v) => `- ${v}`).join('\n')}` : '',
     when.length ? `Posting dates (one per post, same order; mention a day/season only if it fits): ${when.join(', ')}` : '',
     recent.length ? `Recent posts already published (do NOT repeat them):\n${recent.slice(0, 40).map((t) => `- ${String(t).replace(/\s+/g, ' ').slice(0, 160)}`).join('\n')}` : '',
-    'Reply with JSON only: {"posts":[ ... ]} where each item has one of these shapes:',
+    // Gemini tren trinh duyet khong co che do JSON: doi ro mot khoi JSON duy nhat
+    'Reply with ONE valid JSON object only, in a single ```json code block, with no other text before or after it: {"posts":[ ... ]} where each item has one of these shapes:',
     ...[...new Set(types)].map((t) => SPEC[t]),
   ]
   return lines.filter(Boolean).join('\n')
@@ -145,12 +146,10 @@ function cleanPost(raw, type) {
 
 // out: chu JSON cua Gemini; types: loai bai da hen (cung thu tu)
 function parsePosts(out, types) {
-  let j
-  const s = String(out || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
-  try { j = JSON.parse(s) } catch (_) {
-    const m = /[[{][\s\S]*[\]}]/.exec(s)
-    try { j = m ? JSON.parse(m[0]) : null } catch (_) { j = null }
-  }
+  // cau tra loi co the co chu thua / khoi code (Gemini tren trinh duyet): lay doan JSON dau tien
+  let j = null
+  const s = extractJson(out)
+  if (s) j = JSON.parse(s)
   const list = Array.isArray(j) ? j : j && Array.isArray(j.posts) ? j.posts : null
   if (!list) throw new Error('Gemini không trả về danh sách bài đúng dạng JSON.')
   // ghep theo thu tu; Gemini tra du loai khac thu tu thi lay bai cung loai con lai truoc
