@@ -1,3 +1,21 @@
+## YT Auto Studio 0.7.0
+
+### Gemini trên trình duyệt (không cần API key)
+- **Đăng bài AI** và **Gemini viết mô tả** (trang Đăng video) giờ mặc định dùng Gemini trên trình duyệt (gemini.google.com), không tốn tiền API. Tool mở một cửa sổ Gemini riêng bằng tài khoản Google ở trang Tài khoản, tự gõ yêu cầu, chờ Gemini trả lời rồi lấy chữ hoặc ảnh về. Cửa sổ này tách khỏi khung Studio, nên vẫn viết được trong lúc đang đăng video.
+- Cài đặt → Gemini: chọn "Trình duyệt" (mặc định) hoặc "API key", chọn tài khoản Google dùng cho Gemini, nút "Mở Gemini" để đăng nhập hoặc kiểm tra. Có thêm tuỳ chọn "Dùng API khi trình duyệt lỗi".
+- Vẽ ảnh bằng Gemini trên trình duyệt cần tài khoản Google đã đăng nhập. Nếu Gemini đòi đăng nhập, đồng ý điều khoản hay báo hết lượt, tool hiện cửa sổ Gemini và nút "Mở Gemini" để bạn xử lý.
+- Trả lời bình luận (Cộng đồng) vẫn dùng API key như cũ.
+
+### Tối ưu video
+- **Tự tối ưu sau khi đăng không còn chen ngang việc khác.** Tool chỉ tự chạy khi rảnh hẳn: không có việc nào đang chạy hay xếp hàng, và bạn không thao tác trong 5 phút.
+- Trang Tối ưu video có thêm thẻ "Tự tối ưu sau khi đăng": công tắc bật/tắt, danh sách video đang chờ kèm giờ sẽ chạy, nút "Chạy ngay" và "Bỏ khỏi hàng chờ".
+
+### Đăng bài AI
+- **Sửa lỗi không đổi được ngày tháng** của bài và của Từ ngày / Đến ngày. Ô chọn ngày và giờ giờ giống trang Đăng video (lịch kiểu Studio, giờ theo mốc 15 phút).
+
+### Đăng video
+- **Sửa được tiêu đề từng video** ngay trên thẻ video, có bộ đếm 100 ký tự và nút "Về tiêu đề gốc". Tiêu đề được lưu vào file .txt của video, quét lại vẫn giữ. Gemini viết mô tả cũng dùng tiêu đề mới.
+
 ## YT Auto Studio 0.6.3
 
 ### Đăng bài và Đăng bài AI
