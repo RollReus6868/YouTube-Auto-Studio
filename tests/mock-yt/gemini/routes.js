@@ -38,6 +38,7 @@ module.exports = [
   }],
   [/^\/gemini\/__ask$/, (req, res, m, server) => {
     let body = ''
+    req.setEncoding('utf8') // ghep chu dung UTF-8 khi than yeu cau den thanh nhieu manh (ky tu nhieu byte bi cat)
     req.on('data', (c) => { body += c })
     req.on('end', () => {
       let prompt = ''

@@ -60,7 +60,10 @@ module.exports = [
       const text = await ask(ctx.page, { prompt, base, stableMs: 800 })
       assert.equal(text, 'OK dài')
       const got = ctx.mock.server.geminiPrompts[0]
-      assert.equal(got.replace(/\s+/g, ''), prompt.replace(/\s+/g, ''), 'trang nhan du chu')
+      const g = got.replace(/\s+/g, ''), w = prompt.replace(/\s+/g, '')
+      let at = 0
+      while (at < Math.min(g.length, w.length) && g[at] === w[at]) at++
+      assert(g === w, `trang nhan du chu: nhan ${g.length}/${w.length}, khac tu ${at}: "${g.slice(Math.max(0, at - 30), at + 40)}" / "${w.slice(Math.max(0, at - 30), at + 40)}"`)
       assert(got.split('\n').length >= lines.length - 1, `giu xuong dong (${got.split('\n').length}/${lines.length})`)
     })
   }],

@@ -27,6 +27,7 @@ function startMockYt() {
     // trang gia co the bao ket qua ve may chu de bai kiem doc lai
     if (url.pathname === '/__log' && req.method === 'POST') {
       let body = ''
+      req.setEncoding('utf8') // ghep chu dung UTF-8 khi than yeu cau den thanh nhieu manh (ky tu nhieu byte bi cat)
       req.on('data', (c) => { body += c })
       req.on('end', () => { try { server.events.push(JSON.parse(body)) } catch (_) { /* bo */ } res.end('ok') })
       return

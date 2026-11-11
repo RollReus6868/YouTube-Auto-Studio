@@ -243,11 +243,20 @@ async function typePrompt(page, sel, prompt, stopIf) {
     await page.eval((x) => window.__ya.focus(x), T)
     await page.eval(() => window.__ya.selectAll())
     await page.wc.insertText(String(prompt))
-    const end = Date.now() + 4000 + Math.min(20000, prompt.length / 2)
+    // Loi nhac dai (kich ban hang chuc nghin ky tu) co the vao o rat cham (may cham / Quill): KHONG go lai khi o con
+    // dang nhan chu (lan go truoc chua xong se chen them -> chu bi doi). Cho toi khi khop, hoac o dung yen 1,5 giay.
+    const end = Date.now() + 8000 + Math.min(60000, prompt.length * 2)
     let have = ''
+    let prev = -1
+    let still = Date.now()
     while (Date.now() < end) {
       have = strip(await got())
-      if (have === want) return
+      if (have === want) {
+        await sleep(400) // khong con chu nao chen them sau do
+        if (strip(await got()) === want) return
+        continue
+      }
+      if (have.length !== prev) { prev = have.length; still = Date.now() } else if (Date.now() - still > 1500) break
       await sleep(200)
     }
     if (attempt) throw fail('GEMINI_BLOCKED', `Ô nhập của Gemini không nhận đủ lời nhắc (nhận ${have.length}/${want.length} ký tự không kể khoảng trắng).`)
