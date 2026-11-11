@@ -16,6 +16,7 @@ const { CommentDesk } = require('./comments')
 const { uploadOne } = require('./uploader')
 const { googleSession, REJECTED, REJECTED_TEXT } = require('./studio/session')
 const { channelOf } = require('./studio/driver')
+const idle = require('./idle')
 
 const MAX_LOGS = 300
 const STUDIO_URL = process.env.YA_STUDIO_URL || 'https://studio.youtube.com/'
@@ -44,6 +45,10 @@ let raw = new Map() // id -> du lieu quet day du (duong dan file) cho viec dang
 // kich ban cho Gemini viet mo ta, chon tay theo id video (chi giu trong bo nho): duong dan, '' = bo kich ban tu nhan
 const scripts = new Map()
 let desk = null // CommentDesk
+// lan cuoi nguoi dung ra lenh / bam / go o giao dien (mo app cung tinh): viec tu chay ngam doi tool ranh han (src/idle.js)
+let lastActive = Date.now()
+// lenh giao dien tu gui, khong phai nguoi dung thao tac (pane: bao vi tri khung moi 500 ms)
+const PASSIVE = new Set(['hello', 'pane'])
 const kind = updater.installKind({ exe: process.execPath, packaged: app.isPackaged, platform: process.platform })
 const state = {
   status: 'idle', logs: [],
@@ -507,6 +512,7 @@ function setRoot(root) {
 
 const commands = {
   hello: () => {},
+  activity: () => {}, // giao dien bao nguoi dung vua bam / go (toi da 30 giay mot lan): chi cap nhat lastActive
   stop: () => {
     if (uploading && !stopAfter) {
       stopAfter = true
@@ -624,6 +630,11 @@ const ctx = {
   // hop chon thu muc cua he dieu hanh -> duong dan ('' neu huy)
   pickFolder: async (title) => { const r = await dialog.showOpenDialog(win, { title, properties: ['openDirectory'] }); return r.canceled ? '' : r.filePaths[0] || '' },
   get desk() { return desk }, // CommentDesk chung (binh luan API + hop thu Studio), co sau app.whenReady
+  // '' = tool ranh han (khong viec nao dang chay / xep hang, nguoi dung khong thao tac 5 phut); khong thi ly do
+  busyReason: () => idle.busyReason({
+    lastActive, mainBusy: busy, status: state.status, studioJob: state.studio.job,
+    jobs: ctx.accounts && ctx.accounts.jobs ? ctx.accounts.jobs() : 0, features: state.f,
+  }),
 }
 const FEATURES = ['accounts', 'inbox', 'optimize', 'posts', 'aiposts', 'hometab']
 const started = []
@@ -635,6 +646,7 @@ for (const name of FEATURES) {
 
 ipcMain.handle('call', async (_e, cmd, payload) => {
   const fn = commands[cmd]
+  if (!PASSIVE.has(cmd)) lastActive = Date.now()
   if (fn) {
     try { await fn(payload) } catch (e) { log('error', `${cmd}: ${e.message}`) }
   }

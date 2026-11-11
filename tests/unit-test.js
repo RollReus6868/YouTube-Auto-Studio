@@ -632,6 +632,34 @@ test('che do hien thi rieng tung video + yeu cau rieng cho Gemini', () => {
   assert(!/Yêu cầu riêng/.test(g.descriptionPrompt({ title: 'X', request: '  ' })))
 })
 
+// tool "ranh han" (src/idle.js): tu toi uu hang cho sau khi dang khong chen ngang viec khac
+test('tool ranh han: viec dang chay / xep hang / vua thao tac -> chua ranh', () => {
+  const { busyReason, QUIET_MS } = require('../src/idle')
+  const now = 1_000_000_000
+  const idle = { now, lastActive: now - QUIET_MS - 1, jobs: 0, features: {
+    accounts: { busy: {}, login: null, paneBusy: false, debug: null }, inbox: { busy: false, sending: 0, hearting: false },
+    optimize: { busy: false, all: { running: false } }, posts: { busy: false }, aiposts: { busy: '' }, hometab: { busy: false },
+  } }
+  assert.equal(busyReason(idle), '', 'khong ai ban, 5 phut khong thao tac -> ranh')
+  const f = (name, patch) => busyReason({ ...idle, features: { ...idle.features, [name]: { ...idle.features[name], ...patch } } })
+  assert.equal(busyReason({ ...idle, mainBusy: true, status: 'run' }), 'đang đăng video')
+  assert.equal(busyReason({ ...idle, mainBusy: true, status: 'update' }), 'tool đang cập nhật')
+  assert.equal(busyReason({ ...idle, studioJob: 'Bình luận · Dark Faith' }), 'khung Studio đang chạy "Bình luận · Dark Faith"')
+  assert.equal(busyReason({ ...idle, jobs: 2 }), 'còn 2 việc đang chờ chạy trên YouTube Studio')
+  assert.equal(f('inbox', { busy: true }), 'Cộng đồng đang chạy')
+  assert.equal(f('inbox', { sending: 3 }), 'Cộng đồng đang chạy')
+  assert.equal(f('inbox', { hearting: true }), 'Cộng đồng đang chạy')
+  assert.equal(f('posts', { busy: true }), 'Đăng bài đang chạy')
+  assert.equal(f('aiposts', { busy: 'generate' }), 'Đăng bài AI đang chạy', 'Gemini dang viet bai (khong dung khung Studio)')
+  assert.equal(f('hometab', { busy: true }), 'Trang chủ kênh đang chạy')
+  assert.equal(f('optimize', { all: { running: true } }), 'Tối ưu video đang chạy')
+  assert.equal(f('accounts', { login: 'acc1' }), 'Tài khoản đang chạy', 'dang dang nhap trong khung')
+  assert.equal(f('accounts', { paneBusy: true }), 'Tài khoản đang chạy')
+  assert.equal(f('accounts', { busy: { acc1: 'Đang kiểm tra…' } }), 'Tài khoản đang chạy')
+  assert.equal(busyReason({ ...idle, lastActive: now - 2 * 60e3 }), 'bạn vừa dùng tool (chờ 5 phút không thao tác, còn khoảng 3 phút)')
+  assert.equal(busyReason({ ...idle, lastActive: now - 30e3, quietMs: 60e3 }), 'bạn vừa dùng tool (chờ 1 phút không thao tác, còn khoảng 1 phút)')
+})
+
 ;(async () => {
   let failed = 0
   for (const [name, fn] of tests) {

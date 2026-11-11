@@ -163,8 +163,14 @@ module.exports = (ctx) => {
   }
 
   // ---- chay viec tren mot kenh ----------------------------------------------------------
+  // so viec withChannel dang chay + dang xep hang (paneChain / cua so an): tool chua ranh (src/idle.js)
+  let jobs = 0
+  async function withChannel(key, fn, opts = {}) {
+    jobs++
+    try { return await runOnChannel(key, fn, opts) } finally { jobs-- }
+  }
   // shouldStop: dung rieng viec nay (vd nut Dung o trang Cong dong) - buoc dang cho tren trang nem "Đã dừng theo yêu cầu."
-  async function withChannel(key, fn, { label: what = '', shouldStop = null } = {}) {
+  async function runOnChannel(key, fn, { label: what = '', shouldStop = null } = {}) {
     const ch = m().find(key)
     if (!ch) throw new Error(`Không có kênh "${key}" ở trang Tài khoản. Bấm "Làm mới kênh" rồi tick kênh cần dùng.`)
     const acc = m().get(ch.accountId)
@@ -264,6 +270,7 @@ module.exports = (ctx) => {
     find: (key) => m().find(key),
     email: (accountId) => (m().get(accountId) || {}).email || '',
     openUrl: (p) => openUrl(p || {}),
+    jobs: () => jobs, // viec withChannel dang chay + xep hang
     panePartition: () => { const a = m().get(S.pane.accountId) || m().list_[0]; return a ? a.partition : '' },
   }
   ctx.withChannel = withChannel

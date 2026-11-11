@@ -1,8 +1,8 @@
 // Trang "Toi uu video": quet video da dang cua kenh, chon video, toi uu trong Studio theo mau
 // (mau rieng cua kenh hoac mau mac dinh), roi thich + binh luan + ghim. Trang thai: state.f.optimize.
-import { Layers, ListChecks, LoaderCircle, RefreshCw, RotateCcw, Save, ScanSearch, Sparkles, Square, Undo2, Wand2 } from 'lucide-react'
+import { Layers, ListChecks, LoaderCircle, Play, RefreshCw, RotateCcw, Save, ScanSearch, Sparkles, Square, Undo2, Wand2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { ActionBar, Button, Card, EmptyState, PageBody, PageHeader, Pill, cn, type Tone } from '../kit'
+import { ActionBar, Button, Card, EmptyState, PageBody, PageHeader, Pill, Switch, cn, type Tone } from '../kit'
 import { OptimizeTemplateEditor, defaultOptimizeTemplate, templateOf, type OptimizeTemplate, type Templates } from './OptimizeTemplateEditor'
 import type { PageProps } from './index'
 
@@ -16,6 +16,8 @@ export type OptVideo = {
 // Quet toan bo: 2 video moi nhat cua moi kenh da tick (state.f.optimize.all)
 export type OptAllGroup = { key: string; name: string; error: string; videos: OptVideo[] }
 export type OptAll = { at: string; running: boolean; current: string; perChannel?: number; groups: OptAllGroup[] }
+// Hang cho tu toi uu sau khi dang (src/features/optimize.js afterUpload / processPending)
+export type OptPending = { id: string; title: string; channelKey: string; channelName: string; due: string; preset: string }
 export type OptimizeState = {
   channelKey: string
   channels: { key: string; name: string; handle: string; ucId: string }[]
@@ -26,6 +28,10 @@ export type OptimizeState = {
   limit?: number // so video moi nhat se quet (settings.optimizeScanLimit)
   limits?: number[]
   all?: OptAll
+  auto?: boolean // cong tac "Tự tối ưu video sau khi đăng" (settings.optimizeAuto)
+  pending?: OptPending[]
+  pendingWait?: string // vi sao video da toi gio chua chay (tool dang ban / dang tat)
+  quietMin?: number // so phut khong thao tac thi coi la tool ranh
 }
 const LIMITS = [5, 10, 20, 30, 50]
 
@@ -122,6 +128,66 @@ function ScanAllCard({ s, send, go }: { s: OptimizeState; send: PageProps['send'
           )
         })}
       </div>
+    </Card>
+  )
+}
+
+const fmtDue = (iso: string) => { const d = new Date(iso); const p = (n: number) => String(n).padStart(2, '0'); return `${p(d.getHours())}:${p(d.getMinutes())} · ${p(d.getDate())}/${p(d.getMonth() + 1)}` }
+
+// Hang cho tu toi uu sau khi dang: cong tac bat / tat, tung video (kenh, mau, gio chay), Chạy ngay / Bỏ khỏi hàng chờ
+function PendingCard({ s, send }: { s: OptimizeState; send: PageProps['send'] }) {
+  const list = s.pending ?? []
+  const auto = s.auto !== false
+  const quiet = s.quietMin ?? 5
+  const now = Date.now()
+  const hint = !list.length ? 'Hàng chờ trống' : `${list.length} video trong hàng chờ`
+  return (
+    <Card title="Tự tối ưu sau khi đăng" hint={hint}>
+      <div className="flex items-start gap-3">
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">Tự tối ưu video sau khi đăng</span>
+          <span className="block text-xs text-muted-foreground">
+            {auto
+              ? `Video đăng bằng mẫu có bật “Tự tối ưu sau khi đăng” được xếp vào đây (giờ đăng + 15 phút). Tool chỉ tự chạy khi rảnh hẳn: không đăng video, đăng bài, Cộng đồng… và bạn không thao tác trong ${quiet} phút.`
+              : 'Đang tắt: tool không tự tối ưu. Video mới đăng vẫn được xếp vào đây, bấm “Chạy ngay” khi muốn tối ưu hoặc “Bỏ khỏi hàng chờ”.'}
+          </span>
+        </span>
+        <Switch label="Tự tối ưu video sau khi đăng" checked={auto} onChange={(v) => send('optimize_auto', v)} />
+      </div>
+      {s.pendingWait && list.length > 0 && <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">{s.pendingWait}</p>}
+      {list.length > 0 && (
+        <>
+          <ul aria-label="Hàng chờ tự tối ưu" className="mt-2 max-h-[260px] space-y-0.5 overflow-y-auto">
+            {list.map((x) => {
+              const due = Date.parse(x.due)
+              return (
+                <li key={x.id} className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-muted/40">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold" title={x.title}>{x.title}</p>
+                    <p className="truncate text-[11px] text-muted-foreground">
+                      {[x.channelName, x.preset && `mẫu “${x.preset}”`].filter(Boolean).join('  •  ')}
+                    </p>
+                  </div>
+                  <Pill tone={!auto ? 'muted' : due <= now ? 'warning' : 'info'}>
+                    {!auto ? 'Đang tắt' : due <= now ? 'Đã tới giờ, chờ tool rảnh' : `Từ ${fmtDue(x.due)}`}
+                  </Pill>
+                  <Button variant="outline" size="sm" className="h-7" disabled={s.busy} title="Tối ưu video này ngay (không chờ tới giờ / tool rảnh)" aria-label={`Chạy ngay ${x.title}`} onClick={() => send('optimize_pending_run', { ids: [x.id] })}>
+                    <Play /> Chạy ngay
+                  </Button>
+                  <Button variant="subtle" size="sm" className="h-7" title="Bỏ video này khỏi hàng chờ (không tự tối ưu nữa)" aria-label={`Bỏ khỏi hàng chờ ${x.title}`} onClick={() => send('optimize_pending_remove', { id: x.id })}>
+                    <X /> Bỏ khỏi hàng chờ
+                  </Button>
+                </li>
+              )
+            })}
+          </ul>
+          {list.length > 1 && (
+            <div className="mt-2 flex justify-end">
+              <Button variant="outline" size="sm" disabled={s.busy} onClick={() => send('optimize_pending_run', {})}><Play /> Chạy ngay cả hàng chờ ({list.length})</Button>
+            </div>
+          )}
+        </>
+      )}
     </Card>
   )
 }
@@ -251,6 +317,7 @@ export function OptimizePage({ state, send, go }: PageProps) {
             <EmptyState icon={ListChecks} text={s.busy ? 'Đang quét video trong Studio…' : 'Chưa có danh sách. Tool mở trang Nội dung của kênh trong Studio, rồi đọc (không sửa) trang Chi tiết của từng video để xem còn thiếu mục nào so với mẫu.'} />
           )}
         </Card>
+        <PendingCard s={s} send={send} />
         <ScanAllCard s={s} send={send} go={go} />
         <TemplateCard s={s} send={send} />
       </PageBody>
@@ -308,4 +375,12 @@ export const optimizeDemo: OptimizeState = {
       ] },
     ],
   },
+  // hang cho tu toi uu: mot video da toi gio (cho tool ranh), mot video chua toi gio
+  auto: true,
+  quietMin: 5,
+  pendingWait: 'Đã tới giờ, chờ tool rảnh: Cộng đồng đang chạy.',
+  pending: [
+    { id: 'Ark0000Vid1', title: 'Noah’s Ark: What the Bible Really Says About the Flood', channelKey: 'UC6roez1tiwHbdhvLWBvLRmQ', channelName: 'Dark Bible Study', due: new Date(Date.now() - 20 * 60e3).toISOString(), preset: 'Mặc định' },
+    { id: 'Psalm23Vid2', title: 'Psalm 23 in the Valley: A Song for Dark Nights', channelKey: 'UCLBuhr6vMvZQPqZpTTslWaQ', channelName: 'Dark Faith 2nd', due: new Date(Date.now() + 95 * 60e3).toISOString(), preset: 'Video dài' },
+  ],
 }
