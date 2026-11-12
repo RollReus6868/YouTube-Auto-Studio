@@ -36,7 +36,7 @@ export function GuidePage({ state, send, go }: { state: State; send: Send; go: (
             <Card title="Gemini trên trình duyệt (viết mô tả, Đăng bài AI)" hint={aiProviderOf(state) === 'web' ? <GeminiWebPill status={state.geminiWeb} /> : <Pill tone="muted">Đang dùng API key</Pill>}>
               <ol>
                 <Step n={1} title="Đăng nhập Google ở trang Tài khoản" done={accounts}>
-                  <p>Gemini dùng chung tài khoản Google với YouTube Studio. Không cần API key, không tốn phí: tool tự mở <b>gemini.google.com</b> trong một cửa sổ riêng và viết trên đó như bạn tự gõ.</p>
+                  <p>Gemini dùng chung tài khoản Google với YouTube Studio. Không cần API key, không tốn phí: tool tự mở <b>gemini.google.com</b> trong khung trình duyệt bên phải (như các tính năng khác) và viết trên đó như bạn tự gõ, xong thì khung trở lại YouTube Studio. Nếu Google hỏi đồng ý (vd “Kết nối những ứng dụng Google này với Gemini?”), hãy tự chọn ngay trong khung, tool chờ tối đa 5 phút.</p>
                   <Button variant="default" className="mt-1 h-8 px-3 text-xs" onClick={() => go('accounts')}>Mở Tài khoản</Button>
                 </Step>
                 <Step n={2} title="Chọn tài khoản cho Gemini và kiểm tra" done={state.geminiWeb?.signedIn === true}>

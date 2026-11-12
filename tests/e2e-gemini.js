@@ -1,7 +1,9 @@
-// Chay that app voi trang Gemini gia (tests/mock-yt/gemini, YA_GEMINI_BASE): dich vu ctx.geminiWeb trong
-// cua so Gemini rieng (khong dung khung Studio), goi qua lenh thu gemini_web_try:
+// Chay that app voi trang Gemini gia (tests/mock-yt/gemini, YA_GEMINI_BASE): dich vu ctx.geminiWeb, goi qua lenh thu
+// gemini_web_try. Phan 1-7: tat "runInPane" -> cua so Gemini rieng:
 // viet chu (hang doi 2 yeu cau), ve anh (luu vao ai-posts/anh), hop thoai chan -> mo cua so, chua dang nhap,
-// nguoi dung dong cua so Gemini -> lan sau tao lai, doi tai khoan Gemini.
+// nguoi dung dong cua so Gemini -> lan sau tao lai, doi tai khoan Gemini. Phan 8 (mac dinh, tu 0.7.2): chay trong khung
+// trinh duyet ben phai cua cua so chinh, xong tra khung ve Studio, khong mo cua so rieng; khung hoi dong y -> nguoi dung
+// tu bam trong khung.
 //   xvfb-run -a -s "-screen 0 1500x950x24" node tests/e2e-gemini.js
 const assert = require('assert')
 const fs = require('fs')
@@ -19,7 +21,7 @@ const waitFor = async (fn, what, ms = 30000) => {
   const yt = await startMockYt()
   const srv = yt.server
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ya-gemini-e2e-'))
-  const env = { YA_GEMINI_BASE: `${yt.base}/gemini`, YA_STUDIO_BASE: yt.urls.studio, YA_YOUTUBE_BASE: yt.urls.youtube, YA_NO_UPDATE_CHECK: '1' }
+  const env = { YA_GEMINI_BASE: `${yt.base}/gemini`, YA_STUDIO_BASE: yt.urls.studio, YA_STUDIO_URL: `${yt.urls.studio}/`, YA_YOUTUBE_BASE: yt.urls.youtube, YA_NO_UPDATE_CHECK: '1' }
   run(9463, env, async ({ ui, browser }) => {
     const call = (cmd, payload) => ui.evaluate(([c, p]) => window.ya.call(c, p), [cmd, payload])
     const st = () => call('hello')
@@ -27,6 +29,7 @@ const waitFor = async (fn, what, ms = 30000) => {
     const reset = (flags = {}, queue = []) => { srv.geminiFlags = flags; srv.geminiQueue = queue; srv.geminiPrompts = [] }
 
     await ui.getByRole('heading', { name: 'Đăng video' }).waitFor()
+    await call('settings_save', { runInPane: false })
     let s = await st()
     assert.deepEqual([s.geminiWeb.busy, s.geminiWeb.signedIn, s.geminiWeb.accountId], [false, null, 'tk-1'])
     assert.equal(geminiPages().length, 0, 'chua mo cua so Gemini truoc khi can')
@@ -109,6 +112,45 @@ const waitFor = async (fn, what, ms = 30000) => {
     // 7. mo cua so Gemini tu giao dien (dang nhap / xem)
     await call('gemini_web_open')
     assert.equal((await st()).geminiWeb.open, true)
+
+    // 8. mac dinh: Gemini chay trong khung ben phai, xong tra khung ve Studio, khong mo cua so rieng
+    await geminiPages()[0].close()
+    await waitFor(async () => (await st()).geminiWeb.open === false, 'dong cua so Gemini')
+    await call('gemini_web_account', '')
+    await call('settings_save', { runInPane: true })
+    const allPages = () => browser.contexts().flatMap((c) => c.pages())
+    await waitFor(() => allPages().some((p) => p.url().startsWith(yt.urls.studio)), 'khung Studio')
+    const before = allPages().find((p) => p.url().startsWith(yt.urls.studio)).url()
+    reset({ slow: 1500 }, [{ text: 'Trong khung bên phải.' }])
+    const jobs = []
+    const watch = setInterval(() => st().then((x) => jobs.push(x.studio.job)).catch(() => {}), 200)
+    s = await call('gemini_web_try', { prompt: 'Chạy trong khung' })
+    clearInterval(watch)
+    assert.equal(s.geminiWeb.try.text, 'Trong khung bên phải.', JSON.stringify(s.geminiWeb.try))
+    assert(jobs.includes('Gemini viết thử'), `khung hien "Gemini viet thu": ${[...new Set(jobs)].join(' | ')}`)
+    s = await st()
+    assert.equal(s.studio.job, '', 'nha khung')
+    assert.equal(s.geminiWeb.open, false, 'khong mo cua so Gemini rieng')
+    assert.equal(geminiPages().length, 0, 'khung da tra ve Studio')
+    await waitFor(() => allPages().some((p) => p.url() === before), `khung ve lai ${before}`)
+    assert(s.logs.some((l) => l.msg === 'Gemini (trình duyệt): đang viết thử (khung trình duyệt bên phải)…'))
+    assert(!s.logs.slice(-6).some((l) => /Đã vào YouTube Studio/.test(l.msg)), 'khong bao vao Studio lai')
+
+    // khung hoi dong y trong khung: tool bao va cho, nguoi dung tu bam "Tiep tuc" ngay trong khung -> chay tiep
+    reset({ consentFrame: true }, [{ text: 'Sau khi đồng ý.' }])
+    srv.geminiConsentOk = 0
+    const pending = call('gemini_web_try', { prompt: 'Có hỏi đồng ý' })
+    await waitFor(async () => /cần bạn tự xử lý hộp thoại/.test((await st()).studio.job), 'khung bao can nguoi dung')
+    s = await st()
+    assert(s.logs.some((l) => l.level === 'warn' && /hỏi đồng ý.*tự xử lý trong khung trình duyệt bên phải/.test(l.msg)), 'bao trong nhat ky')
+    assert.equal(s.geminiWeb.open, false, 'khong mo cua so rieng')
+    const pane = geminiPages()[0]
+    assert(pane, 'Gemini dang o khung')
+    await pane.frameLocator('iframe.consent').locator('#ok').click()
+    s = await pending
+    assert.equal(s.geminiWeb.try.text, 'Sau khi đồng ý.', JSON.stringify(s.geminiWeb.try))
+    assert.equal(srv.geminiConsentOk, 1)
+    assert.equal((await st()).studio.job, '')
     console.log('E2E GEMINI PASSED')
   }, dataDir)
 })()

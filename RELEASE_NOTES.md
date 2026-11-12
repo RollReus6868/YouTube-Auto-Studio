@@ -1,3 +1,11 @@
+## YT Auto Studio 0.7.2
+
+### Cộng đồng: thả tim
+- **Sửa lỗi thả tim báo "Quá 20 giây vẫn chưa thấy Chuyển đổi tài khoản" ở mọi kênh.** Nguyên nhân: cửa sổ tool bị thu nhỏ trong lúc thả tim. Khi cửa sổ thu nhỏ, YouTube Studio trong khung bên phải ngừng vẽ nên menu đổi kênh và bộ lọc hộp thư không mở được. Giờ nếu bạn thu nhỏ cửa sổ khi tool đang chạy, tool tự mở lại cửa sổ và ghi chú trong nhật ký. Trước mỗi lần đổi kênh, tool cũng kiểm tra trang có đang được vẽ không và mở lại cửa sổ nếu cần. Muốn làm việc khác trong lúc tool chạy, hãy để cửa sổ khác che lên cửa sổ tool thay vì thu nhỏ.
+
+### Gemini trên trình duyệt
+- **Gemini chạy trong khung trình duyệt bên phải**, giống các tính năng khác, không mở cửa sổ riêng nữa. Viết xong, khung tự trở lại trang YouTube Studio trước đó. Nếu Google hỏi đồng ý, bạn tự chọn ngay trong khung, tool chờ tối đa 5 phút. Tắt "Chạy trong khung trình duyệt của tool" ở Cài đặt thì Gemini chạy trong cửa sổ riêng như trước. Nút "Mở Gemini" vẫn mở cửa sổ riêng để đăng nhập.
+
 ## YT Auto Studio 0.7.1
 
 ### Gemini trên trình duyệt

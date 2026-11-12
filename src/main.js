@@ -253,6 +253,8 @@ async function refreshStudio() {
   if (!studio || studio.webContents.isDestroyed() || busy) return
   const wc = studio.webContents
   const url = wc.getURL()
+  // Gemini dang chay nho trong khung (src/gemini-web.js): khong doi kenh / dia chi dang nho cua khung Studio
+  if (/^https:\/\/gemini\.google\.com\/|\/gemini\//.test(url)) return
   if (REJECTED.test(url)) reportRejected(url)
   else if (/^https:\/\/accounts\.google\.com\//.test(url) && !wc.isLoading()) {
     const text = await wc.executeJavaScript('document.body ? document.body.innerText.slice(0, 2000) : ""').catch(() => '')
@@ -629,6 +631,7 @@ const ctx = {
   // khung Studio hien ben phai: doi sang phien cua tai khoan khac
   studio: {
     use: (partition, url, o) => useStudio(partition, url, o), wc: () => studio && studio.webContents, home: STUDIO_URL,
+    partition: () => studioPartition,
     // viec tu dong chay trong khung (de nguoi dung theo doi): giao dien hien khung o moi trang khi job != ''
     claim: (job) => { state.studio.job = job || 'Tool đang chạy'; push() },
     release: () => { state.studio.job = ''; push() },
@@ -657,7 +660,8 @@ for (const name of FEATURES) {
   Object.assign(commands, f.commands || {})
   if (f.start) started.push(f.start)
 }
-// Gemini tren trinh duyet (cua so rieng, khong dung khung Studio): ctx.geminiWeb.ask / image (src/gemini-web.js)
+// Gemini tren trinh duyet: chay trong khung ben phai (nhu cac tinh nang khac, xong tra khung ve Studio); tat "runInPane"
+// thi chay trong cua so rieng. ctx.geminiWeb.ask / image (src/gemini-web.js)
 ctx.geminiWeb = require('./gemini-web').createGeminiWeb(ctx)
 Object.assign(commands, ctx.geminiWeb.commands)
 
@@ -686,7 +690,14 @@ function createWindow() {
   createStudioView((ctx.accounts && ctx.accounts.panePartition()) || 'persist:youtube')
   win.on('closed', () => { win = null; ctx.geminiWeb.close() }) // cua so Gemini khong giu app chay sau khi dong cua so chinh
   // thu nho luc tool dang chay trong khung: Windows dung ve trang -> menu / hop thoai Studio hong
-  win.on('minimize', () => { if (state.studio.job) log('warn', `Đừng thu nhỏ cửa sổ khi tool đang chạy ("${state.studio.job}"): YouTube Studio sẽ ngừng chạy đúng. Có thể để cửa sổ khác che lên.`) })
+  // Thu nho cua so trong luc tool chay trong khung: Chromium ngung ve khung -> menu tai khoan, bo loc hop thu, hop thoai
+  // Studio khong mo (loi thuc te 10-13/11/2026: tha tim bao "Qua 20 giay van chua thay Chuyen doi tai khoan" o moi kenh).
+  // Mo lai cua so ngay; de cua so khac che len thi van chay dung (da tat CalculateNativeWinOcclusion).
+  win.on('minimize', () => {
+    if (!state.studio.job) return
+    log('warn', `Không thu nhỏ được cửa sổ khi tool đang chạy ("${state.studio.job}"): cửa sổ thu nhỏ thì YouTube Studio ngừng vẽ, menu đổi kênh và bộ lọc không mở được, nên tool đã mở lại cửa sổ. Muốn làm việc khác, hãy để cửa sổ khác che lên cửa sổ tool.`)
+    setTimeout(() => { if (win && !win.isDestroyed() && win.isMinimized() && state.studio.job) win.restore() }, 300)
+  })
 }
 
 function fatal(err) {

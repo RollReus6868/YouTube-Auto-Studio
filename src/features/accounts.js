@@ -90,21 +90,31 @@ module.exports = (ctx) => {
   // Chi co mot khung: moi viec (moi tai khoan) chay lan luot.
   let paneChain = Promise.resolve()
   const inPane = () => ctx.store.settings.runInPane !== false && !!(ctx.studio && ctx.studio.claim)
-  function onPane(acc, fn, what, stopIf) {
+  // o.restore: xong viec thi tra khung ve tai khoan + trang truoc do (vd Gemini chay nho trong khung roi "dong" lai)
+  function onPane(acc, fn, what, stopIf, o = {}) {
     const run = paneChain.then(async () => {
       if (stopIf && stopIf()) throw new Error('Đã dừng theo yêu cầu.') // dung luc con xep hang: khong mo khung
       ctx.studio.claim(what)
+      if (ctx.studio.wake) ctx.studio.wake() // cua so tool dang thu nho: mo lai (khung khong duoc ve thi Studio lam do dang)
+      const wc0 = ctx.studio.wc()
+      const prev = { partition: ctx.studio.partition ? ctx.studio.partition() : '', url: wc0 && !wc0.isDestroyed() ? wc0.getURL() : '' }
       try {
         ctx.studio.use(acc.partition, undefined, { force: true })
         const wc = ctx.studio.wc()
         if (!wc || wc.isDestroyed()) throw new Error('Khung trình duyệt chưa mở.')
         wc.setAudioMuted(true) // trang xem video tu phat tieng
         try {
-          return await fn(new Page(wc, { timeout: 20000, shotDir: ctx.logFile('loi-trang'), shouldStop: () => ctx.stopped() || !!(stopIf && stopIf()), wake: ctx.studio.wake }))
+          // o.ownStop: chi dung theo stopIf (Gemini: nut Dung chung co the con bat tu viec truoc)
+          const stopNow = o.ownStop ? () => !!(stopIf && stopIf()) : () => ctx.stopped() || !!(stopIf && stopIf())
+          return await fn(new Page(wc, { timeout: 20000, shotDir: ctx.logFile('loi-trang'), shouldStop: stopNow, wake: ctx.studio.wake }))
         } finally {
           if (!wc.isDestroyed()) wc.setAudioMuted(false)
         }
       } finally {
+        if (o.restore) {
+          const back = prev.url && /^https?:/.test(prev.url) && !(o.skipUrl && o.skipUrl.test(prev.url)) ? prev.url : ctx.studio.home
+          try { ctx.studio.use(prev.partition || acc.partition, back, { force: true }) } catch (_) { /* cua so da dong */ }
+        }
         ctx.studio.release()
       }
     })
@@ -271,6 +281,13 @@ module.exports = (ctx) => {
     email: (accountId) => (m().get(accountId) || {}).email || '',
     openUrl: (p) => openUrl(p || {}),
     jobs: () => jobs, // viec withChannel dang chay + xep hang
+    // chay fn(page) trong khung trinh duyet ben phai (lan luot voi cac viec khac cua khung); null neu tat "runInPane"
+    runInPane: (accountId, fn, what, stopIf, o) => {
+      const acc = m().get(accountId)
+      if (!acc) return Promise.reject(new Error('Không tìm thấy tài khoản.'))
+      return onPane(acc, fn, what, stopIf, o)
+    },
+    paneEnabled: () => inPane(),
     panePartition: () => { const a = m().get(S.pane.accountId) || m().list_[0]; return a ? a.partition : '' },
   }
   ctx.withChannel = withChannel

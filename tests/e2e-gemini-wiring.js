@@ -1,5 +1,5 @@
 // Chay that app: Dang bai AI va "Gemini viet mo ta" dung dich vu Gemini tren trinh duyet THAT (src/gemini-web.js,
-// cua so rieng) voi trang Gemini gia (tests/mock-yt/gemini, YA_GEMINI_BASE) - khong dung ctx.geminiWeb gia,
+// chay trong khung ben phai) voi trang Gemini gia (tests/mock-yt/gemini, YA_GEMINI_BASE) - khong dung ctx.geminiWeb gia,
 // khong co API key. Kiem: loi nhac di qua o nhap cua trang Gemini, cau tra loi (JSON trong khoi code + chu thua)
 // thanh ban nhap dung loai; mo ta video ve hop thoai; khung Studio khong bi chiem.
 //   xvfb-run -a -s "-screen 0 1500x950x24" node tests/e2e-gemini-wiring.js
@@ -50,8 +50,11 @@ const ymd = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())
     assert.equal(d.text, DESC, 'mo ta doc dung tu trang Gemini (nhieu doan)')
     assert.equal(srv.geminiPrompts.length, 1)
     assert(srv.geminiPrompts[0].includes('Bí ẩn tập 7') && srv.geminiPrompts[0].includes('Giọng ấm áp'), srv.geminiPrompts[0])
-    assert.equal((await st()).studio.job, '', 'khong chiem khung Studio')
-    assert(pages().some((p) => p.url().includes('/gemini/app')), 'cua so Gemini rieng')
+    // chay trong khung ben phai (khong mo cua so rieng), xong tra khung lai
+    assert.equal((await st()).studio.job, '', 'da nha khung Studio')
+    assert.equal((await st()).geminiWeb.open, false, 'khong mo cua so Gemini rieng')
+    assert(!pages().some((p) => p.url().includes('/gemini/app')), 'khung da ve Studio')
+    assert((await st()).logs.some((l) => /đang viết mo-ta-.* \(khung trình duyệt bên phải\)…$/.test(l.msg)), 'chay trong khung')
 
     // 2. Dang bai AI: dang nhap tai khoan gia, tick kenh, Gemini (trinh duyet) viet 2 bai chu + tham do
     await call('draft_close')

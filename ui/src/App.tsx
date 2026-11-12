@@ -794,7 +794,7 @@ function SettingsPage({ state, send }: Backend) {
                     <div className="flex flex-wrap items-center gap-2">
                       <GeminiWebPill status={state.geminiWeb} />
                       <Button variant="outline" className="h-8 px-3 text-xs" onClick={openGemini}><ExternalLink /> Mở Gemini</Button>
-                      <span className="min-w-0 flex-1 basis-40 text-[11px] text-muted-foreground">Mở cửa sổ Gemini để đăng nhập, đồng ý điều khoản hoặc xem tool đang viết.</span>
+                      <span className="min-w-0 flex-1 basis-40 text-[11px] text-muted-foreground">Mở cửa sổ Gemini để đăng nhập hoặc đồng ý điều khoản. Khi viết bài, Gemini chạy trong khung trình duyệt bên phải.</span>
                     </div>
                     {state.geminiWeb?.lastError && <p className="break-words text-xs text-red-600 dark:text-red-400">Lần gần nhất: {state.geminiWeb.lastError}</p>}
                     <ToggleRow title="Dùng API khi trình duyệt lỗi" hint="Cần API key bên dưới. Gemini trên trình duyệt lỗi (chưa đăng nhập, hết lượt, bị chặn…) thì tool thử lại bằng Gemini API và ghi vào nhật ký." checked={d.aiFallbackApi} onChange={(aiFallbackApi) => set({ aiFallbackApi })} />

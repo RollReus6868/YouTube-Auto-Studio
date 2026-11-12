@@ -242,7 +242,7 @@ function checkStop(stopIf) {
 // bam thay nguoi dung: bao (o.onWaitUser - dich vu hien cua so Gemini) va cho nguoi dung tu xu ly toi da o.waitUserMs
 // (0 = bao loi GEMINI_BLOCKED ngay). Thoi gian cho nguoi dung duoc cong them vao han cua yeu cau (clock.deadline).
 async function clearWay(page, s, o) {
-  const { stopIf, clock, waitUserMs = 0, onWaitUser } = o
+  const { stopIf, clock, waitUserMs = 0, onWaitUser, onUserDone, where = 'cửa sổ Gemini vừa mở' } = o
   let asked = 0
   let dismissed = 0
   for (;;) {
@@ -262,14 +262,14 @@ async function clearWay(page, s, o) {
         : s.blocked ? `Gemini đang hiện hộp thoại chặn ("${cut(s.blocked, 120)}")`
           : s.tooltip ? `Gemini đang hiện lớp phủ che ô nhập ("${cut(s.tooltip, 80)}") mà tool không tắt được` : ''
       if (!why) {
-        if (asked) clock.deadline += Date.now() - asked
+        if (asked) { clock.deadline += Date.now() - asked; if (onUserDone) onUserDone() }
         return s
       }
       const mins = Math.max(1, Math.round(waitUserMs / 60000))
       if (!waitUserMs) throw fail('GEMINI_BLOCKED', `${why}: hãy xử lý trong cửa sổ Gemini rồi chạy lại.`)
       if (!asked) {
         asked = Date.now()
-        if (onWaitUser) onWaitUser(`${why}. Tool không tự chọn thay bạn: hãy tự xử lý trong cửa sổ Gemini vừa mở, tool chờ tối đa ${mins} phút rồi chạy tiếp.`)
+        if (onWaitUser) onWaitUser(`${why}. Tool không tự chọn thay bạn: hãy tự xử lý trong ${where}, tool chờ tối đa ${mins} phút rồi chạy tiếp.`)
       } else if (Date.now() - asked > waitUserMs) throw fail('GEMINI_BLOCKED', `${why}: chưa được xử lý sau ${mins} phút. Hãy xử lý trong cửa sổ Gemini rồi chạy lại.`)
     }
     await sleep(asked ? 1000 : 400)
@@ -417,12 +417,12 @@ function answerError(s, mode) {
 
 // Mot yeu cau viet chu tren page (cua so / khung bat ky dang dung phien Google can dung)
 // waitUserMs / onWaitUser: Gemini hien hop thoai can nguoi dung tu chon (dong y, xac nhan...) -> bao va cho (xem clearWay)
-async function askOn(page, { prompt, base = geminiBase(), shouldStop, timeoutMs = 180000, stableMs = 2500, emptyMs = 15000, mode = 'text', waitUserMs = 0, onWaitUser } = {}) {
+async function askOn(page, { prompt, base = geminiBase(), shouldStop, timeoutMs = 180000, stableMs = 2500, emptyMs = 15000, mode = 'text', waitUserMs = 0, onWaitUser, onUserDone, where } = {}) {
   const stopIf = () => !!(shouldStop && shouldStop())
   prompt = String(prompt || '')
   if (!prompt.trim()) throw fail('GEMINI_EMPTY', 'Lời nhắc cho Gemini trống.')
   const clock = { deadline: Date.now() + timeoutMs }
-  const o = { base, stopIf, clock, waitUserMs, onWaitUser }
+  const o = { base, stopIf, clock, waitUserMs, onWaitUser, onUserDone, where }
   const before = await openChat(page, o)
   await typePrompt(page, before.input, prompt, o)
   await send(page, before, stopIf)
@@ -477,9 +477,9 @@ async function imageBytes(page, src) {
 }
 
 // Mot yeu cau ve anh tren page -> luu vao dir
-async function imageOn(page, { prompt, dir, base = geminiBase(), shouldStop, timeoutMs = 240000, stableMs = 2500, emptyMs = 15000, waitUserMs = 0, onWaitUser } = {}) {
+async function imageOn(page, { prompt, dir, base = geminiBase(), shouldStop, timeoutMs = 240000, stableMs = 2500, emptyMs = 15000, waitUserMs = 0, onWaitUser, onUserDone, where } = {}) {
   if (!dir) throw new Error('Thiếu thư mục lưu ảnh.')
-  const s = await askOn(page, { prompt, base, shouldStop, timeoutMs, stableMs, emptyMs, mode: 'image', waitUserMs, onWaitUser })
+  const s = await askOn(page, { prompt, base, shouldStop, timeoutMs, stableMs, emptyMs, mode: 'image', waitUserMs, onWaitUser, onUserDone, where })
   if (!s.images.length) {
     const t = s.text.trim()
     if (SIGNIN_TEXT_RE.test(t)) throw fail('GEMINI_SIGNIN', `Gemini cần đăng nhập Google để tạo ảnh: "${cut(t)}"`)
@@ -571,6 +571,11 @@ function createGeminiWeb(ctx, opts = {}) {
     win = null
   }
 
+  // Chay trong khung trinh duyet ben phai cua cua so chinh (nhu cac tinh nang khac; Cai dat "runInPane", mac dinh bat):
+  // nguoi dung thay Gemini viet, xong thi khung tra ve trang Studio truoc do. Tat "runInPane" (hoac opts.window) thi
+  // chay trong cua so Gemini rieng nhu 0.7.x.
+  const inPane = () => !opts.window && !!(ctx.accounts && ctx.accounts.runInPane && ctx.accounts.paneEnabled && ctx.accounts.paneEnabled())
+
   async function runJob(kind, o) {
     S.queue--
     const stopIf = () => !!(o.shouldStop && o.shouldStop())
@@ -578,45 +583,68 @@ function createGeminiWeb(ctx, opts = {}) {
     if (stopIf()) { pushState(); throw fail('GEMINI_STOPPED', 'Đã dừng theo yêu cầu.') }
     S.busy = true
     pushState()
-    ctx.log('info', `Gemini (trình duyệt): đang ${kind === 'image' ? 'vẽ ảnh' : 'viết'}${what}…`)
-    let page = null
+    const pane = inPane()
+    const job = `Gemini ${kind === 'image' ? 'vẽ ảnh' : 'viết'}${what}`
+    ctx.log('info', `Gemini (trình duyệt): đang ${kind === 'image' ? 'vẽ ảnh' : 'viết'}${what}${pane ? ' (khung trình duyệt bên phải)' : ''}…`)
     let w = null
-    try {
-      w = ensureWindow()
-      // Windows khong ve cua so an: hien cua so (khong gianh focus) trong luc chay
-      if (w.isMinimized()) w.restore()
-      if (!w.isVisible()) w.showInactive()
-      const { Page } = require('./studio/driver')
-      page = new Page(w.webContents, { timeout: 20000, shotDir: ctx.logFile('loi-trang'), shouldStop: () => stopIf() || w.isDestroyed() })
-      // hop thoai can nguoi dung tu chon (Google hoi dong y...): hien cua so Gemini, bao trong nhat ky va cho toi da 5 phut
-      const onWaitUser = (msg) => { open(); ctx.log('warn', `Gemini (trình duyệt):${what} ${msg}`) }
-      const common = { base: base(), shouldStop: o.shouldStop, waitUserMs: opts.waitUserMs !== undefined ? opts.waitUserMs : 5 * 60000, onWaitUser, ...(o.timeoutMs ? { timeoutMs: o.timeoutMs } : {}) }
-      let r
-      if (kind === 'image') {
-        r = await imageOn(page, { ...common, prompt: o.prompt, dir: o.dir || ctx.logFile(path.join('ai-posts', 'anh')) })
-        ctx.log('ok', `Gemini (trình duyệt):${what} xong (ảnh ${path.basename(r.file)}).`)
-      } else {
-        r = await ask(page, { ...common, prompt: o.prompt })
-        ctx.log('ok', `Gemini (trình duyệt):${what} xong (${r.length.toLocaleString('vi-VN')} ký tự).`)
+    // loi cua driver (Page): het gio / dung / phan tu khong bam duoc -> ma loi Gemini
+    const norm = (e) => {
+      if (w && w.isDestroyed()) return fail('GEMINI_STOPPED', 'Cửa sổ Gemini bị đóng giữa chừng.')
+      if (CODES.includes(e.code)) return e
+      if (stopIf()) return fail('GEMINI_STOPPED', 'Đã dừng theo yêu cầu.')
+      return fail(/^Quá \d+ giây/.test(e.message) ? 'GEMINI_TIMEOUT' : 'GEMINI_BLOCKED', `Gemini: ${e.message}`)
+    }
+    const work = async (page) => {
+      // hop thoai can nguoi dung tu chon (Google hoi dong y...): bao trong nhat ky va cho toi da 5 phut
+      const onWaitUser = (msg) => {
+        if (pane) ctx.studio.claim(`Gemini cần bạn tự xử lý hộp thoại trong khung này${what}`)
+        else open()
+        ctx.log('warn', `Gemini (trình duyệt):${what} ${msg}`)
       }
+      const onUserDone = () => { if (pane) ctx.studio.claim(job) }
+      const common = {
+        base: base(), shouldStop: o.shouldStop, waitUserMs: opts.waitUserMs !== undefined ? opts.waitUserMs : 5 * 60000,
+        onWaitUser, onUserDone, where: pane ? 'khung trình duyệt bên phải' : 'cửa sổ Gemini vừa mở', ...(o.timeoutMs ? { timeoutMs: o.timeoutMs } : {}),
+      }
+      try {
+        if (kind === 'image') return await imageOn(page, { ...common, prompt: o.prompt, dir: o.dir || ctx.logFile(path.join('ai-posts', 'anh')) })
+        return await ask(page, { ...common, prompt: o.prompt })
+      } catch (e0) {
+        const e = norm(e0)
+        // chup trang luc loi truoc khi khung tra ve Studio
+        if (e.code !== 'GEMINI_STOPPED') {
+          const shot = await page.snapshot('gemini').catch(() => '')
+          if (shot) ctx.log('warn', `Gemini (trình duyệt): đã lưu ảnh trang lúc lỗi: ${shot}.png`)
+        }
+        throw e
+      }
+    }
+    try {
+      let r
+      if (pane) {
+        const acc = account()
+        if (!acc) throw fail('GEMINI_SIGNIN', 'Chưa có tài khoản Google nào (trang Tài khoản) để dùng Gemini.')
+        if (S.accountId !== acc.id) S.signedIn = null
+        S.accountId = acc.id
+        r = await ctx.accounts.runInPane(acc.id, (page) => work(page), job, stopIf, { restore: true, ownStop: true, skipUrl: /gemini\.google\.com|\/gemini\// })
+      } else {
+        w = ensureWindow()
+        // Windows khong ve cua so an: hien cua so (khong gianh focus) trong luc chay
+        if (w.isMinimized()) w.restore()
+        if (!w.isVisible()) w.showInactive()
+        const { Page } = require('./studio/driver')
+        r = await work(new Page(w.webContents, { timeout: 20000, shotDir: ctx.logFile('loi-trang'), shouldStop: () => stopIf() || w.isDestroyed() }))
+      }
+      if (kind === 'image') ctx.log('ok', `Gemini (trình duyệt):${what} xong (ảnh ${path.basename(r.file)}).`)
+      else ctx.log('ok', `Gemini (trình duyệt):${what} xong (${r.length.toLocaleString('vi-VN')} ký tự).`)
       S.signedIn = true
       S.lastError = ''
       return r
     } catch (e0) {
-      let e = e0
-      if (w && w.isDestroyed()) e = fail('GEMINI_STOPPED', 'Cửa sổ Gemini bị đóng giữa chừng.')
-      else if (!CODES.includes(e.code)) {
-        // loi cua driver (Page): het gio / dung / phan tu khong bam duoc
-        if (stopIf()) e = fail('GEMINI_STOPPED', 'Đã dừng theo yêu cầu.')
-        else e = fail(/^Quá \d+ giây/.test(e.message) ? 'GEMINI_TIMEOUT' : 'GEMINI_BLOCKED', `Gemini: ${e.message}`)
-      }
+      const e = norm(e0)
       if (e.code === 'GEMINI_SIGNIN') S.signedIn = false
       S.lastError = e.message
-      if (e.code !== 'GEMINI_STOPPED' && page) {
-        const shot = await page.snapshot('gemini').catch(() => '')
-        if (shot) ctx.log('warn', `Gemini (trình duyệt): đã lưu ảnh trang lúc lỗi: ${shot}.png`)
-      }
-      if (e.code === 'GEMINI_BLOCKED') open() // nguoi dung xu ly hop thoai trong cua so Gemini
+      if (e.code === 'GEMINI_BLOCKED' && !pane) open() // nguoi dung xu ly hop thoai trong cua so Gemini
       ctx.log(e.code === 'GEMINI_STOPPED' ? 'warn' : 'error', `Gemini (trình duyệt):${what} ${e.message}`)
       throw e
     } finally {

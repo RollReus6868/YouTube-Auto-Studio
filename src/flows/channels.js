@@ -206,6 +206,9 @@ async function listChannels(page, { urls, log = () => {} } = {}) {
 // Chuyen Studio sang kenh `target` ({ name, handle, ucId }); tra ve { ucId, name } sau khi da kiem.
 // Menu avatar khong mo / khong co kenh: tai lai Studio thu lai mot lan, roi chuyen qua trang chon kenh cua YouTube.
 async function switchChannel(page, target, { urls, log = () => {}, timeout = 20000 } = {}) {
+  // Menu tai khoan / trang chon kenh chi mo khi trang duoc ve. Cua so tool bi thu nho thi Chromium ngung ve khung
+  // (loi 11/2026: "menu tai khoan khong mo; trang dang hien, KHONG duoc ve" o moi kenh sau khi thu nho): mo lai truoc.
+  if (page.awake) await page.awake().catch(() => {})
   const st = await openStudio(page, { urls })
   if (st.signedOut) throw new StepError('Tài khoản Google này chưa đăng nhập (Studio chuyển sang trang đăng nhập).', page.step)
   if (target.ucId && st.ucId === target.ucId) return verify(page, target)
@@ -221,6 +224,7 @@ async function switchChannel(page, target, { urls, log = () => {}, timeout = 200
       const last = i || /^Không thấy kênh/.test(e.message)
       log('warn', `Chuyển sang kênh "${target.name}" bằng menu tài khoản chưa được: ${e.message}${why ? ` (${why})` : ''}. ${last ? 'Thử trang chọn kênh của YouTube.' : 'Tải lại Studio rồi thử lại.'}`)
       await closeMenu(page)
+      if (page.awake) await page.awake().catch(() => {})
       if (last) break
       await page.goto(`${urls.studio}/`)
       const s2 = await openStudio(page, { urls })
