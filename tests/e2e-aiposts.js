@@ -19,8 +19,14 @@ const waitFor = async (fn, what, ms = 60000) => {
   throw new Error(`het gio cho: ${what}`)
 }
 const p2 = (n) => String(n).padStart(2, '0')
-const ymd = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
-const vnDay = (d) => `${d.getDate()} thg ${d.getMonth() + 1}, ${d.getFullYear()}`
+// Dang bai AI tinh ngay gio theo gio Viet Nam (GMT+7) du may o mui gio nao (CI chay o UTC). "w" = gio VN tren dong ho
+// (doc bang getUTC*); trang YouTube gia (hop chon gio) dung gio may -> scheduledAt theo gio may (lymd + getHours).
+const VN = 7 * 3600e3
+const wallNow = () => new Date(Date.now() + VN)
+const wallDays = (n) => { const w = wallNow(); w.setUTCDate(w.getUTCDate() + n); return w }
+const ymd = (w) => `${w.getUTCFullYear()}-${p2(w.getUTCMonth() + 1)}-${p2(w.getUTCDate())}`
+const vnDay = (w) => `${w.getUTCDate()} thg ${w.getUTCMonth() + 1}, ${w.getUTCFullYear()}`
+const lymd = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
 const WEB = process.argv[2] === 'web'
 
 ;(async () => {
@@ -43,7 +49,7 @@ const WEB = process.argv[2] === 'web'
       await scope.getByRole('button', { name: new RegExp(`^${label}:`) }).click()
       await scope.getByRole('dialog', { name: 'Chọn ngày' }).getByLabel('Ngày', { exact: true }).click()
       await ui.keyboard.press('Control+A')
-      await ui.keyboard.type(`${p2(d.getDate())}/${p2(d.getMonth() + 1)}/${d.getFullYear()}`)
+      await ui.keyboard.type(`${p2(d.getUTCDate())}/${p2(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`)
       await ui.keyboard.press('Enter')
       await scope.getByRole('button', { name: `${label}: ${vnDay(d)}`, exact: true }).waitFor()
     }
@@ -98,8 +104,8 @@ const WEB = process.argv[2] === 'web'
     await req.blur()
     await waitFor(async () => Object.values((await st()).f.aiposts.opts.perChannel).some((c) => /warm tone/.test(c.request || '')), 'luu yeu cau kenh')
     const KEY = (await st()).f.aiposts.opts.channels[0]
-    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
-    const after = new Date(); after.setDate(after.getDate() + 2)
+    const tomorrow = wallDays(1)
+    const after = wallDays(2)
     await typeDay(ui, 'Từ ngày', tomorrow)
     await waitFor(async () => (await st()).f.aiposts.opts.from === ymd(tomorrow), 'luu tu ngay')
     await typeDay(ui, 'Đến ngày', after)
@@ -115,7 +121,7 @@ const WEB = process.argv[2] === 'web'
     await waitFor(async () => { const s = (await st()).f.aiposts; return !s.busy && s.drafts.length === 4 }, 'gemini viet xong', 60000)
     let s = (await st()).f.aiposts
     assert.deepEqual(s.drafts.map((d) => d.type), ['text', 'image', 'poll', 'quiz'])
-    assert.deepEqual(s.drafts.map((d) => { const w = new Date(d.when); return `${w.getDate()} ${w.getHours()}` }), [`${tomorrow.getDate()} 9`, `${tomorrow.getDate()} 20`, `${after.getDate()} 9`, `${after.getDate()} 20`])
+    assert.deepEqual(s.drafts.map((d) => { const w = new Date(new Date(d.when).getTime() + VN); return `${w.getUTCDate()} ${w.getUTCHours()}` }), [`${tomorrow.getUTCDate()} 9`, `${tomorrow.getUTCDate()} 20`, `${after.getUTCDate()} 9`, `${after.getUTCDate()} 20`])
     assert.equal(images(), 1, 'Gemini ve 1 anh')
     assert(fs.existsSync(s.drafts[1].images[0]), 'anh da luu')
     assert.equal(fs.readFileSync(s.drafts[1].images[0]).subarray(1, 4).toString(), 'PNG')
@@ -137,7 +143,8 @@ const WEB = process.argv[2] === 'web'
     await box.blur()
     await waitFor(async () => (await st()).f.aiposts.drafts[0].text.startsWith('Edited:'), 'luu chu da sua')
     // doi ngay + gio bai dau bang ban phim (loi cu: o datetime-local bi state cua main ghi de moi phim, khong sua duoc ngay)
-    const later = new Date(); later.setDate(later.getDate() + 3); later.setHours(21, 15, 0, 0)
+    const later = wallDays(3); later.setUTCHours(21, 15, 0, 0)
+    const laterAt = new Date(later.getTime() - VN) // thoi diem that cua 21:15 gio VN
     const card0 = ui.getByRole('article').first()
     await typeDay(card0, 'Ngày đăng', later)
     const t0 = card0.getByLabel('Giờ đăng', { exact: true })
@@ -145,7 +152,7 @@ const WEB = process.argv[2] === 'web'
     await ui.keyboard.press('Control+A')
     await ui.keyboard.type('21:07')
     await ui.keyboard.press('Tab')
-    await waitFor(async () => (await st()).f.aiposts.drafts[0].when === later.toISOString(), 'luu ngay gio moi (21:07 -> 21:15)')
+    await waitFor(async () => (await st()).f.aiposts.drafts[0].when === laterAt.toISOString(), 'luu ngay gio moi (21:07 -> 21:15)')
     assert.equal(await t0.inputValue(), '21:15')
     await card0.getByRole('button', { name: `Ngày đăng: ${vnDay(later)}`, exact: true }).waitFor()
 
@@ -162,8 +169,8 @@ const WEB = process.argv[2] === 'web'
     assert.equal(posts()[3].answers.filter((x) => x.correct).length, 1)
     assert.equal(posts()[1].images.length, 1, 'bai anh co anh')
     const w0 = new Date(s.drafts[0].when)
-    assert.equal(posts()[0].scheduledAt, `${ymd(w0)}T${p2(w0.getHours())}:${p2(w0.getMinutes())}`)
-    assert.equal(posts()[0].scheduledAt, `${ymd(later)}T21:15`, 'len lich theo ngay gio da sua')
+    assert.equal(posts()[0].scheduledAt, `${lymd(w0)}T${p2(w0.getHours())}:${p2(w0.getMinutes())}`)
+    assert.equal(posts()[0].scheduledAt, `${lymd(laterAt)}T${p2(laterAt.getHours())}:${p2(laterAt.getMinutes())}`, 'len lich theo ngay gio da sua')
     const hist = JSON.parse(fs.readFileSync(path.join(dataDir, 'ai-posts-history.json'), 'utf8'))
     assert.equal(hist[KEY].posts.length, 4, 'nho bai da dang')
 

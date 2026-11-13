@@ -112,8 +112,11 @@ function findBrowser() {
       // go do dang gui ca gia tri rong) -> o hien gia tri moi, moi lan chon gui dung 1 aipost_update
       {
         const p2 = (n) => String(n).padStart(2, '0')
-        const at = (n, h, m) => { const d = new Date(); d.setDate(d.getDate() + n); d.setHours(h, m, 0, 0); return d }
-        const vnDay = (d) => `${d.getDate()} thg ${d.getMonth() + 1}, ${d.getFullYear()}`
+        // ngay gio bai Dang bai AI theo gio Viet Nam (GMT+7), may o mui gio nao cung vay: w = gio VN doc bang getUTC*
+        const VN = 7 * 3600e3
+        const wall = (d) => new Date(d.getTime() + VN)
+        const at = (n, h, m) => { const w = wall(new Date()); w.setUTCDate(w.getUTCDate() + n); w.setUTCHours(h, m, 0, 0); return new Date(w.getTime() - VN) }
+        const vnDay = (d) => { const w = wall(d); return `${w.getUTCDate()} thg ${w.getUTCMonth() + 1}, ${w.getUTCFullYear()}` }
         const sentOf = async (cmd) => (await page.evaluate(() => window.__sent)).filter(([c]) => c === cmd).map(([, p]) => p)
         await page.goto(`${URL}?demo&rec#aiposts`)
         const card = page.getByRole('article').first()
@@ -125,7 +128,7 @@ function findBrowser() {
         await check('aiposts-chon-ngay')
         await cal.getByLabel('Ngày', { exact: true }).click()
         await page.keyboard.press('Control+A')
-        await page.keyboard.type(`${p2(d9.getDate())}/${p2(d9.getMonth() + 1)}/${d9.getFullYear()}`)
+        await page.keyboard.type(`${p2(wall(d9).getUTCDate())}/${p2(wall(d9).getUTCMonth() + 1)}/${wall(d9).getUTCFullYear()}`)
         await page.keyboard.press('Enter')
         await card.getByRole('button', { name: `Ngày đăng: ${vnDay(d9)}`, exact: true }).waitFor()
         // gio: go 21:07 + Tab -> lam tron len 21:15 nhu YouTube
@@ -161,7 +164,7 @@ function findBrowser() {
         if (await before.count()) assert(await before.isDisabled(), `${tag}: Den ngay truoc Tu ngay bi khoa`)
         await cal2.getByRole('button', { name: vnDay(d5), exact: true }).click()
         await page.getByRole('button', { name: `Đến ngày: ${vnDay(d5)}`, exact: true }).waitFor()
-        const ymd = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
+        const ymd = (d) => { const w = wall(d); return `${w.getUTCFullYear()}-${p2(w.getUTCMonth() + 1)}-${p2(w.getUTCDate())}` }
         assert.deepEqual(await sentOf('aipost_save'), [{ from: ymd(d3) }, { to: ymd(d5) }], `${tag}: lenh aipost_save`)
       }
       // loi Gemini (chua dang nhap): huong dan + nut "Mở Gemini" o Dang bai AI va hop thoai mo ta, canh bao anh

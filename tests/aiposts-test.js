@@ -9,7 +9,9 @@ const { startMock } = require('./google-mock')
 
 const tests = []
 const test = (name, fn) => tests.push([name, fn])
-const at = (y, mo, d, h = 0, mi = 0) => new Date(y, mo - 1, d, h, mi)
+// gio Viet Nam (lich dang bai tinh theo GMT+7, bai kiem chay duoc o moi mui gio, vd CI o UTC)
+const at = (y, mo, d, h = 0, mi = 0) => AI.vnDate(y, mo - 1, d, h, mi)
+const vn = (iso) => AI.vnParts(new Date(iso))
 
 test('parseTimes: nhieu kieu go, lam tron moc 15 phut, bo trung', () => {
   assert.deepEqual(AI.parseTimes('08:00, 20:30; 9h, 7g10, 20:30'), ['07:15', '08:00', '09:00', '20:30'])
@@ -38,10 +40,10 @@ test('planSlots: rai deu so bai vao cac ngay + gio, xoay vong loai bai', () => {
   const now = at(2026, 11, 1, 6, 0)
   const r = AI.planSlots({ count: 4, from: '2026-11-01', to: '2026-11-04', times: '08:00, 20:00', types: ['text', 'poll'], now })
   assert.deepEqual(r.warnings, [])
-  assert.deepEqual(r.slots.map((s) => [new Date(s.when).getDate(), new Date(s.when).getHours(), s.type]), [[1, 8, 'text'], [2, 8, 'poll'], [3, 8, 'text'], [4, 8, 'poll']])
+  assert.deepEqual(r.slots.map((s) => [vn(s.when).d, vn(s.when).h, s.type]), [[1, 8, 'text'], [2, 8, 'poll'], [3, 8, 'text'], [4, 8, 'poll']])
   // bo gio da qua (va trong 20 phut toi)
   const r2 = AI.planSlots({ count: 3, from: '2026-11-01', to: '2026-11-01', times: '06:10, 08:00, 20:00', types: ['quiz'], now })
-  assert.deepEqual(r2.slots.map((s) => new Date(s.when).getHours()), [8, 20])
+  assert.deepEqual(r2.slots.map((s) => vn(s.when).h), [8, 20])
   assert.match(r2.warnings[0], /Chỉ có 2 giờ đăng/)
   // startIndex: tiep noi vong loai bai
   assert.equal(AI.planSlots({ count: 1, from: '2026-11-02', times: '9:00', types: ['text', 'image'], now, startIndex: 1 }).slots[0].type, 'image')

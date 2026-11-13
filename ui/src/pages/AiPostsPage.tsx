@@ -384,7 +384,7 @@ export function AiPostsPage({ state, send, go }: PageProps) {
 const svg = (h: number, label: string) => `data:image/svg+xml,${encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${h},60%,40%)"/><stop offset="1" stop-color="hsl(${h + 40},60%,18%)"/></linearGradient></defs><rect width="160" height="160" fill="url(#g)"/><text x="80" y="92" font-family="serif" font-size="24" fill="white" text-anchor="middle">${label}</text></svg>`,
 )}`
-const inDays = (d: number, h: number) => { const t = new Date(); t.setDate(t.getDate() + d); t.setHours(h, 0, 0, 0); return t.toISOString() }
+const inDays = (d: number, h: number) => vnIso(addDays(vnYmd(new Date()), d), `${p2(h)}:00`) // gio Viet Nam
 const dd = { options: [], answers: [], explanation: '', images: [], imageUrls: [], error: '', url: '', line: '' }
 export const aipostsDemo: AiPostsState = {
   busy: '', progress: '', warnings: [],
