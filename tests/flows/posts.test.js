@@ -180,6 +180,22 @@ module.exports = [
     assert.equal(p.type, 'quiz')
     assert.deepEqual(p.answers.map((a) => a.text), ['Lu-ca', 'Phao-lô', 'Phi-e-rơ'])
   }],
+  // Loi that 11-13/11/2026: sau khi dang, the tren cung hien chu bai moi nhung dong gio + link cua bai TRUOC (YouTube dung
+  // lai the cu) -> tool bao "YouTube len lich lech" du bai len lich dung. Nay doc on dinh + tai lai roi moi ket luan.
+  ...[['the cu ve lai sau 2,5 giay', 2500], ['the cu ve lai cham (20 giay)', 20000]].map(([name, ms]) => [
+    `len lich lien tiep, danh sach dung lai the cu (${name}) -> khong bao lech nham, lay dung link`, async (ctx) => {
+      fresh(ctx.mock)
+      ctx.mock.server.postsFlags = { staleCard: ms, schedLink: true }
+      try {
+        const want = [inDays(3, 0, 0), inDays(4, 0, 0), inDays(5, 0, 0)]
+        const rs = []
+        for (let i = 0; i < want.length; i++) rs.push(await run(ctx, { type: i === 1 ? 'poll' : 'text', text: `Bài liên tiếp ${i + 1}`, ...(i === 1 ? { options: [{ text: 'A' }, { text: 'B' }] } : {}), when: want[i].toISOString() }))
+        assert.deepEqual(rs.map((r) => r.mismatch), ['', '', ''], ctx.logs.join('\n'))
+        const ids = db(ctx.mock).map((p) => p.id)
+        assert.deepEqual(rs.map((r) => r.url.split('/').pop()), ids, 'link dung bai')
+        assert(!ctx.logs.some((l) => /^error /.test(l)), ctx.logs.join('\n'))
+      } finally { ctx.mock.server.postsFlags = {} }
+    }]),
   ['len lich: bam o ngay khong an -> du phong go ngay, van dung ngay', async (ctx) => {
     fresh(ctx.mock)
     ctx.mock.server.postsFlags = { dateClick: 'none' }

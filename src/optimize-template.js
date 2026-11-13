@@ -379,6 +379,13 @@ function playlistsFilled(p, t) {
   const named = t.playlists.some((want) => p.items.some((x) => lc(x.name) === lc(want) || (x.id && x.id === want)))
   return !(named || (t.playlistAuto > 0 && p.items.length > 0))
 }
+// Quy tac (yeu cau 14/11/2026 - video da toi uu tay thi bo qua muc da lam): mot muc chi "thieu" khi con TRONG hoac van
+// la gia tri mac dinh cua YouTube (chua ai dong toi). Muc da co gia tri khac (nguoi dung tu dat, du khac mau) = da xong,
+// tool KHONG ghi de. Mac dinh cua YouTube: phoi lai = cho phep tat ca, binh luan = bat, giay phep = YouTube chuan,
+// cho nhung = co, danh muc = Mọi người và blog (22). Quang cao tra tien / Su dung AI: chi thieu khi chua tra loi.
+const YT_DEFAULT = { remix: 'all', comments: 'on', license: 'youtube', embeddable: true, category: '22' }
+const NO_VALUE_RE = /^(chọn|không có|không|chưa chọn|none|select|not set)$/
+const hasValue = (x) => { const v = lc(x); return !!v && !NO_VALUE_RE.test(v) }
 function compareFields(read, template, { title = '' } = {}) {
   const t = normalizeTemplate(template)
   const r = read || {}
@@ -387,15 +394,17 @@ function compareFields(read, template, { title = '' } = {}) {
   const has = (k) => r[k] !== undefined && r[k] !== null
   if (t.description) add('description', has('description') ? !!String(r.description).trim() : undefined)
   if (t.playlists.length || t.playlistAuto) add('playlists', playlistsFilled(r.playlists, t))
-  for (const k of ['paidPromotion', 'ai', 'remix', 'comments']) if (t[k] !== 'keep') add(k, has(k) ? r[k] === t[k] : undefined)
-  if (t.tagsMode !== 'keep' || t.extraTags.length) add('tags', has('tags') ? tagsToAdd(r.tags, t, title).add.length === 0 : undefined)
-  if (t.language) add('language', has('language') ? r.language.every((x) => sameAny(x, optionNames('language', t.language))) : undefined)
+  for (const k of ['paidPromotion', 'ai']) if (t[k] !== 'keep') add(k, has(k) ? r[k] === t[k] || !!r[k] : undefined)
+  for (const k of ['remix', 'comments']) if (t[k] !== 'keep') add(k, has(k) ? r[k] === t[k] || (!!r[k] && r[k] !== YT_DEFAULT[k]) : undefined)
+  // the: video da co the (nguoi dung tu nhap) = xong; chua co the nao thi them theo mau
+  if (t.tagsMode !== 'keep' || t.extraTags.length) add('tags', has('tags') ? (r.tags || []).length > 0 || tagsToAdd(r.tags, t, title).add.length === 0 : undefined)
+  if (t.language) add('language', has('language') ? r.language.every((x) => sameAny(x, optionNames('language', t.language))) || r.language.some(hasValue) : undefined)
   if (t.recordingDate !== 'keep') add('recordingDate', has('recordingDate') ? !!String(r.recordingDate).trim() : undefined)
   if (t.location) add('location', has('location') ? !!String(r.location).trim() : undefined)
   // giay phep bi khoa: Studio khong cho doi -> khong tinh la thieu
-  if (t.license !== 'keep') add('license', has('license') ? r.license.locked || r.license.value === t.license : undefined)
-  if (t.embeddable !== 'keep') add('embeddable', has('embeddable') ? r.embeddable === (t.embeddable === 'yes') : undefined)
-  if (t.category !== 'keep') add('category', has('category') ? sameAny(r.category, optionNames('category', t.category)) : undefined)
+  if (t.license !== 'keep') add('license', has('license') ? r.license.locked || r.license.value === t.license || (!!r.license.value && r.license.value !== YT_DEFAULT.license) : undefined)
+  if (t.embeddable !== 'keep') add('embeddable', has('embeddable') ? r.embeddable === (t.embeddable === 'yes') || r.embeddable !== YT_DEFAULT.embeddable : undefined)
+  if (t.category !== 'keep') add('category', has('category') ? sameAny(r.category, optionNames('category', t.category)) || (hasValue(r.category) && !sameAny(r.category, optionNames('category', YT_DEFAULT.category))) : undefined)
   if (t.endScreen !== 'keep') add('endScreen', has('endScreen') ? !!r.endScreen : undefined) // quet mo trinh chinh man hinh ket thuc de xem
   const out = { missing: [], filled: [], unknown: [] }
   for (const [k, v] of checks) out[v === true ? 'filled' : v === false ? 'missing' : 'unknown'].push(k)

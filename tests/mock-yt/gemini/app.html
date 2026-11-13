@@ -10,7 +10,8 @@
   thong bao het luot.
   Bien the (window.FLAGS, may chu chen vao): signedOut, blockedDialog, consentFrame, discoveryTooltip (+ tooltipDelay ms,
   tooltipSticky = Esc khong tat, chi bam nen), limit, slow (ms), pendingStuck
-  (aria-busy + span.pending khong bao gio het, innerText = "" nhu trang khong duoc ve), chunkMs, imageMs.
+  (aria-busy + span.pending khong bao gio het, innerText = "" nhu trang khong duoc ve), chunkMs, imageMs,
+  blobImage (anh src blob: da thu hoi, fetch(blob:) bi CSP chan).
 -->
 <style>
   * { box-sizing: border-box }
@@ -272,8 +273,14 @@ async function send() {
   if (item.image) {
     await sleep(F.imageMs || 600)
     if (stopped) return
+    // blobImage: nhu trang that - trang tu tai anh roi gan src blob: (thu hoi ngay sau khi ve; CSP connect-src khong co blob:
+    // -> fetch(blob:) trong trang bao "Failed to fetch"); tool phai doc anh tu the img da ve
+    let src = item.src
+    if (F.blobImage) src = URL.createObjectURL(await (await fetch(item.src)).blob())
+    const im = el('img', { class: 'image loaded', src, alt: 'Generated image' })
+    if (F.blobImage) im.addEventListener('load', () => URL.revokeObjectURL(src), { once: true })
     content.append(el('generated-image', {}, el('single-image', { class: 'generated-image large' },
-      el('div', { class: 'image-container' }, el('button', { class: 'image-button' }, el('img', { class: 'image loaded', src: item.src, alt: 'Generated image' })),
+      el('div', { class: 'image-container' }, el('button', { class: 'image-button' }, im),
         el('div', { class: 'generated-image-controls' }, el('download-generated-image-button', {}, el('button', { 'aria-label': 'Download full size image' }, el('mat-icon', { fonticon: 'download' }))))))))
   }
   if (stopped) return

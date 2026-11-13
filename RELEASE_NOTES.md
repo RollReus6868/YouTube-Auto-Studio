@@ -1,3 +1,14 @@
+## YT Auto Studio 0.7.4
+
+### Tối ưu video
+- **Không còn làm lại video bạn đã tối ưu thủ công.** Trước đây, khi quét, mục nào khác mẫu (thể loại, ngôn ngữ, giấy phép, bình luận, phối lại…) hoặc thẻ chưa chứa tiêu đề đều bị tính là "thiếu". Video chưa đọc được (vướng hộp thoại xác minh, hoặc bạn bấm Dừng) bị áp cả mẫu, nên ghi đè lên phần bạn đã làm. Giờ tool **chỉ làm mục còn trống hoặc vẫn để mặc định của YouTube**. Mục bạn đã tự đặt thì giữ nguyên, kể cả khi khác mẫu. Video chưa đọc được thì tool đọc lại trước rồi mới tối ưu phần còn thiếu.
+- **Video đã có bình luận của kênh được ghim sẵn**: tool giữ nguyên, không bình luận hay ghim thêm.
+- **Ghim bình luận mà YouTube báo cần xác minh kênh**: tool đóng hộp thoại, bỏ qua bước ghim của video đó (không thử ghim lại) và ghi rõ trong nhật ký. Bình luận vẫn được giữ. Tool không tự xác minh thay bạn.
+
+### Đăng bài AI
+- **Sửa lỗi báo nhầm "YouTube lên lịch bài lúc …, khác giờ mong muốn"** khi đăng nhiều bài liên tiếp. Nguyên nhân: ngay sau khi đăng, danh sách Đã lên lịch của YouTube vẽ thẻ bài mới bằng chữ mới nhưng vẫn mang ngày giờ của bài trước (và chưa có đường dẫn bài). Tool đọc trúng thẻ chưa vẽ xong đó nên báo lệch giờ, dù bài thường đã lên lịch đúng ngày. Giờ tool chờ thẻ bài ổn định mới đọc; nếu vẫn thấy lệch thì tải lại danh sách Đã lên lịch để đọc lại, rồi mới báo lỗi.
+- **Sửa lỗi "Không tải được ảnh Gemini đã tạo (Failed to fetch)"** khi Gemini trên trình duyệt vẽ ảnh cho bài Ảnh. Gemini hiện ảnh bằng địa chỉ tạm (blob:) và chặn tải lại địa chỉ đó. Giờ tool lấy ảnh trực tiếp từ ảnh đang hiện trên trang Gemini, đủ cỡ gốc.
+
 ## YT Auto Studio 0.7.3
 
 ### Đăng bài AI

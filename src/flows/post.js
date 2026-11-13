@@ -690,15 +690,29 @@ async function waitPublished(page, timeout = 45000, name = '') {
   }
 }
 
+// Tim the bai vua dang. Danh sach cua YouTube ve lai bang cach dung lai the cu: ngay sau khi dang, the tren cung co the
+// da hien chu bai moi nhung dong gio / link van la cua bai TRUOC (loi that 11-13/11/2026: moi bai "lech gio" deu khong co
+// link va mang dung ngay cua bai truoc). Vi vay chi nhan ket qua khi doc 2 lan giong nhau: co link thi on dinh 1 giay,
+// chua co link thi on dinh 4 giay; het gio thi tra ket qua cuoi cung.
+const postsUrl = (urls, ch, handle) => `${urls.youtube}/${ch.ucId ? `channel/${ch.ucId}` : handle}/posts`
+
 async function findCard(page, tab, key, vid, before, timeout = 15000) {
   const end = Date.now() + timeout
   let reopened = false
+  let last = null
+  let lastJson = ''
+  let since = 0
   await openTab(page, tab)
   for (;;) {
     const c = await inPage(page, 'findCard', key, vid, before)
-    if (c) return c
-    if (Date.now() > end) return null
-    if (!reopened && Date.now() > end - timeout / 2) { reopened = true; await openTab(page, tab === 'sched' ? 'pub' : 'sched'); await openTab(page, tab) }
+    if (c) {
+      const j = JSON.stringify(c)
+      if (j !== lastJson) { lastJson = j; since = Date.now() }
+      last = c
+      if (Date.now() - since >= (c.url ? 1000 : 4000)) return c
+    }
+    if (Date.now() > end) return last
+    if (!c && !reopened && Date.now() > end - timeout / 2) { reopened = true; await openTab(page, tab === 'sched' ? 'pub' : 'sched'); await openTab(page, tab) }
     await sleep(500)
   }
 }
@@ -724,7 +738,7 @@ async function createPost(page, input, { urls, log = () => {}, onStep = () => {}
   await page.run('Mở tab Bài đăng của kênh', async () => {
     const handle = ch.handle ? (ch.handle.startsWith('@') ? ch.handle : `@${ch.handle}`) : ''
     if (!ch.ucId && !handle) throw new StepError('Thiếu mã kênh (UC…) hoặc @handle để mở tab Bài đăng.', page.step)
-    await page.goto(`${urls.youtube}/${ch.ucId ? `channel/${ch.ucId}` : handle}/posts`)
+    await page.goto(postsUrl(urls, ch, handle))
     await page.waitFor({ regex: LABELS.tabPosted, selector: LABELS.tabs }, { timeout: 30000 })
     try { await composer(page, 15000) } catch (_) {
       throw new StepError('Không thấy khung soạn bài ở tab Bài đăng: tài khoản đang mở không phải chủ kênh này, hoặc kênh chưa dùng được tính năng bài đăng.', page.step)
@@ -780,10 +794,21 @@ async function createPost(page, input, { urls, log = () => {}, onStep = () => {}
     onStep('verify')
     const signal = await page.run('Chờ YouTube xác nhận', () => waitPublished(page, 45000, ch.name))
     log('info', `YouTube xác nhận: ${signal}.`)
-    const card = await page.run('Tìm bài vừa đăng', () => findCard(page, at ? 'sched' : 'pub', key, vid, at ? before.sched : before.pub))
+    let card = await page.run('Tìm bài vừa đăng', () => findCard(page, at ? 'sched' : 'pub', key, vid, at ? before.sched : before.pub))
     if (!card) log('warn', 'Đã đăng nhưng chưa thấy bài trong danh sách để lấy đường dẫn.')
     // so gio YouTube ghi tren the bai voi gio muon (doc ca "Scheduled for Nov 12, 2026, 12:00 AM" lan "00:00 12 thg 11, 2026")
     let mismatch = ''
+    const off = (c) => { const g = c && c.line ? parseSchedLine(c.line) : null; return g && g.getTime() !== at.getTime() ? g : null }
+    if (at && off(card)) {
+      // co the la the cu chua ve lai: tai lai trang Bai dang, doc lai the trong DA LEN LICH roi moi ket luan
+      log('info', `Thẻ bài ghi "${card.line}", khác giờ mong muốn ${line}: tải lại danh sách Đã lên lịch để đọc lại…`)
+      const again = await page.run('Đọc lại giờ bài vừa lên lịch', async () => {
+        await page.goto(postsUrl(urls, ch, ch.handle ? (ch.handle.startsWith('@') ? ch.handle : `@${ch.handle}`) : ''))
+        await page.waitFor({ regex: LABELS.tabPosted, selector: LABELS.tabs }, { timeout: 30000 })
+        return findCard(page, 'sched', key, vid, null)
+      }).catch(() => null)
+      if (again && again.line) card = { url: again.url || card.url, line: again.line }
+    }
     if (at && card && card.line) {
       const got = parseSchedLine(card.line)
       if (!got) log('info', `Không đọc được giờ trên thẻ bài ("${card.line}") để so với giờ mong muốn ${line}.`)

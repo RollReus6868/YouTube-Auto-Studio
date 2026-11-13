@@ -1,7 +1,7 @@
 // Trang Gemini gia (thay cho https://gemini.google.com): /gemini/app (chat moi), /gemini/app/<id> (sau khi gui).
 // Cau truc DOM chep theo trang that do ngay 11/11/2026 (xem app.html).
 // Bai kiem dieu khien qua may chu:
-//   server.geminiFlags = { signedOut, blockedDialog, consentFrame, discoveryTooltip, tooltipDelay, tooltipSticky, limit, slow: ms, pendingStuck, chunkMs, imageMs }  (doc luc tai trang)
+//   server.geminiFlags = { signedOut, blockedDialog, consentFrame, discoveryTooltip, tooltipDelay, tooltipSticky, limit, slow: ms, pendingStuck, chunkMs, imageMs, blobImage }  (doc luc tai trang)
 //   server.geminiQueue = [{ text } | { image: true, text? } | { error: 'limit' | 'signin' }, ...]  (het hang -> echo)
 //   server.geminiPrompts: loi nhac trang da nhan; server.geminiImages[n]: byte anh gia thu n; server.geminiImgHits: [{ n, cookie }]
 const fs = require('fs')
@@ -30,7 +30,7 @@ module.exports = [
     const flags = server.geminiFlags || {}
     server.geminiLoads = (server.geminiLoads || 0) + 1
     res.setHeader('content-type', 'text/html; charset=utf-8')
-    res.setHeader('content-security-policy', "require-trusted-types-for 'script'")
+    res.setHeader('content-security-policy', "require-trusted-types-for 'script'" + (flags.blobImage ? "; connect-src 'self'" : ''))
     // da dang nhap: cookie phien gia (HttpOnly) - anh chi tai duoc khi gui kem cookie nay
     if (!flags.signedOut) res.setHeader('set-cookie', `${COOKIE}; Path=/; HttpOnly`)
     const html = fs.readFileSync(path.join(__dirname, 'app.html'), 'utf8').replace('/*FLAGS*/', `window.FLAGS = ${JSON.stringify(flags)};`)

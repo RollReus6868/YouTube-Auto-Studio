@@ -88,8 +88,16 @@ test('quet: so gia tri doc duoc voi mau', () => {
   let r = ot.compareFields(full, all, { title: 'tieu de' })
   assert.deepEqual([r.missing, r.unknown], [[], ['endScreen']], 'man hinh ket thuc: khong doc duoc -> khong tinh')
   assert.equal(r.filled.length, 13)
-  r = ot.compareFields({ playlists: { count: 0 }, paidPromotion: '', ai: 'no', remix: 'all', tags: [], recordingDate: '', location: '' }, ot.defaultTemplate(), { title: 'T' })
-  assert.deepEqual(r.missing, ['playlists', 'paidPromotion', 'ai', 'remix', 'tags', 'recordingDate', 'location'])
+  r = ot.compareFields({ playlists: { count: 0 }, paidPromotion: '', ai: '', remix: 'all', tags: [], recordingDate: '', location: '' }, ot.defaultTemplate(), { title: 'T' })
+  assert.deepEqual(r.missing, ['playlists', 'paidPromotion', 'ai', 'remix', 'tags', 'recordingDate', 'location'], 'trong / chua tra loi / mac dinh YouTube')
+  // video toi uu tay (yeu cau 14/11/2026): muc da co gia tri - du khac mau - la xong, tool khong ghi de
+  r = ot.compareFields({ playlists: { count: 1 }, paidPromotion: 'yes', ai: 'no', remix: 'audio', tags: ['tu dat'], recordingDate: '1 thg 11, 2026', location: 'Việt Nam' }, ot.defaultTemplate(), { title: 'Tieu de dai' })
+  assert.deepEqual([r.missing, r.filled], [[], ['playlists', 'paidPromotion', 'ai', 'remix', 'tags', 'recordingDate', 'location']])
+  const all2 = { ...ot.defaultTemplate(), language: 'Tiếng Việt', category: '27', comments: 'pause', license: 'creativeCommon', embeddable: 'no' }
+  r = ot.compareFields({ language: ['English', ''], category: 'Entertainment', comments: 'off', license: { value: 'creativeCommon', locked: false }, embeddable: false }, all2)
+  assert.deepEqual(r.missing, [], 'gia tri khac mau nhung khac mac dinh YouTube: giu nguyen')
+  r = ot.compareFields({ language: ['', ''], category: 'Mọi người và blog', comments: 'on', license: { value: 'youtube', locked: false }, embeddable: true }, all2)
+  assert.deepEqual(r.missing, ['comments', 'language', 'license', 'embeddable', 'category'], 'van la mac dinh YouTube -> lam theo mau')
   // muc 'keep' bo qua; giay phep khoa khong tinh la thieu
   const keep = ot.normalizeTemplate({ playlistAuto: 0, paidPromotion: 'keep', ai: 'keep', tagsMode: 'keep', location: '', recordingDate: 'keep', remix: 'keep', endScreen: 'keep', license: 'creativeCommon' })
   assert.deepEqual(ot.compareFields({ license: { value: 'youtube', locked: true } }, keep), { missing: [], filled: ['license'], unknown: [] })
@@ -179,7 +187,8 @@ test('quet: Studio tieng Anh doc ten danh muc / ngon ngu tieng Anh', () => {
   assert.deepEqual(ot.compareFields({ category: 'Education', language: ['English (United States)', 'english  (united states)'] }, t).filled, ['language', 'category'])
   assert.deepEqual(ot.compareFields({ category: 'Giáo dục', language: ['Tiếng Anh (Hoa Kỳ)', 'English (United States)'] }, t).filled, ['language', 'category'], 'tron Viet / Anh')
   assert.deepEqual(ot.compareFields({ category: 'Giáo dục'.normalize('NFD'), language: ['Tiếng Anh (Hoa Kỳ)'.normalize('NFD')] }, t).filled, ['language', 'category'], 'NFD')
-  assert.deepEqual(ot.compareFields({ category: 'Entertainment', language: ['English (United States)', 'English'] }, t).missing, ['language', 'category'])
+  assert.deepEqual(ot.compareFields({ category: 'Entertainment', language: ['English (United States)', 'English'] }, t).filled, ['language', 'category'], 'nguoi dung da tu dat (khac mau, khac mac dinh) -> giu')
+  assert.deepEqual(ot.compareFields({ category: 'People & Blogs', language: ['', 'Chọn'] }, t).missing, ['language', 'category'], 'mac dinh / trong -> lam')
   assert.deepEqual(ot.compareFields({ category: 'People & Blogs' }, { ...keep, category: '22' }).filled, ['category'])
   assert.deepEqual(ot.compareFields({ language: ['English'] }, { ...keep, language: 'English' }).filled, ['language'], 'mau go ten tieng Anh')
   // giay phep / binh luan da doi ra khoa ('youtube' | 'on' ...) nen khong phu thuoc ngon ngu

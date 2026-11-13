@@ -258,7 +258,7 @@ export function OptimizePage({ state, send, go }: PageProps) {
       <PageHeader
         icon={Wand2}
         title="Tối ưu video"
-        description="Bấm “Quét và tối ưu”: tool đọc trang Chi tiết của các video mới nhất (chọn số video) để biết video nào còn thiếu thông tin so với mẫu, rồi tối ưu luôn trong YouTube Studio + thích, bình luận, ghim. Video đã tối ưu ở lần trước được bỏ qua (bấm “Quét lại” ở video để đọc lại)."
+        description="Bấm “Quét và tối ưu”: tool đọc trang Chi tiết của các video mới nhất (chọn số video) để biết video nào còn thiếu thông tin, rồi tối ưu luôn trong YouTube Studio + thích, bình luận, ghim. Tool chỉ làm mục còn trống hoặc vẫn để mặc định của YouTube; mục bạn đã tự đặt (dù khác mẫu) và bình luận kênh đã ghim sẵn được giữ nguyên. Video đã tối ưu ở lần trước được bỏ qua (bấm “Quét lại” ở video để đọc lại)."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <select

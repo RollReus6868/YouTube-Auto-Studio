@@ -1120,8 +1120,25 @@ async function commentAndPin(page, ...args) {
   try { return await watchTasks(page, ...args) } finally { if (hide) await hide() }
 }
 
+// Bam "Ghim" ma YouTube hien hop thoai doi xac minh (vd "Channel owner needs to verify" - ytw-feature-enablement-info-renderer,
+// nhu o tab Bai dang; hay hop thoai "xac minh" khac): tra chu cua hop thoai va danh dau nut dong (Got it / Đã hiểu / Hủy...).
+// Tool khong tu xac minh; khong thu ghim lai video nay.
+const pinVerifyDialog = (page) => page.eval((dsel) => {
+  const re = /(verif|xác minh)/i
+  const shown = (x) => { const r = x.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(x).visibility !== 'hidden' }
+  const fe = [...document.querySelectorAll('ytw-feature-enablement-info-renderer')].find(shown)
+  const d = (fe && (fe.closest('tp-yt-paper-dialog, [role=dialog], ytd-popup-container') || fe)) ||
+    [...document.querySelectorAll(dsel)].find((x) => shown(x) && re.test(String(x.innerText || '')))
+  if (!d) return ''
+  for (const el of document.querySelectorAll('[data-ya-pinclose]')) el.removeAttribute('data-ya-pinclose')
+  const b = [...d.querySelectorAll('button, [role=button]')].filter(shown).find((x) => /^(got it|đã hiểu|tôi hiểu|ok|đóng|close|hủy|cancel|để sau|not now)$/i.test(String(x.innerText || x.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim()))
+  if (b) b.setAttribute('data-ya-pinclose', '1')
+  return String(d.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 160) || 'hộp thoại xác minh'
+}, SEL.dialogs).catch(() => '')
+
 // Ghim binh luan cua kenh (scanThreads tim lai va danh dau data-ya-thread="me"):
 // 'ok' | 'nomenu' (menu khong co "Ghim": kenh khong ghim duoc) | 'nobadge' (da bam Ghim nhung khong thay huy hieu "Da ghim")
+// | 'verify' (YouTube doi xac minh moi cho ghim: dong hop thoai, khong thu lai)
 async function pinOnce(page, text, who) {
   const r = await scanThreads(page, text, who)
   if (!r.match) throw new StepError('Không thấy bình luận của kênh để ghim.', page.step)
@@ -1134,13 +1151,22 @@ async function pinOnce(page, text, who) {
   await page.click({ ...LABELS.pin, within: SEL.menus })
   // hop thoai "Ghim binh luan nay?" / "Pin this comment?" (co the khong co)
   const isPinned = async () => { const x = await scanThreads(page, text, who); return !!(x.match && x.match.pinned) }
-  const seen = await poll(page, async () => ((await isPinned()) ? 'pinned' : (await markDialog(page, LABELS.pinDialog, 'pin', { timeout: 0 }).catch(() => false)) ? 'dialog' : ''), Math.max(page.timeout, 8000))
+  let why = ''
+  const closeVerify = async () => {
+    if (await page.has({ selector: '[data-ya-pinclose]' })) await page.click({ selector: '[data-ya-pinclose]' }).catch(() => {})
+    else await page.press('Escape').catch(() => {})
+    return 'verify'
+  }
+  const seen = await poll(page, async () => ((await isPinned()) ? 'pinned' : (why = await pinVerifyDialog(page)) ? 'verify' : (await markDialog(page, LABELS.pinDialog, 'pin', { timeout: 0 }).catch(() => false)) ? 'dialog' : ''), Math.max(page.timeout, 8000))
+  if (seen === 'verify') { pinOnce.why = why; return closeVerify() }
   if (seen === 'dialog') await page.click({ ...LABELS.pinConfirm, within: sec('pin') })
-  if (await poll(page, isPinned, Math.max(page.timeout, 15000))) return 'ok'
+  const done = await poll(page, async () => ((await isPinned()) ? 'ok' : (why = await pinVerifyDialog(page)) ? 'verify' : ''), Math.max(page.timeout, 15000))
+  if (done === 'ok') return 'ok'
+  if (done === 'verify') { pinOnce.why = why; return closeVerify() }
   await page.press('Escape').catch(() => {})
   return 'nobadge'
 }
-const PIN_WHY = { nomenu: 'menu của bình luận không có "Ghim"', nobadge: 'đã bấm "Ghim" nhưng không thấy huy hiệu "Đã ghim"' }
+const PIN_WHY = { nomenu: 'menu của bình luận không có "Ghim"', nobadge: 'đã bấm "Ghim" nhưng không thấy huy hiệu "Đã ghim"', verify: 'YouTube yêu cầu xác minh kênh mới cho ghim (tool không tự xác minh, bỏ qua bước ghim của video này)' }
 // Ghi chu khi kenh khong ghim duoc (video van tinh la xong): "đã thích và bình luận - chưa ghim"
 function pinNote(liked, commented) {
   const did = [liked && 'thích', commented && 'bình luận'].filter(Boolean).join(' và ')
@@ -1220,6 +1246,17 @@ async function watchTasks(page, videoId, text, { urls, log = () => {}, onStep = 
   }
 
   let mine = null
+  // video da toi uu tay: kenh da co binh luan (khac chu mau) duoc ghim san -> giu nguyen, khong binh luan / ghim them
+  // (yeu cau 14/11/2026: muc nao da lam roi thi bo qua)
+  if (text) {
+    await page.until((s) => window.__ya.count({ selector: s.thread, within: s.comments }), [WATCH], { timeout: Math.min(page.timeout, 6000) }).catch(() => 0)
+    const r0 = await scanThreads(page, text, who).catch(() => null)
+    if (r0 && r0.first && r0.first.mine && r0.first.pinned && !r0.first.ours) {
+      log('info', 'Video đã có bình luận của kênh được ghim sẵn: giữ nguyên, không bình luận / ghim thêm.')
+      Object.assign(out, { commented: true, pinned: true, kept: true })
+      text = ''
+    }
+  }
   if (text) {
     mine = await step('Tìm bình luận của kênh', () => seekMine(page, text, who, { pages, log }))
     if (mine) log('info', 'Bình luận này của kênh đã có dưới video, không đăng lại.')
@@ -1260,7 +1297,8 @@ async function watchTasks(page, videoId, text, { urls, log = () => {}, onStep = 
       pinTry = 'error'
       log('info', `Chưa ghim được bình luận: ${e.message}`)
     }
-    if (PIN_WHY[pinTry]) log('info', `Chưa ghim được bình luận: ${PIN_WHY[pinTry]}.`)
+    if (pinTry === 'verify') log('warn', `Không ghim được bình luận: ${PIN_WHY.verify}. YouTube báo: "${pinOnce.why || 'cần xác minh'}".`)
+    else if (PIN_WHY[pinTry]) log('info', `Chưa ghim được bình luận: ${PIN_WHY[pinTry]}.`)
     return pinTry
   }
   if (text && pin && mine && !mine.pinned) await tryPin('Ghim bình luận')
@@ -1302,7 +1340,7 @@ async function watchTasks(page, videoId, text, { urls, log = () => {}, onStep = 
     })
     // binh luan co nhung chua ghim (ghim ngay sau khi dang khong an / mat sau khi tai lai): ghim lai MOT lan tren trang
     // vua tai (binh luan lay tu may chu), roi tai lai kiem. Menu khong co "Ghim" thi khong thu lai.
-    if (text && pin && out.commented && !out.pinned && pinTry !== 'nomenu') {
+    if (text && pin && out.commented && !out.pinned && pinTry !== 'nomenu' && pinTry !== 'verify') {
       if ((await tryPin('Ghim lại bình luận')) === 'ok') {
         await step('Kiểm tra lại ghim sau khi tải lại trang', async () => {
           await openWatch(page, url)
@@ -1317,10 +1355,10 @@ async function watchTasks(page, videoId, text, { urls, log = () => {}, onStep = 
   if (text && pin && !out.commented) out.pinned = false
   if (text && pin && out.commented && !out.pinned) {
     out.cannotPin = true
-    out.pinNote = pinNote(out.liked, out.commented)
+    out.pinNote = pinNote(out.liked, out.commented) + (pinTry === 'verify' ? ' (YouTube cần xác minh kênh để ghim)' : '')
     log('info', `Kênh này chưa ghim được bình luận (${PIN_WHY[pinTry] || 'sau khi tải lại trang bình luận không được ghim'}): coi như xong, ghi chú "${out.pinNote}".`)
   }
-  log(out.warnings.length ? 'warn' : 'ok', `Trang xem video (đã kiểm lại): ${[like && `thích ${out.liked ? '✓' : '✗'}`, text && `bình luận ${out.commented ? '✓' : '✗'}`, text && pin && `ghim ${out.pinned ? '✓' : out.cannotPin ? '✗ (kênh không ghim được)' : '✗'}`].filter(Boolean).join(', ')}.`)
+  log(out.warnings.length ? 'warn' : 'ok', `Trang xem video (đã kiểm lại): ${[like && `thích ${out.liked ? '✓' : '✗'}`, out.kept && 'bình luận + ghim ✓ (giữ bình luận ghim sẵn của kênh)', text && `bình luận ${out.commented ? '✓' : '✗'}`, text && pin && `ghim ${out.pinned ? '✓' : out.cannotPin ? '✗ (kênh không ghim được)' : '✗'}`].filter(Boolean).join(', ')}.`)
   return out
 }
 

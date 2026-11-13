@@ -292,9 +292,17 @@ module.exports = (ctx) => {
       const prev = (readDb()[key] || {})[v.id]
       // da quet: chi cac muc con thieu; video tool chua tung lam o trang xem video -> van thich / binh luan / ghim
       // (quet khong biet; commentAndPin tu kiem nen khong dang trung)
-      const scanned = !v.tpl && Array.isArray(v.missing) && !v.unread
-      const tpl = scanned ? ot.missingTemplate(base, v.missing, { watch: !prev }) : base
+      let scanned = !v.tpl && Array.isArray(v.missing) && !v.unread
+      let tpl = scanned ? ot.missingTemplate(base, v.missing, { watch: !prev }) : base
       try {
+        // chua doc duoc trang Chi tiet (lan quet bi dung / loi): doc truoc roi chi lam muc con trong / con mac dinh, khong
+        // ap ca mau len video (loi 0.7.3: video nguoi dung da toi uu tay bi ghi de 8 muc). Video vua dang (v.tpl) giu cach cu.
+        if (!v.tpl && !scanned) {
+          const r0 = await inspectVideo(page, v.id, base, { urls: ctx.urls, log: ctx.log, onStep, video: v })
+          Object.assign(v, { missing: r0.missing, unread: false, title: r0.title || v.title })
+          scanned = true
+          tpl = ot.missingTemplate(base, r0.missing, { watch: !prev })
+        }
         let r = { id: v.id, title: v.title, changed: [], warnings: [], saved: false }
         // chua quet (hang cho sau khi dang): van mo trang Chi tiet de lay tieu de hien tai cho binh luan
         if (ot.studioFields(tpl).length || !scanned) r = await optimizeVideo(page, v.id, tpl, { urls: ctx.urls, log: ctx.log, onStep, video: v, channelName: name })

@@ -17,6 +17,8 @@
        opt-nopin=1         menu khong co "Ghim"
        opt-pinfail=silent  bam Ghim, co thong bao nhung huy hieu van rong, khong luu
        opt-pinfail=local   huy hieu hien tren trang nhung khong luu (tai lai thi mat)
+       opt-pinfail=verify  bam Ghim -> hop thoai "Channel owner needs to verify" (ytw-feature-enablement-info-renderer, nut
+                           "Got it"; HTML that tu tab Bai dang 11/2026), khong ghim
        opt-ownerlike=1     giao dien chu kenh xem video cua minh (that/xem-da-ghim.html): 1 nut ytd-toggle-button-renderer "Thích" / "Bỏ thích", khong co nut Khong thich
        opt-nolike=1        khong co nut Thich nao (giao dien la)
        opt-topcap=N        muc "Nổi bật nhất" chi hien N luot (phai doi sang "Mới nhất")
@@ -231,6 +233,15 @@ function menu(t, cid) {
 }
 
 function confirmPin(cid) {
+  if (OPT.load('opt-pinfail', '') === 'verify') {
+    OPT.log({ type: 'pinverify', id })
+    return setTimeout(() => {
+      $('#popups').innerHTML = `<div class="bg"></div><tp-yt-paper-dialog role="dialog"><ytd-flow-step-renderer><ytw-feature-enablement-info-renderer>
+        <span role="text" style="display:block;font-size:20px;margin-bottom:12px">Channel owner needs to verify</span><span role="text">Ask the channel owner to complete the verification process so you can access this feature.</span>
+        </ytw-feature-enablement-info-renderer><div class="bar" style="justify-content:flex-end"><yt-flow-bottom-bar-renderer><button aria-label="Got it">Got it</button></yt-flow-bottom-bar-renderer></div></ytd-flow-step-renderer></tp-yt-paper-dialog>`
+      $('#popups button').onclick = closePopups
+    }, 300)
+  }
   setTimeout(() => {
     $('#popups').innerHTML = `<div class="bg"></div><tp-yt-paper-dialog role="dialog"><yt-confirm-dialog-renderer><h3 id="title">Ghim bình luận này?</h3>
       <p>Nếu bạn đã ghim một bình luận, thì bình luận này sẽ thay thế bình luận đã ghim trước đó.</p>

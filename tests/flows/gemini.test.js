@@ -171,6 +171,18 @@ module.exports = [
       assert(hits.length >= 2 && hits.every((h) => h.cookie), 'tool tai anh kem cookie cua phien')
     })
   }],
+  ['image: anh blob: da thu hoi + CSP chan fetch(blob:) (Failed to fetch o trang that) -> doc tu the img da ve', async (ctx) => {
+    await withMock(ctx, { flags: { blobImage: true }, queue: [{ image: true }] }, async (base) => {
+      const r = await imageOn(ctx.page, { prompt: 'Vẽ một ngọn hải đăng', dir: ctx.tmp, base, stableMs: 800 })
+      assert.equal(r.mime, 'image/png')
+      const { nativeImage } = require('electron')
+      const got = nativeImage.createFromPath(r.file)
+      const imgs = ctx.mock.server.geminiImages
+      const want = nativeImage.createFromBuffer(imgs[Object.keys(imgs).length]) // anh moi nhat (bai truoc cung tao anh)
+      assert.deepEqual(got.getSize(), { width: 1024, height: 1024 }, 'anh du co goc')
+      assert(got.toBitmap().equals(want.toBitmap()), 'dung diem anh')
+    })
+  }],
   ['image: chua dang nhap ("Are you signed in?") -> GEMINI_SIGNIN; chi co chu -> loi kem chu', async (ctx) => {
     await withMock(ctx, { queue: [{ error: 'signin' }] }, async (base) => {
       await assert.rejects(imageOn(ctx.page, { prompt: 'Vẽ ảnh', dir: ctx.tmp, base, stableMs: 800 }), (e) => code('GEMINI_SIGNIN')(e) && /Are you signed in/.test(e.message))

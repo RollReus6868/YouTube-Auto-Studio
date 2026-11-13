@@ -452,16 +452,46 @@ function fullSizeUrl(src) {
 
 const EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' }
 
-// Tai byte anh: blob:/data: doc trong trang; http(s) qua session cua cua so (cookie Google)
+// Doc anh tu chinh the <img> da ve tren trang (ve len canvas -> PNG). Dung khi fetch(blob:) that bai: Gemini that
+// thu hoi blob: ngay sau khi ve va CSP connect-src khong cho fetch blob: -> "Failed to fetch" (13/11/2026).
+// Anh khac nguon (http khong CORS) lam canvas "ban" -> toDataURL nem SecurityError (bao loi, khong doan).
+async function imageFromTag(page, src) {
+  const r = await page.eval(async (u) => {
+    const img = [...document.querySelectorAll('img')].find((i) => (i.currentSrc || i.src) === u)
+    if (!img) return { err: 'không còn thẻ ảnh trên trang' }
+    if (!img.complete || !img.naturalWidth) {
+      await new Promise((ok) => { img.addEventListener('load', ok, { once: true }); img.addEventListener('error', ok, { once: true }); setTimeout(ok, 8000) })
+    }
+    if (!img.naturalWidth) return { err: 'ảnh trên trang chưa tải xong' }
+    try {
+      const c = document.createElement('canvas')
+      c.width = img.naturalWidth; c.height = img.naturalHeight
+      c.getContext('2d').drawImage(img, 0, 0)
+      const d = c.toDataURL('image/png')
+      return { b64: d.slice(d.indexOf(',') + 1), w: c.width, h: c.height }
+    } catch (e) { return { err: `không đọc được điểm ảnh (${e.name})` } }
+  }, src)
+  if (!r || r.err) throw new Error(r ? r.err : 'không đọc được ảnh trên trang')
+  return { buf: Buffer.from(r.b64, 'base64'), mime: 'image/png' }
+}
+
+// Tai byte anh: blob:/data: doc trong trang; http(s) qua session cua cua so (cookie Google);
+// khong duoc -> doc tu the <img> da ve (imageFromTag)
 async function imageBytes(page, src) {
+  const viaTag = async (e) => {
+    try { return await imageFromTag(page, src) } catch (e2) { throw new Error(`${e.message}; đọc từ ảnh trên trang: ${e2.message}`) }
+  }
   if (/^(blob|data):/.test(src)) {
-    const r = await page.eval(async (u) => {
-      const res = await fetch(u)
-      const b = new Uint8Array(await res.arrayBuffer())
-      let s = ''
-      for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000))
-      return { b64: btoa(s), type: res.headers.get('content-type') || '' }
-    }, src)
+    let r
+    try {
+      r = await page.eval(async (u) => {
+        const res = await fetch(u)
+        const b = new Uint8Array(await res.arrayBuffer())
+        let s = ''
+        for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000))
+        return { b64: btoa(s), type: res.headers.get('content-type') || '' }
+      }, src)
+    } catch (e) { return viaTag(e) }
     return { buf: Buffer.from(r.b64, 'base64'), mime: r.type }
   }
   const ses = page.wc.session
@@ -473,7 +503,7 @@ async function imageBytes(page, src) {
   }
   const big = fullSizeUrl(src)
   if (big !== src) { try { return await get(big) } catch (_) { /* thu dia chi goc */ } }
-  return get(src)
+  try { return await get(src) } catch (e) { return viaTag(e) }
 }
 
 // Mot yeu cau ve anh tren page -> luu vao dir

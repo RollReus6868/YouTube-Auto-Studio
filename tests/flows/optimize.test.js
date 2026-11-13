@@ -280,6 +280,35 @@ module.exports = [
     assert(logs.some((l) => /^ok Trang xem video \(đã kiểm lại\): thích ✓, bình luận ✓, ghim ✗ \(kênh không ghim được\)/.test(l)), logs.join('\n'))
   }],
 
+  // Yeu cau 14/11/2026: video da toi uu tay - kenh da ghim san mot binh luan cua minh (khac chu mau) -> giu nguyen
+  ['kenh da ghim san binh luan cua minh (lam tay): khong binh luan / ghim them, van thich', async ({ page, urls, mock }) => {
+    const seed = [{ cid: 'mine0', author: CH.handle, text: 'Bình luận tôi tự viết và ghim', t: Date.now() - 3600e3, likes: 2, pinned: true, creator: true },
+      { cid: 'v1', author: '@nguoixem1', text: 'Amen', t: Date.now() - 7200e3, likes: 5, pinned: false, creator: false }]
+    await flags(page, urls, { [`opt-comments-${VID}`]: seed })
+    const logs = []
+    const r = await commentAndPin(page, VID, TITLE, { urls, channel: CH, log: (l, m) => logs.push(`${l} ${m}`) })
+    assert.deepEqual([r.liked, r.commented, r.pinned, r.kept, r.warnings], [true, true, true, true, []], logs.join('\n'))
+    assert.deepEqual([await events(mock, 'comment'), await events(mock, 'pin')], [[], []], 'khong dang / ghim them')
+    assert(logs.some((l) => /giữ nguyên, không bình luận \/ ghim thêm/.test(l)), logs.join('\n'))
+  }],
+
+  // Yeu cau 14/11/2026: bam Ghim ma YouTube bao can xac minh -> bo qua buoc ghim cua video nay, KHONG thu ghim lai
+  // (0.7.3: cho ~40 giay roi tai lai trang ghim lan nua, cung bao "khong thay huy hieu")
+  ['bam Ghim -> hop thoai "Channel owner needs to verify": dong hop thoai, bo qua ghim, khong thu lai', async ({ page, urls, mock }) => {
+    await flags(page, urls, { 'opt-pinfail': 'verify' })
+    const logs = []
+    const t0 = Date.now()
+    const r = await commentAndPin(page, VID, TITLE, { urls, channel: CH, log: (l, m) => logs.push(`${l} ${m}`) })
+    assert.deepEqual([r.liked, r.commented, r.pinned, r.cannotPin, r.warnings], [true, true, false, true, []], logs.join('\n'))
+    assert.equal(r.pinNote, 'đã thích và bình luận - chưa ghim (YouTube cần xác minh kênh để ghim)')
+    assert.equal((await events(mock, 'pinverify')).length, 1, 'chi bam Ghim 1 lan')
+    assert.equal((await events(mock, 'pin')).length, 0)
+    assert(logs.some((l) => /^warn Không ghim được bình luận: YouTube yêu cầu xác minh kênh .*Channel owner needs to verify/.test(l)), logs.join('\n'))
+    assert(!logs.some((l) => /Ghim lại bình luận/.test(l)), logs.join('\n'))
+    assert(Date.now() - t0 < 40000, `nhanh (${Date.now() - t0} ms)`)
+    assert.equal(await page.eval(() => !!document.querySelector('ytw-feature-enablement-info-renderer')), false, 'da dong hop thoai')
+  }],
+
   ['ghim chi hien tren trang, tai lai thi mat: pinned=false, kenh khong ghim duoc', async ({ page, urls, mock }) => {
     await flags(page, urls, { 'opt-pinfail': 'local' })
     const r = await commentAndPin(page, VID, TITLE, { urls, like: false, channel: CH })
@@ -590,8 +619,10 @@ module.exports.push(['quet: video da dien du -> khong thieu muc nao, khong doi g
 module.exports.push(['quet: video moi -> danh sach muc con thieu (mo hop thoai danh sach phat roi dong)', async ({ page, urls, mock }) => {
   const tpl = { ...defaultTemplate(), description: 'Mô tả {tieu_de}', language: 'Tiếng Việt', category: '22', comments: 'on', license: 'creativeCommon', embeddable: 'yes', endScreen: 'keep' }
   const r = await inspectVideo(page, VID, tpl, { urls })
-  assert.deepEqual(r.missing, ['playlists', 'paidPromotion', 'ai', 'remix', 'tags', 'language', 'recordingDate', 'location'], JSON.stringify(r))
-  assert.deepEqual(r.filled, ['description', 'comments', 'license', 'embeddable', 'category'], 'giay phep bi khoa -> khong tinh la thieu')
+  // the ("Dark Bible Study" tu mac dinh tai len cua kenh) va ngon ngu (Tieng Anh) da co gia tri -> xong, khong ghi de theo mau
+  // (yeu cau 14/11/2026: chi lam muc con trong / van la mac dinh YouTube)
+  assert.deepEqual(r.missing, ['playlists', 'paidPromotion', 'ai', 'remix', 'recordingDate', 'location'], JSON.stringify(r))
+  assert.deepEqual(r.filled, ['description', 'comments', 'tags', 'language', 'license', 'embeddable', 'category'], 'giay phep bi khoa -> khong tinh la thieu')
   assert.deepEqual(r.unknown, [])
   assert.equal(r.title, TITLE)
   assert.deepEqual([r.read.playlists.text, r.read.playlists.count, r.read.playlists.items.length], ['Chọn', 0, 4])
@@ -656,7 +687,7 @@ module.exports.push(['tinh nang: quet doc tung video, chi toi uu video con thieu
   console.log('quet 7 video:', Date.now() - t0, 'ms')
   const by = Object.fromEntries(S.videos.map((v) => [v.id, v]))
   assert.deepEqual(S.videos.map((v) => v.status), ['done', 'new', 'done', 'new', 'new', 'done', 'done'], JSON.stringify(S.videos.map((v) => [v.id, v.status, v.missing, v.note])))
-  assert.deepEqual(by[VID].missing, ['playlists', 'paidPromotion', 'ai', 'remix', 'tags', 'recordingDate', 'location', 'endScreen'])
+  assert.deepEqual(by[VID].missing, ['playlists', 'paidPromotion', 'ai', 'remix', 'recordingDate', 'location', 'endScreen'], 'the da co (mac dinh kenh) -> khong tinh la thieu')
   assert.deepEqual(by.NeverProp01.missing, ['location'], 'da o 1 danh sach phat -> xong')
   assert.match(by.Maccabee001.note, /Không đọc được trang Chi tiết/)
   assert(steps.has('Đang đọc 1/7…') && steps.has('Đang đọc 7/7…'), [...steps].join(', '))
@@ -729,6 +760,7 @@ module.exports.push(['tinh nang: quet toan bo (2 video moi kenh), toi uu cac ken
   let saved = {}
   const state = { f: {} }
   const switched = []
+  let block2 = true
   const chans = [{ key: UC, ucId: UC, name: 'Dark Bible Study', handle: '@DarkBibleStudy999' }, { key: UC2, ucId: UC2, name: 'Kênh Thứ Hai', handle: '@KenhThuHai' }]
   const mk = (st) => ({
     state: st, log: (l, m) => logs.push(`${l} ${m}`), logFile: (n) => path.join(tmp, n), urls, push: () => {},
@@ -739,7 +771,7 @@ module.exports.push(['tinh nang: quet toan bo (2 video moi kenh), toi uu cac ken
     withChannel: async (key, fn) => {
       switched.push(key)
       await page.goto(`${urls.studio}/video/${VID}/edit`)
-      await page.eval((on) => { if (on) localStorage.setItem('opt-verify', 'load'); else localStorage.removeItem('opt-verify') }, key === UC2)
+      await page.eval((on) => { if (on) localStorage.setItem('opt-verify', 'load'); else localStorage.removeItem('opt-verify') }, key === UC2 && block2)
       return fn(page)
     },
   })
@@ -755,7 +787,7 @@ module.exports.push(['tinh nang: quet toan bo (2 video moi kenh), toi uu cac ken
   assert.deepEqual(S.all.groups.map((g) => [g.key, g.name, g.videos.map((v) => v.id)]), [[UC, 'Dark Bible Study', ['Prem0000001', VID]], [UC2, 'Kênh Thứ Hai', ['Prem0000001', VID]]])
   const g1 = S.all.groups[0].videos
   assert.deepEqual(g1.map((v) => v.status), ['done', 'new'], JSON.stringify(g1))
-  assert.deepEqual(g1[1].missing, ['playlists', 'paidPromotion', 'ai', 'remix', 'tags', 'recordingDate', 'location', 'endScreen'])
+  assert.deepEqual(g1[1].missing, ['playlists', 'paidPromotion', 'ai', 'remix', 'recordingDate', 'location', 'endScreen'])
   const g2 = S.all.groups[1].videos
   assert(g2.every((v) => v.status === 'new' && v.unread && /Xác minh danh tính của bạn/.test(v.note)), JSON.stringify(g2))
   assert.match(logs.join('\n'), /error Kênh Kênh Thứ Hai: YouTube Studio đang hiện hộp thoại "Xác minh danh tính của bạn"/)
@@ -779,6 +811,15 @@ module.exports.push(['tinh nang: quet toan bo (2 video moi kenh), toi uu cac ken
   assert.deepEqual(b.map((v) => v.status), ['error', 'error'])
   assert(b.every((v) => /Xác minh danh tính của bạn/.test(v.error)), JSON.stringify(b))
   assert.equal(logs.filter((l) => /^error The Dead in Christ/.test(l)).length, 1, 'chi video dau cua kenh bi chan duoc mo')
+  // het chan: video chua doc duoc trang Chi tiet (unread) -> doc truoc, chi lam muc con thieu; video da du (toi uu tay /
+  // lan truoc) khong bi ap ca mau, khong luu gi (loi 0.7.3: ghi de 8 muc cua video nguoi dung da toi uu tay)
+  block2 = false
+  for (const v of b) Object.assign(v, { status: 'new', error: '', unread: true, missing: undefined })
+  mock.events.length = 0
+  await f.commands.optimize_run_all()
+  assert.deepEqual((await events(mock, 'save')).map((e) => e.id), [], 'ca 2 video da toi uu o lan chay truoc: khong luu gi')
+  assert.deepEqual(S.all.groups[1].videos.map((v) => [v.status, v.unread]), [['done', false], ['done', false]], JSON.stringify(S.all.groups[1].videos))
+  assert.equal(logs.filter((l) => /các mục trong Studio đã đủ theo mẫu, không làm lại/.test(l)).length, 2, 'doc truoc roi moi quyet dinh, khong ap ca mau')
   // chua tick kenh nao
   chans.length = 0
   await f.commands.optimize_scan_all()

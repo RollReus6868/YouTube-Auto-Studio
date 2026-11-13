@@ -478,6 +478,7 @@ async function submit(at) {
   window.CE = null
   await fetch('/yt/__posts/add', { method: 'POST', body: JSON.stringify(payload) })
   window.POSTS_DONE = (window.POSTS_DONE || 0) + 1
+  window.LAST_ADD = Date.now()
   setTimeout(() => {
     reset(); render()
     toast(at ? 'Đã lên lịch đăng bài của bạn' : 'Đã đăng bài đăng') // lich: theo video C; dang ngay: DOAN
@@ -519,14 +520,26 @@ async function loadList() {
     $('#contents').innerHTML = rows.map((p) => `<div class="row"><div><yt-formatted-string id="content-text">${esc(p.text)}</yt-formatted-string></div></div>${p.scheduledAt ? `<div class="sched-line">${schedLine(p.scheduledAt)}</div>` : `<a href="/yt/post/${p.id}">vừa xong</a>`}`).join('')
     return
   }
-  $('#contents').innerHTML = rows.map((p) => `<ytd-backstage-post-thread-renderer><ytd-backstage-post-renderer><img alt="" src="${AV}"><div style="flex:1">
-    <div id="header"><a id="author-text" style="color:#fff;font-weight:500">Dark Bible Stories</a> &nbsp;${p.scheduledAt ? `<span class="sched-line">${schedLine(p.scheduledAt)}</span>` : `<yt-formatted-string id="published-time-text"><a href="/yt/post/${p.id}">vừa xong</a></yt-formatted-string>`}</div>
+  // FLAGS.staleCard = ms (loi that 11-13/11/2026): YouTube dung lai the cu khi ve danh sach, ngay sau khi dang the tren cung
+  // hien chu bai MOI nhung dong gio cua bai TRUOC va chua co link, mot luc sau moi ve dung. FLAGS.schedLink: the DA LEN LICH
+  // co link /post/ (nhu YouTube that).
+  const draw = (list) => { $('#contents').innerHTML = list.map(card).join('') }
+  if (FLAGS.staleCard && rows.length > 1 && window.LAST_ADD && Date.now() - window.LAST_ADD < 10000) {
+    const [a, b] = rows
+    draw([{ ...b, text: a.text, options: a.options, answers: a.answers, id: '' }, ...rows.slice(1)])
+    setTimeout(() => draw(rows), FLAGS.staleCard)
+  } else draw(rows)
+}
+function card(p) {
+  const line = p.scheduledAt ? (FLAGS.schedLink && p.id ? `<a class="sched-line" href="/yt/post/${p.id}">${schedLine(p.scheduledAt)}</a>` : `<span class="sched-line">${schedLine(p.scheduledAt)}</span>`) : ''
+  return `<ytd-backstage-post-thread-renderer><ytd-backstage-post-renderer><img alt="" src="${AV}"><div style="flex:1">
+    <div id="header"><a id="author-text" style="color:#fff;font-weight:500">Dark Bible Stories</a> &nbsp;${p.scheduledAt ? line : `<yt-formatted-string id="published-time-text"><a href="/yt/post/${p.id}">vừa xong</a></yt-formatted-string>`}</div>
     <yt-formatted-string id="content-text">${esc(p.text)}</yt-formatted-string>
     ${(p.options || []).map((o, i) => `<div class="po">${String.fromCharCode(65 + i)}. ${esc(o.text || o)}</div>`).join('')}
     ${(p.answers || []).map((o, i) => `<div class="po">${String.fromCharCode(65 + i)}. ${esc(o.text)}</div>`).join('')}
     ${p.images && p.images.length ? `<div class="sched-line">${p.images.length} ảnh</div>` : ''}
     ${p.video ? `<a class="sched-line" href="/watch?v=${p.video}">youtube.com/watch?v=${p.video}</a>` : ''}
-  </div><button aria-label="Menu tác vụ">⋮</button></ytd-backstage-post-renderer></ytd-backstage-post-thread-renderer>`).join('')
+  </div><button aria-label="Menu tác vụ">⋮</button></ytd-backstage-post-renderer></ytd-backstage-post-thread-renderer>`
 }
 for (const t of $$('tp-yt-paper-tab')) t.onclick = () => {
   history.pushState(null, '', location.pathname + ({ pub: '', sched: '?pvf=CAE%253D', arch: '?pvf=CAI%253D' })[t.dataset.tab])
