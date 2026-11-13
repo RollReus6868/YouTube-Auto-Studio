@@ -141,6 +141,45 @@ module.exports = [
         assert(!ctx.logs.some((l) => /cách dự phòng: gõ ngày|khác giờ mong muốn/.test(l)), ctx.logs.join('\n'))
       } finally { ctx.mock.server.postsFlags = {} }
     }]),
+  // Loi that 11 + 13/11/2026: bai thu 2 tro di len lich theo ngay cua bai truoc (khung soan nho gio 00:00, doi ngay chi
+  // doi nhan, chi chon gio moi "chot" ngay). Nay luon chon lai gio (moc ke ben truoc neu o gio da dung gio muon).
+  ['len lich nhieu bai 00:00 lien tiep, YouTube chi chot ngay khi chon gio -> moi bai dung ngay', async (ctx) => {
+    fresh(ctx.mock)
+    ctx.mock.server.postsFlags = { commitOnTime: true }
+    try {
+      const p2 = (n) => String(n).padStart(2, '0')
+      const key = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`
+      const want = [inDays(3, 0, 0), inDays(4, 0, 0), inDays(6, 0, 0), inDays(7, 23, 45)]
+      for (let i = 0; i < want.length; i++) {
+        const r = await run(ctx, { type: 'text', text: `Bài hẹn giờ số ${i + 1}`, when: want[i].toISOString() })
+        assert.equal(r.mismatch, '', r.mismatch)
+      }
+      assert.deepEqual(db(ctx.mock).map((p) => p.scheduledAt), want.map(key))
+    } finally { ctx.mock.server.postsFlags = {} }
+  }],
+  // Loi that 13/11/2026: khung trinh duyet rong 394 px -> bo cuc hep, khong bam duoc "Cau hoi". main.js gia lap man hinh
+  // rong 1100 px roi thu nho (src/studio/fit.js); driver nhan toa do chuot voi ty le.
+  ['khung hep (gia lap man hinh rong, thu nho): dang do vui hen gio van bam dung', async (ctx) => {
+    fresh(ctx.mock)
+    const { fitView } = require('../../src/studio/fit')
+    ctx.win.setContentSize(420, 860)
+    const fit = () => fitView(ctx.page.wc, 420, 860)
+    ctx.page.wc.on('did-navigate', fit)
+    assert.equal(fit(), 1, 'chua tai trang: chua gia lap (Electron SIGSEGV)')
+    await ctx.page.goto(`${ctx.urls.youtube}/channel/${CH.ucId}/posts`)
+    assert(ctx.page.wc._yaScale < 0.4, String(ctx.page.wc._yaScale))
+    const at = inDays(5, 8, 30)
+    const r = await run(ctx, {
+      type: 'quiz', text: 'Ai viết sách Công vụ?', when: at.toISOString(),
+      answers: [{ text: 'Lu-ca', correct: true }, { text: 'Phao-lô' }, { text: 'Phi-e-rơ' }], explanation: 'Truyền thống cho là Lu-ca.',
+    })
+    assert.equal(r.status, 'scheduled')
+    assert.equal(r.mismatch, '')
+    assert.equal(await ctx.page.eval(() => innerWidth), 1100, 'gia lap van con sau khi tai trang')
+    const p = db(ctx.mock)[0]
+    assert.equal(p.type, 'quiz')
+    assert.deepEqual(p.answers.map((a) => a.text), ['Lu-ca', 'Phao-lô', 'Phi-e-rơ'])
+  }],
   ['len lich: bam o ngay khong an -> du phong go ngay, van dung ngay', async (ctx) => {
     fresh(ctx.mock)
     ctx.mock.server.postsFlags = { dateClick: 'none' }

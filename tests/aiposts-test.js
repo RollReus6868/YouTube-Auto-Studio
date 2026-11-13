@@ -17,6 +17,23 @@ test('parseTimes: nhieu kieu go, lam tron moc 15 phut, bo trung', () => {
   assert.deepEqual(AI.parseTimes(''), [])
 })
 
+test('planSlots: gio dang theo gio Viet Nam (GMT+7) du may o mui gio khac', () => {
+  const tz = process.env.TZ
+  try {
+    for (const zone of ['Asia/Ho_Chi_Minh', 'UTC', 'America/New_York', 'Asia/Tokyo']) {
+      process.env.TZ = zone
+      const now = new Date('2026-11-13T05:00:00Z') // 12:00 13/11 gio VN
+      const r = AI.planSlots({ count: 3, from: '2026-11-14', to: '2026-11-16', times: '00:00', types: ['text'], now })
+      assert.deepEqual(r.slots.map((s) => s.when), ['2026-11-13T17:00:00.000Z', '2026-11-14T17:00:00.000Z', '2026-11-15T17:00:00.000Z'], zone)
+      // "hom nay" theo gio VN: 23:30 12/11 UTC = 06:30 13/11 VN -> tu ngay 13/11
+      const r2 = AI.planSlots({ count: 1, times: '09:00', types: ['text'], now: new Date('2026-11-12T23:30:00Z') })
+      assert.equal(r2.slots[0].when, '2026-11-13T02:00:00.000Z', zone)
+      assert.equal(AI.ymd(new Date('2026-11-12T23:30:00Z')), '2026-11-13', zone)
+      assert.equal(AI.addDays('2026-11-28', 6), '2026-12-04')
+    }
+  } finally { if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz }
+})
+
 test('planSlots: rai deu so bai vao cac ngay + gio, xoay vong loai bai', () => {
   const now = at(2026, 11, 1, 6, 0)
   const r = AI.planSlots({ count: 4, from: '2026-11-01', to: '2026-11-04', times: '08:00, 20:00', types: ['text', 'poll'], now })

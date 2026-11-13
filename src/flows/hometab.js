@@ -285,7 +285,8 @@ const norm = (s) => String(s || '').normalize('NFC').replace(/\s+/g, ' ').trim()
 const noop = () => {}
 
 function mouse(page, type, x, y, extra = {}) {
-  page.wc.sendInputEvent({ type, x: Math.round(x), y: Math.round(y), ...extra })
+  const k = page.wc._yaScale || 1 // khung gia lap man hinh rong (main.js fitPane)
+  page.wc.sendInputEvent({ type, x: Math.round(x * k), y: Math.round(y * k), ...extra })
 }
 
 // ---- mo trang ---------------------------------------------------------------------

@@ -1,3 +1,10 @@
+## YT Auto Studio 0.7.3
+
+### Đăng bài AI
+- **Sửa lỗi bài lên lịch sai ngày** (bài sau lấy ngày của bài trước, vd muốn 18/11 nhưng YouTube ghi 16/11). Nguyên nhân: YouTube chỉ ghi nhận ngày bạn chọn khi giờ cũng được chọn lại. Khung soạn bài nhớ giờ 00:00 của bài trước, nên tool thấy giờ đã đúng và bỏ qua bước chọn giờ, và YouTube giữ ngày cũ. Giờ tool luôn chọn lại giờ sau khi chọn ngày, và kiểm tra lại ngày giờ YouTube ghi trên bài.
+- **Sửa lỗi bài Câu đố báo "Quá 20 giây vẫn chưa thấy Câu trả lời 1"**. Nguyên nhân: khung trình duyệt bên phải quá hẹp (khoảng 400 px) nên YouTube chuyển sang bố cục hẹp, nút "Câu hỏi" bị che mất một nửa. Khi tool chạy trong khung hẹp, khung giờ hiển thị YouTube như trên màn hình rộng 1100 px rồi thu nhỏ cho vừa, nên mọi nút đều bấm được. Bạn tự dùng khung thì vẫn hiển thị bình thường.
+- **Giờ đăng tính theo giờ Việt Nam (GMT+7)**: giờ đăng mỗi ngày, khoảng ngày và ngày giờ của từng bài đều theo giờ Việt Nam, kể cả khi máy đặt múi giờ khác.
+
 ## YT Auto Studio 0.7.2
 
 ### Cộng đồng: thả tim

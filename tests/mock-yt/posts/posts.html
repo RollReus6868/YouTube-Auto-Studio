@@ -134,7 +134,7 @@ const fmtTime = (m) => `${(Math.floor(m / 60) % 12) || 12}:${String(m % 60).padS
 // bien the do bai kiem dat (server.postsFlags): timeAnim = ms danh sach gio dang mo (pointer-events: none nhu
 // iron-dropdown .animating), timeClick = 'trusted-ignored' (chuot that khong chon) | 'none' (chi API select() chon duoc)
 let FLAGS = {}
-fetch('/yt/__posts/flags').then((r) => r.json()).then((f) => { FLAGS = f || {} }).catch(() => {})
+fetch('/yt/__posts/flags').then((r) => r.json()).then((f) => { FLAGS = f || {}; if (FLAGS.commitOnTime && S && !S.open) { reset(); render() } }).catch(() => {})
 const p2 = (n) => String(n).padStart(2, '0')
 const MY_VIDEOS = [
   ['AbCdEfGhIjK', 'The Faith God Uses to Protect Black America’s Next Generation', '1.595'],
@@ -152,6 +152,11 @@ function reset() {
   S = { open: false, mode: null, images: [], names: [], uploading: 0, error: '', options: ['', ''], answers: [{ t: '' }, { t: '' }], right: 0, expl: '',
     ip: [{ t: '' }, { t: '' }], video: null, menu: false, sched: false, date: null, time: 0, pop: '', ph: PH[Math.floor(Math.random() * PH.length)] }
   const t = new Date(); t.setDate(t.getDate() + 1); t.setHours(0, 0, 0, 0); S.date = t // mac dinh (video C): ngay mai, 12:00 AM
+  // FLAGS.commitOnTime (gia thuyet tu loi that 11 + 13/11/2026): khung soan nho ngay / gio hien o lan truoc; doi ngay chi
+  // doi nhan, ngay that chi "chot" khi chon gio. Bai sau ma khong chon gio -> len lich theo ngay cua bai truoc.
+  // (nho qua ca lan tai lai trang nhu tren YouTube that: tool tai lai trang Bai dang truoc moi bai)
+  const mem = FLAGS.commitOnTime && JSON.parse(localStorage.getItem('ya-sched-mem') || 'null')
+  if (mem) { S.date = new Date(mem.date); S.time = mem.time }
   if (window.CE) window.CE.innerText = ''
 }
 const textOf = () => (window.CE ? window.CE.innerText.replace(/\n$/, '') : '')
@@ -211,6 +216,7 @@ function render() {
     if (!S.sched) return submit(null)
     const at = new Date(S.date); at.setHours(0, S.time, 0, 0)
     if (at <= new Date()) return
+    if (FLAGS.commitOnTime) localStorage.setItem('ya-sched-mem', JSON.stringify({ date: +(S.dateShown || S.date), time: S.time })) // khung soan sau hien lai
     submit(at)
   }
   $('#commentbox #option-menu yt-button-shape button').onclick = () => { if (!valid()) return; S.menu = !S.menu; popups() }
@@ -422,19 +428,26 @@ function schedPanel() {
       S.pop = ''; render()
     }
     // FLAGS.dateClick 'none': bam o ngay khong an (bai kiem cach du phong go ngay)
-    for (const b of $$('#calendar-main .calendar-day[data-d]')) b.onclick = () => { if (FLAGS.dateClick === 'none') return; const [y, mo, d] = b.dataset.d.split('-'); S.date = new Date(+y, mo - 1, +d); S.dateShown = null; S.pop = ''; render() }
+    for (const b of $$('#calendar-main .calendar-day[data-d]')) b.onclick = () => {
+      if (FLAGS.dateClick === 'none') return
+      const [y, mo, d] = b.dataset.d.split('-')
+      if (FLAGS.commitOnTime) S.dateShown = new Date(+y, mo - 1, +d)
+      else { S.date = new Date(+y, mo - 1, +d); S.dateShown = null }
+      S.pop = ''; render()
+    }
+    const setTime = (m) => { S.time = m; if (FLAGS.commitOnTime && S.dateShown) { S.date = S.dateShown; S.dateShown = null }; S.pop = ''; render() }
     const cm = $('#calendar-main')
     if (cm && S.pop === 'date') { const sel = cm.querySelector('.calendar-day.selected'); if (sel) cm.scrollTop = sel.closest('.calendar-month').offsetTop }
     const step = (dir) => () => { const ms = $$('#calendar-main .calendar-month'); const i = ms.findIndex((x) => x.offsetTop + x.offsetHeight > cm.scrollTop + 1); const t = ms[Math.max(0, Math.min(ms.length - 1, i + dir))]; if (t) cm.scrollTop = t.offsetTop }
     if (cm) { $('#next-month button').onclick = step(1); $('#prev-month button').onclick = step(-1) }
     const box = $('#time-listbox')
-    const pickAt = (i) => { const o = $$('#time-listbox [role=option]')[i]; if (o) { S.time = +o.dataset.m; S.pop = ''; render() } }
+    const pickAt = (i) => { const o = $$('#time-listbox [role=option]')[i]; if (o) setTime(+o.dataset.m) }
     if (box) { box.select = (i) => pickAt(+i); box.selectIndex = box.select } // API cua iron-selectable
     for (const o of $$('#time-listbox [role=option]')) {
       o.onclick = (e) => {
         if (FLAGS.timeClick === 'none') return
         if (FLAGS.timeClick === 'trusted-ignored' && e.isTrusted) return
-        S.time = +o.dataset.m; S.pop = ''; render()
+        setTime(+o.dataset.m)
       }
     }
     for (const o of $$('#timezone-listbox [role=option]')) o.onclick = () => { S.pop = ''; render() }

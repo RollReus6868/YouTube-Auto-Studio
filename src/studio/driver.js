@@ -190,7 +190,9 @@ class Page {
     if (r.covered || opts.dom) {
       await this.eval((x) => window.__ya.domClick(x), t)
     } else {
-      const x = Math.round(r.x), y = Math.round(r.y)
+      // khung gia lap man hinh rong roi thu nho (main.js fitPane): toa do chuot = toa do trang x ty le
+      const k = this.wc._yaScale || 1
+      const x = Math.round(r.x * k), y = Math.round(r.y * k)
       this.wc.sendInputEvent({ type: 'mouseMove', x, y })
       this.wc.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 })
       this.wc.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 })

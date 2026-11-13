@@ -147,8 +147,7 @@ module.exports = (ctx) => {
   function range(o) {
     const today = AI.ymd(new Date())
     const from = o.from && o.from >= today ? o.from : today
-    const [y, m, d] = from.split('-').map(Number)
-    const to = o.to && o.to >= from ? o.to : AI.ymd(new Date(y, m - 1, d + 6))
+    const to = o.to && o.to >= from ? o.to : AI.addDays(from, 6)
     return { from, to }
   }
 

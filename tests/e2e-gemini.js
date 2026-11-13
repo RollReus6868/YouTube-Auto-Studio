@@ -146,7 +146,12 @@ const waitFor = async (fn, what, ms = 30000) => {
     assert.equal(s.geminiWeb.open, false, 'khong mo cua so rieng')
     const pane = geminiPages()[0]
     assert(pane, 'Gemini dang o khung')
-    await pane.frameLocator('iframe.consent').locator('#ok').click()
+    // khung hep: tool gia lap man hinh rong >= 1100 px trong luc chay (src/studio/fit.js)
+    const iw = await pane.evaluate(() => innerWidth)
+    assert(iw >= 1100, `khung rong ${iw} px trong luc tool chay`)
+    // bam bang su kien DOM: khung dang gia lap man hinh rong + thu nho, toa do chuot CDP cua Playwright khong qua phep
+    // thu nho (chuot that cua nguoi dung thi co - xem bai kiem "khung hep" o tests/flows/posts.test.js)
+    await pane.frameLocator('iframe.consent').locator('#ok').dispatchEvent('click')
     s = await pending
     assert.equal(s.geminiWeb.try.text, 'Sau khi đồng ý.', JSON.stringify(s.geminiWeb.try))
     assert.equal(srv.geminiConsentOk, 1)

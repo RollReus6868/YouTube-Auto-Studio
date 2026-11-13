@@ -619,13 +619,19 @@ async function setSchedule(page, at, log) {
       throw new StepError(`Không chọn được ngày ${wantDate} (ô ngày đang là "${dd.date.text}").`, page.step)
     }
   }
-  // gio: mo danh sach moc 15 phut (#time-listbox), bam dung muc
+  // gio: mo danh sach moc 15 phut (#time-listbox), bam dung muc. LUON chon gio, ke ca khi o gio da dung: YouTube that chi
+  // "chot" ngay da chon vao lich dang khi chon gio (loi that 11 + 13/11/2026: bai sau lay ngay cua bai truoc, vi khung
+  // soan nho gio 00:00 cua bai truoc nen tool bo qua buoc chon gio). O gio da dung thi chon moc ke ben truoc roi chon lai.
   const wantTime = timeText(at, dd.time.text)
-  if (norm(dd.time.text) !== norm(wantTime)) {
-    await pickTime(page, dd.time.sel, wantTime, log)
+  if (norm(dd.time.text) === norm(wantTime)) {
+    const other = new Date(at.getTime() + (at.getHours() === 23 && at.getMinutes() >= 45 ? -15 : 15) * 60e3)
+    await pickTime(page, dd.time.sel, timeText(other, dd.time.text), log)
     dd = await waitPage(page, 'sched', [], { timeout: 5000, what: 'ô chọn ngày giờ đăng' })
-    if (norm(dd.time.text) !== norm(wantTime)) throw new StepError(`Không chọn được giờ ${wantTime} (ô giờ đang là "${dd.time.text}").`, page.step)
   }
+  await pickTime(page, dd.time.sel, wantTime, log)
+  dd = await waitPage(page, 'sched', [], { timeout: 5000, what: 'ô chọn ngày giờ đăng' })
+  if (norm(dd.time.text) !== norm(wantTime)) throw new StepError(`Không chọn được giờ ${wantTime} (ô giờ đang là "${dd.time.text}").`, page.step)
+  if (norm(dd.date.text) !== norm(wantDate)) throw new StepError(`Ngày đổi thành "${dd.date.text}" sau khi chọn giờ (muốn ${wantDate}).`, page.step)
   if (!new RegExp(LABELS.localTz, 'i').test(dd.tz.text)) log('warn', `Múi giờ đang là "${dd.tz.text}", không phải giờ địa phương: giờ đăng có thể lệch.`)
   return `${p2(at.getHours())}:${p2(at.getMinutes())} ${at.getDate()} thg ${at.getMonth() + 1}, ${at.getFullYear()}`
 }

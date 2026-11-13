@@ -20,7 +20,14 @@ const IMAGE_MODELS = [
 const LANGS = { en: 'English', vi: 'Vietnamese (tiếng Việt)', es: 'Spanish', pt: 'Portuguese', fr: 'French' }
 
 const p2 = (n) => String(n).padStart(2, '0')
-const ymd = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
+// Gio dang bai tinh theo gio Viet Nam (GMT+7), khong phu thuoc mui gio cua may. YouTube nhan dung thoi diem: hop chon
+// gio cua YouTube dung gio may, src/flows/post.js doi thoi diem nay ra gio may khi chon.
+const VN_OFFSET = 7 * 3600e3
+const vnParts = (d) => { const t = new Date(d.getTime() + VN_OFFSET); return { y: t.getUTCFullYear(), m: t.getUTCMonth(), d: t.getUTCDate(), h: t.getUTCHours(), mi: t.getUTCMinutes() } }
+const vnDate = (y, m, d, h = 0, mi = 0) => new Date(Date.UTC(y, m, d, h, mi) - VN_OFFSET)
+// ngay (YYYY-MM-DD) theo gio Viet Nam
+const ymd = (d) => { const p = vnParts(d); return `${p.y}-${p2(p.m + 1)}-${p2(p.d)}` }
+const addDays = (s, n) => { const [y, m, d] = s.split('-').map(Number); const t = new Date(Date.UTC(y, m - 1, d + n)); return `${t.getUTCFullYear()}-${p2(t.getUTCMonth() + 1)}-${p2(t.getUTCDate())}` }
 
 // "08:00, 20:30 ; 9h" -> ['08:00', '20:30', '09:00'] (lam tron len moc 15 phut, bo trung, sap xep)
 function parseTimes(s) {
@@ -37,7 +44,7 @@ function parseTimes(s) {
   return [...out].sort()
 }
 
-// Lich dang: count bai (moi kenh) trong [from, to] (YYYY-MM-DD, gio may) vao cac gio `times`.
+// Lich dang: count bai (moi kenh) trong [from, to] (YYYY-MM-DD, gio Viet Nam GMT+7) vao cac gio `times` (gio Viet Nam).
 // now: bo cac moc truoc now + 20 phut (YouTube can gio trong tuong lai). from rong = hom nay.
 // Tra ve { slots: [{ when: ISO, type }], warnings }
 function planSlots({ count, from, to, times, types, now = new Date(), startIndex = 0 }) {
@@ -48,16 +55,19 @@ function planSlots({ count, from, to, times, types, now = new Date(), startIndex
   if (!n) return { slots: [], warnings: ['Số bài phải lớn hơn 0.'] }
   if (!kinds.length) return { slots: [], warnings: ['Chọn ít nhất một loại bài.'] }
   if (!ts.length) return { slots: [], warnings: ['Nhập ít nhất một giờ đăng (vd 08:00, 20:00).'] }
-  const day = (s, fb) => { const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(String(s || '').trim()); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : fb }
-  const start = day(from, new Date(now.getFullYear(), now.getMonth(), now.getDate()))
+  // ngay lich (UTC 00:00 cua ngay do) -> cong ngay khong lech mui gio
+  const day = (s, fb) => { const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(String(s || '').trim()); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : fb }
+  const n0 = vnParts(now)
+  const start = day(from, Date.UTC(n0.y, n0.m, n0.d))
   let end = day(to, start)
   if (end < start) { warnings.push('Ngày kết thúc trước ngày bắt đầu: chỉ đăng trong ngày bắt đầu.'); end = start }
   const all = []
   const soon = now.getTime() + 20 * 60e3
-  for (let d = new Date(start); d <= end && all.length < 2000; d.setDate(d.getDate() + 1)) {
+  for (let t0 = start; t0 <= end && all.length < 2000; t0 += 864e5) {
+    const d = new Date(t0)
     for (const t of ts) {
       const [h, m] = t.split(':').map(Number)
-      const w = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m)
+      const w = vnDate(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), h, m)
       if (w.getTime() >= soon) all.push(w)
     }
   }
@@ -208,4 +218,4 @@ function pickFolderImages(folder, n, used = new Set()) {
   return { files: src.slice(0, n), reused: fresh.length < n }
 }
 
-module.exports = { TYPES, TYPE_LABEL, LIMITS, IMAGE_MODELS, LANGS, parseTimes, planSlots, postsPrompt, parsePosts, cleanPost, geminiImage, imagePrompt, pickFolderImages, ymd }
+module.exports = { TYPES, TYPE_LABEL, LIMITS, IMAGE_MODELS, LANGS, parseTimes, planSlots, postsPrompt, parsePosts, cleanPost, geminiImage, imagePrompt, pickFolderImages, ymd, addDays, vnParts, vnDate }

@@ -214,6 +214,8 @@ function createStudioView(partition, url = STUDIO_URL) {
     else if (/^https?:/.test(u)) shell.openExternal(u)
     return { action: 'deny' }
   })
+  // gia lap man hinh rong mat moi lan tai trang (ke ca cung trang) -> dat lai sau moi lan dieu huong
+  wc.on('did-navigate', () => fitPane())
   if (studio.setBorderRadius) studio.setBorderRadius(10)
   studio.setVisible(false) // chi hien khi trang hien tai co khung trinh duyet
   win.contentView.addChildView(studio)
@@ -238,6 +240,14 @@ function useStudio(partition, url, { force = false } = {}) {
   push()
 }
 
+// Khung hep: khi tool chay trong khung, gia lap man hinh rong 1100 px roi thu nho cho vua (src/studio/fit.js). Nguoi
+// dung tu dung khung (khong co viec) thi giu nguyen.
+function fitPane() {
+  if (!studio) return
+  const r = state.studio.job ? lastPane : null
+  require('./studio/fit').fitView(studio.webContents, r ? r.width : 0, r ? r.height : 0)
+}
+
 // Giao dien bao vi tri khung (px cua cua so); null = trang nay khong co khung.
 function setPane(r) {
   lastPane = r
@@ -246,6 +256,7 @@ function setPane(r) {
   if (!state.studio.visible) return studio.setVisible(false)
   studio.setBounds({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) })
   studio.setVisible(true)
+  fitPane()
 }
 
 // Da dang nhap Studio chua? Studio chuyen toi /channel/UC... khi da vao kenh.
@@ -633,8 +644,8 @@ const ctx = {
     use: (partition, url, o) => useStudio(partition, url, o), wc: () => studio && studio.webContents, home: STUDIO_URL,
     partition: () => studioPartition,
     // viec tu dong chay trong khung (de nguoi dung theo doi): giao dien hien khung o moi trang khi job != ''
-    claim: (job) => { state.studio.job = job || 'Tool đang chạy'; push() },
-    release: () => { state.studio.job = ''; push() },
+    claim: (job) => { state.studio.job = job || 'Tool đang chạy'; fitPane(); push() },
+    release: () => { state.studio.job = ''; fitPane(); push() },
     // cua so chinh thu nho / an -> Chromium dung ve khung (Studio lam do dang): mo lai, khong cuop focus
     wake: () => {
       if (!win || win.isDestroyed()) return

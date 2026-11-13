@@ -11,6 +11,7 @@ import { GeminiBar, GeminiErrorHelp, aiProviderOf } from '../GeminiHelp'
 import { ActionBar, Button, Card, Choice, EmptyState, Field, PageBody, PageHeader, Pill, Select, TextArea, TextInput, ToggleRow, cn, type Tone } from '../kit'
 import { DatePicker, TimePicker } from '../VisibilityCard'
 import type { PageProps } from './index'
+import { addDays, vnHm, vnIso, vnShort, vnYmd } from '../vn'
 
 type AiType = 'text' | 'image' | 'poll' | 'quiz' | 'image_poll'
 type PerChannel = { request?: string; imageStyle?: string; imageFolder?: string; language?: string }
@@ -45,9 +46,10 @@ const STEP: Record<string, string> = { open: 'Mở tab Bài đăng', check: 'Ki�
 const RESULT: Record<string, string> = { posted: 'Đã đăng', scheduled: 'Đã lên lịch', duplicate: 'Đã có sẵn, bỏ qua' }
 
 const p2 = (n: number) => String(n).padStart(2, '0')
-const ymd = (d: Date) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
-const hm = (d: Date) => `${p2(d.getHours())}:${p2(d.getMinutes())}`
-const fmtWhen = (iso: string | null) => { if (!iso) return 'Đăng ngay'; const d = new Date(iso); return `${p2(d.getHours())}:${p2(d.getMinutes())} ${p2(d.getDate())}/${p2(d.getMonth() + 1)}` }
+// ngay / gio dang bai hien va nhap theo gio Viet Nam (GMT+7), khong theo mui gio cua may
+const ymd = vnYmd
+const hm = vnHm
+const fmtWhen = (iso: string | null) => (iso ? vnShort(new Date(iso)) : 'Đăng ngay')
 const timesOf = (s: string) => [...new Set((s.match(/\d{1,2}\s*[:hg.]\s*\d{0,2}|\b\d{1,2}\b/g) || []))].length
 
 // Gia tri hien ngay khi nguoi dung chon (khong cho main tra state ve); main day gia tri khac thi lay theo main
@@ -64,9 +66,9 @@ function useLocal<T>(value: T): [T, (v: T) => void] {
 function WhenPicker({ when, onChange }: { when: string | null; onChange: (iso: string) => void }) {
   const [v, setV] = useLocal(when)
   const d = v ? new Date(v) : null
-  const tomorrow = () => { const t = new Date(); t.setDate(t.getDate() + 1); return ymd(t) }
+  const tomorrow = () => addDays(ymd(new Date()), 1)
   const set = (day: string, time: string) => {
-    const iso = new Date(`${day}T${time}:00`).toISOString()
+    const iso = vnIso(day, time)
     setV(iso)
     if (iso !== when) onChange(iso)
   }
@@ -207,8 +209,8 @@ export function AiPostsPage({ state, send, go }: PageProps) {
   const canWrite = !s.busy && picked.length > 0 && o.types.length > 0 && !noKey
   const today = ymd(new Date())
   const from = fromV && fromV >= today ? fromV : today
-  const to = toV && toV >= from ? toV : ymd(new Date(new Date(from + 'T00:00').getTime() + 6 * 864e5))
-  const setRange = (days: number) => { const a = new Date(); const b = new Date(); b.setDate(a.getDate() + days - 1); setFromV(ymd(a)); setToV(ymd(b)); save({ from: ymd(a), to: ymd(b) }) }
+  const to = toV && toV >= from ? toV : addDays(from, 6)
+  const setRange = (days: number) => { const a = ymd(new Date()); const b = addDays(a, days - 1); setFromV(a); setToV(b); save({ from: a, to: b }) }
   const perDay = timesOf(o.times)
   return (
     <>
@@ -296,7 +298,7 @@ export function AiPostsPage({ state, send, go }: PageProps) {
             <Field label="Đến ngày">
               <DatePicker label="Đến ngày" min={from} value={to} onChange={(x) => { setToV(x); save({ to: x }) }} />
             </Field>
-            <Field label="Giờ đăng mỗi ngày" hint="Mốc 15 phút, cách nhau dấu phẩy">
+            <Field label="Giờ đăng mỗi ngày" hint="Giờ Việt Nam (GMT+7), mốc 15 phút, cách nhau dấu phẩy">
               <Saved value={o.times} aria-label="Giờ đăng mỗi ngày" placeholder="09:00, 20:00" onSave={(times) => save({ times })} />
             </Field>
           </div>
