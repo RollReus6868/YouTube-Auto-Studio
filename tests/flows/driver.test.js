@@ -46,4 +46,8 @@ module.exports = [
     await page.click({ selector: '#b1' })
     assert.equal(await page.eval(() => window.clicked), 1)
   }],
+  ['goto: loi mang thoang qua (ket noi bi dong) -> thu lai; loi mai -> bao "Khong mo duoc"', async ({ page, urls }) => {
+    await page.goto(`${urls.studio}/__flaky/a?n=2`, { wait: 'Đã mở' })
+    await assert.rejects(page.goto(`${urls.studio}/__flaky/b?n=9`), /Không mở được .*ERR_EMPTY_RESPONSE/)
+  }],
 ]

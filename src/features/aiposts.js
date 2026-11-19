@@ -211,52 +211,73 @@ module.exports = (ctx) => {
     for (const d of list) setDraft(d.id, { status: 'queued', error: '' })
     push()
     let ok = 0
-    const blocked = {} // kenh bi YouTube khoa dang bai (chu so huu can xac minh): bo qua cac bai con lai cua kenh
-    try {
-      for (const d0 of list) {
-        if (ctx.stopped()) { setDraft(d0.id, { status: 'draft' }); continue }
-        const d = S.drafts.find((x) => x.id === d0.id)
-        if (!d) continue
-        if (blocked[d.channelKey]) { setDraft(d.id, { status: 'error', step: '', error: `Chưa đăng: ${blocked[d.channelKey]}` }); continue }
-        const ch = channels().find((c) => c.key === d.channelKey)
-        if (!ch) { setDraft(d.id, { status: 'error', error: 'Kênh không còn ở trang Tài khoản (đã bỏ tick?).' }); continue }
-        // gio da qua (ban nhap cu) -> dang ngay
-        const when = d.when && new Date(d.when).getTime() > Date.now() + 5 * 60e3 ? d.when : null
-        setDraft(d.id, { status: 'run', step: 'open' })
-        S.progress = `Đang ${when ? 'lên lịch' : 'đăng'} bài ${ok + 1}/${list.length} lên kênh "${ch.name}"…`
-        push()
-        try {
-          const r = await ctx.withChannel(ch.key, (page) => createPost(page, {
-            type: d.type, text: d.text, images: d.images || [], options: (d.options || []).map((x) => ({ text: x.text, image: x.image || '' })),
-            answers: d.answers || [], explanation: d.explanation || '', video: '', when,
-            channel: { ucId: channelOf(page.url()) || ch.ucId, handle: ch.handle, name: ch.name },
-          }, {
-            urls: ctx.urls,
-            log: (level, msg) => ctx.log(level, `Bài Gemini (${ch.name}): ${msg}`),
-            onStep: (step) => { setDraft(d.id, { step }); ctx.push() },
-          }), { label: `dang-bai-ai-${ch.name}`, shouldStop: () => ctx.stopped() })
-          if (r.mismatch) {
-            // da len lich nhung YouTube ghi sai gio: bao loi de nguoi dung sua (dang lai se bi coi la trung bai)
-            setDraft(d.id, { status: 'error', step: '', url: r.url || '', line: r.line || '', result: r.status, error: r.mismatch })
-            remember(ch.key, d)
-            ctx.log('error', `Kênh "${ch.name}": bài ${AI.TYPE_LABEL[d.type]} ${r.mismatch}`)
-            push()
-            continue
-          }
-          setDraft(d.id, { status: 'done', step: '', url: r.url || '', line: r.line || '', result: r.status })
+    const blocked = {} // kenh bi YouTube khoa dang bai (chu so huu can xac minh) / loi lien tiep: bo qua cac bai con lai cua kenh
+    const fails = {} // so bai loi lien tiep cua tung kenh
+    const retry = [] // bai loi thoang qua: thu lai mot lan o cuoi
+    const postOne = async (d0, round) => {
+      if (ctx.stopped()) { setDraft(d0.id, { status: 'draft' }); return }
+      const d = S.drafts.find((x) => x.id === d0.id)
+      if (!d) return
+      if (blocked[d.channelKey]) { setDraft(d.id, { status: 'error', step: '', error: `Chưa đăng: ${blocked[d.channelKey]}` }); return }
+      const ch = channels().find((c) => c.key === d.channelKey)
+      if (!ch) { setDraft(d.id, { status: 'error', error: 'Kênh không còn ở trang Tài khoản (đã bỏ tick?).' }); return }
+      // gio da qua (ban nhap cu) -> dang ngay
+      const when = d.when && new Date(d.when).getTime() > Date.now() + 5 * 60e3 ? d.when : null
+      setDraft(d.id, { status: 'run', step: 'open', error: '' })
+      S.progress = `${round ? 'Thử lại: ' : ''}Đang ${when ? 'lên lịch' : 'đăng'} bài ${ok + 1}/${list.length} lên kênh "${ch.name}"…`
+      push()
+      try {
+        const r = await ctx.withChannel(ch.key, (page) => createPost(page, {
+          type: d.type, text: d.text, images: d.images || [], options: (d.options || []).map((x) => ({ text: x.text, image: x.image || '' })),
+          answers: d.answers || [], explanation: d.explanation || '', video: '', when,
+          channel: { ucId: channelOf(page.url()) || ch.ucId, handle: ch.handle, name: ch.name },
+        }, {
+          urls: ctx.urls,
+          log: (level, msg) => ctx.log(level, `Bài Gemini (${ch.name}): ${msg}`),
+          onStep: (step) => { setDraft(d.id, { step }); ctx.push() },
+        }), { label: `dang-bai-ai-${ch.name}`, shouldStop: () => ctx.stopped() })
+        fails[d.channelKey] = 0
+        if (r.mismatch) {
+          // da len lich nhung YouTube ghi sai gio: bao loi de nguoi dung sua (dang lai se bi coi la trung bai)
+          setDraft(d.id, { status: 'error', step: '', url: r.url || '', line: r.line || '', result: r.status, error: r.mismatch })
           remember(ch.key, d)
-          ok++
-          ctx.log('ok', `Kênh "${ch.name}": ${r.status === 'scheduled' ? `đã lên lịch bài ${AI.TYPE_LABEL[d.type]}${r.line ? ` (${r.line})` : ''}` : r.status === 'duplicate' ? 'bài đã có sẵn trên kênh, không đăng lại' : `đã đăng bài ${AI.TYPE_LABEL[d.type]}`}${r.url ? ` ${r.url}` : ''}.`)
-        } catch (e) {
-          setDraft(d.id, { status: ctx.stopped() ? 'draft' : 'error', step: '', error: e.message })
-          ctx.log('error', `Kênh "${ch.name}": chưa đăng được bài ${AI.TYPE_LABEL[d.type]}: ${e.message}`)
-          if (e.code === 'OWNER_VERIFY') {
-            blocked[d.channelKey] = `YouTube yêu cầu chủ sở hữu kênh "${ch.name}" xác minh trước khi đăng bài (xem lỗi bài trước).`
-            const rest = list.filter((x) => x.channelKey === d.channelKey && S.drafts.some((y) => y.id === x.id && y.status === 'queued')).length
-            if (rest) ctx.log('warn', `Kênh "${ch.name}": dừng ${rest} bài còn lại của kênh này cho tới khi chủ sở hữu xác minh.`)
+          ctx.log('error', `Kênh "${ch.name}": bài ${AI.TYPE_LABEL[d.type]} ${r.mismatch}`)
+          push()
+          return
+        }
+        setDraft(d.id, { status: 'done', step: '', url: r.url || '', line: r.line || '', result: r.status })
+        remember(ch.key, d)
+        ok++
+        ctx.log('ok', `Kênh "${ch.name}": ${r.status === 'scheduled' ? `đã lên lịch bài ${AI.TYPE_LABEL[d.type]}${r.line ? ` (${r.line})` : ''}` : r.status === 'duplicate' ? 'bài đã có sẵn trên kênh, không đăng lại' : `đã đăng bài ${AI.TYPE_LABEL[d.type]}`}${r.url ? ` ${r.url}` : ''}.`)
+      } catch (e) {
+        const stopped = ctx.stopped()
+        setDraft(d.id, { status: stopped ? 'draft' : 'error', step: '', error: e.message })
+        if (stopped) return
+        ctx.log('error', `Kênh "${ch.name}": chưa đăng được bài ${AI.TYPE_LABEL[d.type]}: ${e.message}`)
+        const rest = () => list.filter((x) => x.channelKey === d.channelKey && S.drafts.some((y) => y.id === x.id && y.status === 'queued')).length
+        if (e.code === 'OWNER_VERIFY') {
+          blocked[d.channelKey] = `YouTube yêu cầu chủ sở hữu kênh "${ch.name}" xác minh trước khi đăng bài (xem lỗi bài trước).`
+          if (rest()) ctx.log('warn', `Kênh "${ch.name}": dừng ${rest()} bài còn lại của kênh này cho tới khi chủ sở hữu xác minh.`)
+        } else if (!round) {
+          retry.push(d0)
+          // loi lien tiep o cung kenh (vd khong chuyen duoc kenh, Studio khong mo): khong thu tung bai con lai (loi that 13/11/2026:
+          // 13 bai cua mot kenh loi giong nhau "Khong mo duoc studio.youtube.com")
+          fails[d.channelKey] = (fails[d.channelKey] || 0) + 1
+          if (fails[d.channelKey] >= 2) {
+            blocked[d.channelKey] = `kênh "${ch.name}" lỗi 2 bài liên tiếp (${e.message.slice(0, 160)}). Kiểm tra kênh ở khung Studio rồi bấm Đăng lại.`
+            if (rest()) ctx.log('warn', `Kênh "${ch.name}": lỗi 2 bài liên tiếp, tạm dừng ${rest()} bài còn lại của kênh này.`)
           }
         }
-        push()
+      }
+      push()
+    }
+    try {
+      for (const d0 of list) await postOne(d0, 0)
+      // thu lai mot lan cac bai loi thoang qua (vd khung len lich chua hien, mang chap chon), tru kenh dang bi tam dung
+      const again = retry.filter((d0) => !blocked[d0.channelKey] && !ctx.stopped())
+      if (again.length) {
+        ctx.log('info', `Đăng bài tự động: thử lại ${again.length} bài vừa lỗi.`)
+        for (const d0 of again) { setDraft(d0.id, { status: 'queued' }); await postOne(d0, 1) }
       }
     } finally {
       S.busy = ''

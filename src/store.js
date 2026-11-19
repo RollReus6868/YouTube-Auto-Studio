@@ -29,7 +29,10 @@ const DEFAULTS = {
   descRequest: '', // yeu cau rieng cua nguoi dung khi Gemini viet mo ta (vd "viet bang tieng Anh, 3 doan, nhac link ebook")
   videoVis: {}, // che do hien thi rieng tung video (trang Dang video): { [id video]: { mode, at, premiere } }
   descPosition: 'above', // phan Gemini viet / mo ta rieng cua video nam: above = tren | below = duoi phan mac dinh
-  uploadChannel: '', // khoa kenh (UC ID) dang video qua hop thoai tai len cua Studio (trang Dang video)
+  uploadChannel: '', // khoa kenh (UC ID) dang video qua hop thoai tai len cua Studio (trang Dang video) = kenh mac dinh
+  // cai dat rieng tung video (trang Dang video): { [id video]: { channel: khoa kenh, preset: id mau, monetize: on|off, queue: 1..9|'solo' } }
+  videoOpts: {},
+  uploadParallel: 2, // so hang cho dang video chay cung luc (1-4; src/upload-queue.js)
   // tu toi uu video trong hang cho sau khi dang (theo "Tự tối ưu sau khi đăng" cua mau): false = khong tu chay (trang Toi uu video)
   optimizeAuto: true,
 }

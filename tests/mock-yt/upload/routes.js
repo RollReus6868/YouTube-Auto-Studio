@@ -19,6 +19,8 @@ module.exports = [
   }],
   // HTML that (an danh) cua Studio: hop thoai tai len o buoc chon tep + "Ban da hoan tat" (tests/flows/upload.test.js)
   [/^\/studio\/that-upload\/chon-tep$/, 'that-chon-tep.html'],
+  // HTML that: buoc "Kiem tien" (kenh da bat kiem tien, loi-trang 19/11/2026) + hop thoai Bat/Tat
+  [/^\/studio\/that-upload\/kiem-tien$/, 'that-kiem-tien.html'],
   [/^\/studio\/__upload\/done$/, (req, res, m, server) => {
     let body = ''
     req.setEncoding('utf8') // ghep chu dung UTF-8 khi than yeu cau den thanh nhieu manh (ky tu nhieu byte bi cat)

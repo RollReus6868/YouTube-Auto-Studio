@@ -29,6 +29,7 @@ const ALIASES = {
   tre_em: 'tre_em', danh_cho_tre_em: 'tre_em',
   ghi_chu: 'ghi_chu', note: 'ghi_chu',
   mo_ta: 'mo_ta', description: 'mo_ta',
+  kiem_tien: 'kiem_tien', monetization: 'kiem_tien', monetize: 'kiem_tien',
 }
 const PRIVACY = { cong_khai: 'public', public: 'public', khong_cong_khai: 'unlisted', unlisted: 'unlisted', rieng_tu: 'private', private: 'private' }
 const YES = /^(co|có|yes|true|1|x)$/i

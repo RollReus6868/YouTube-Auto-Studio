@@ -85,6 +85,67 @@ module.exports = (ctx) => {
     return run
   }
 
+  // ---- cua so dang video rieng (trang Dang video: nhieu hang cho chay cung luc) ------------------------
+  // Moi luong dang video thu 2 tro di mot cua so THAT (hien, khong cuop focus): Windows chi ve trang cua so dang hien, nen
+  // khong dung cua so an / trong suot. Doi tai khoan Google = tao lai cua so tren phien (partition) cua tai khoan do.
+  // Thu nho / dong cua so luc dang tai len thi tool mo lai / chan dong (video dang tai se hong).
+  const workers = new Map() // workerId -> { win, page, partition, chain, pending, timer, job }
+  function closeWorker(id) {
+    const w = workers.get(id)
+    if (!w) return
+    workers.delete(id)
+    clearTimeout(w.timer)
+    w.closing = true
+    if (!w.win.isDestroyed()) w.win.destroy()
+  }
+  function worker(id, acc, title) {
+    const old = workers.get(id)
+    if (old && !old.win.isDestroyed() && old.partition === acc.partition) { clearTimeout(old.timer); return old }
+    if (old) closeWorker(id)
+    const n = Number(String(id).replace(/\D+/g, '')) || 1
+    const win = new BrowserWindow({
+      show: false, width: 1180, height: 820, x: 60 + 40 * (n % 6), y: 40 + 30 * (n % 6), autoHideMenuBar: true, title,
+      webPreferences: { session: googleSession(acc.partition), backgroundThrottling: false, contextIsolation: true, sandbox: true, spellcheck: false },
+    })
+    const wc = win.webContents
+    wc.setAudioMuted(true)
+    wc.on('will-prevent-unload', (e) => e.preventDefault())
+    wc.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) wc.loadURL(url); return { action: 'deny' } })
+    const w = { win, partition: acc.partition, chain: Promise.resolve(), pending: 0, timer: null, job: '', closing: false }
+    win.on('page-title-updated', (e) => e.preventDefault()) // giu tieu de "Dang video · luong N · kenh"
+    win.on('minimize', () => {
+      if (!w.job) return
+      ctx.log('warn', `Không thu nhỏ được cửa sổ "${win.getTitle()}" khi đang đăng video: thu nhỏ thì YouTube Studio ngừng chạy đúng. Có thể để cửa sổ khác che lên.`)
+      setTimeout(() => { if (!win.isDestroyed() && win.isMinimized() && w.job) win.restore() }, 300)
+    })
+    win.on('close', (e) => {
+      if (w.closing || !w.job) return
+      e.preventDefault()
+      ctx.log('warn', `Cửa sổ "${win.getTitle()}" đang đăng video: không đóng được (đóng sẽ làm hỏng video đang tải). Bấm "Dừng" ở trang Đăng video, đợi video xong rồi cửa sổ tự đóng.`)
+    })
+    win.on('closed', () => { if (workers.get(id) === w) workers.delete(id) })
+    win.showInactive()
+    const wake = () => { if (win.isDestroyed()) return; if (win.isMinimized()) win.restore(); else if (!win.isVisible()) win.showInactive() }
+    w.page = new Page(wc, { timeout: 20000, shotDir: ctx.logFile('loi-trang'), shouldStop: ctx.stopped, wake })
+    workers.set(id, w)
+    return w
+  }
+  function onWorker(id, acc, fn, what) {
+    const w = worker(id, acc, what)
+    w.pending++
+    const run = w.chain.then(() => {
+      if (w.win.isDestroyed()) throw new Error('Cửa sổ đăng video đã bị đóng.')
+      w.job = what
+      w.win.setTitle(what)
+      return fn(w.page)
+    })
+    w.chain = run.catch(() => {}).finally(() => {
+      w.job = ''
+      if (--w.pending === 0 && workers.get(id) === w) w.timer = setTimeout(() => closeWorker(id), IDLE_MS)
+    })
+    return run
+  }
+
   // ---- chay trong khung trinh duyet cua tool (Cai dat "runInPane", mac dinh bat) -----------
   // Nguoi dung xem duoc tool lam gi; khung nam trong cua so chinh nen luon duoc ve (khong bi Windows coi la an).
   // Chi co mot khung: moi viec (moi tai khoan) chay lan luot.
@@ -180,13 +241,21 @@ module.exports = (ctx) => {
     try { return await runOnChannel(key, fn, opts) } finally { jobs-- }
   }
   // shouldStop: dung rieng viec nay (vd nut Dung o trang Cong dong) - buoc dang cho tren trang nem "Đã dừng theo yêu cầu."
-  async function runOnChannel(key, fn, { label: what = '', shouldStop = null } = {}) {
+  // worker: chay trong cua so dang video rieng (vd 'upload-1'), khong dung khung / cua so chung cua tai khoan
+  async function runOnChannel(key, fn, { label: what = '', shouldStop = null, worker: workerId = '' } = {}) {
     const ch = m().find(key)
     if (!ch) throw new Error(`Không có kênh "${key}" ở trang Tài khoản. Bấm "Làm mới kênh" rồi tick kênh cần dùng.`)
     const acc = m().get(ch.accountId)
     if (acc.status === 'needs-sign-in') throw new Error(`Tài khoản Google "${acc.label}" chưa đăng nhập (trang Tài khoản → Đăng nhập).`)
     const job = `${what || 'Việc tự động'} · ${ch.name}`
-    const runner = inPane() ? (fn) => onPane(acc, fn, job, shouldStop) : (fn) => onAccount(acc.id, (page) => {
+    const wrapStop = (page, fn) => {
+      if (!shouldStop) return fn(page)
+      const prev = page.shouldStop
+      page.shouldStop = () => prev() || !!shouldStop()
+      return Promise.resolve(fn(page)).finally(() => { page.shouldStop = prev })
+    }
+    const runner = workerId ? (fn) => onWorker(workerId, acc, (page) => wrapStop(page, fn), job)
+      : inPane() ? (fn) => onPane(acc, fn, job, shouldStop) : (fn) => onAccount(acc.id, (page) => {
       if (!shouldStop) return fn(page)
       const prev = page.shouldStop
       page.shouldStop = () => prev() || !!shouldStop()
@@ -288,6 +357,9 @@ module.exports = (ctx) => {
       return onPane(acc, fn, what, stopIf, o)
     },
     paneEnabled: () => inPane(),
+    // cua so dang video rieng: dua len truoc / dong khi ranh
+    showWorker: (id) => { const w = workers.get(id); if (w && !w.win.isDestroyed()) { if (w.win.isMinimized()) w.win.restore(); w.win.show(); w.win.focus(); return true } return false },
+    workers: () => [...workers.entries()].filter(([, w]) => !w.win.isDestroyed()).map(([id, w]) => ({ id, job: w.job })),
     panePartition: () => { const a = m().get(S.pane.accountId) || m().list_[0]; return a ? a.partition : '' },
   }
   ctx.withChannel = withChannel

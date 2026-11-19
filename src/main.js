@@ -15,6 +15,7 @@ const { endpoints, gemini, geminiModels, GEMINI_MODELS, descriptionPrompt } = re
 const { createAi } = require('./ai')
 const { CommentDesk } = require('./comments')
 const { uploadOne } = require('./uploader')
+const { UploadQueue, queueKey, MAX_PARALLEL } = require('./upload-queue')
 const { googleSession, REJECTED, REJECTED_TEXT } = require('./studio/session')
 const { channelOf } = require('./studio/driver')
 const idle = require('./idle')
@@ -62,7 +63,9 @@ const state = {
   scan: { root: '', videoDir: '', videos: [], posts: [], errors: [], at: '' }, // root: thu muc goc (bai dang); videoDir: thu muc video
   // job: viec tool dang chay trong khung (nguoi dung xem; khong doi tai khoan / kenh cua khung luc do)
   studio: { channelId: '', channelName: '', url: '', visible: false, job: '' },
-  upload: { channelKey: '', channels: [] }, // kenh dang video (trang Dang video) + cac kenh da tick o trang Tai khoan
+  // kenh dang video mac dinh (trang Dang video) + cac kenh da tick o trang Tai khoan; parallel: so hang cho chay cung luc;
+  // run: hang cho dang chay [{ key, label, lane, running: id, waiting: [id], channel }] (src/upload-queue.js)
+  upload: { channelKey: '', channels: [], parallel: 2, maxParallel: MAX_PARALLEL, run: [] },
   jobs: {}, // id video -> { status: queued|run|done|error|stopped, step, progress, error, url }
   draft: null, // { id, text, loading, error, script } mo ta Gemini dang soan (script: ten file kich ban da gui)
   comments: { items: [], busy: false, at: '', sentLastHour: 0 },
@@ -129,6 +132,29 @@ function scriptFor(v) {
   return v.script ? { path: v.script, auto: true } : null
 }
 
+// ---- cai dat rieng tung video (trang Dang video) ----
+const VIDEO_QUEUES = 9
+const videoOptsOf = (id) => (store.settings.videoOpts || {})[id] || {}
+// mau cua video: chon rieng tren trang Dang video > dong "Mẫu:" trong file thong tin > mau mac dinh
+function presetOf(v) {
+  const o = videoOptsOf(v.id)
+  return (o.preset && store.settings.presets.find((p) => p.id === o.preset)) || store.presetFor(v)
+}
+// kenh dang cua video: chon rieng (phai con duoc tick o trang Tai khoan) > kenh mac dinh cua trang. { key, own, missing }
+function channelFor(v) {
+  const o = videoOptsOf(v.id)
+  const list = state.upload.channels
+  if (o.channel) {
+    // khoa kenh doi tu '<tai khoan>:<ten>' sang UC ID khi tool hoc duoc ma kenh: tim lai qua ctx.accounts.find
+    const f = ctx.accounts && ctx.accounts.find(o.channel)
+    const key = f && list.some((c) => c.key === f.key) ? f.key : ''
+    return key ? { key, own: true } : { key: '', own: true, missing: o.channel }
+  }
+  return { key: list.some((c) => c.key === state.upload.channelKey) ? state.upload.channelKey : '', own: false }
+}
+const channelName = (key) => (state.upload.channels.find((c) => c.key === key) || {}).name || ''
+const queueLabel = (q) => (q === 'solo' ? 'Chạy riêng' : `Hàng chờ ${Math.max(1, Math.min(VIDEO_QUEUES, Number(q) || 1))}`)
+
 function runScan(quiet = false) {
   const root = store.settings.root
   const vdir = videoDir()
@@ -143,22 +169,29 @@ function runScan(quiet = false) {
   }
   // video co che do hien thi rieng (trang Dang video) khong chiem moc lich cua preset
   const own = store.settings.videoVis || {}
+  // lich cua mau xep rieng theo tung kenh (moi kenh mot chuoi gio dang: video kenh A va kenh B cung nhan moc dau tien)
   const ready = r.videos.filter((v) => !v.errors.length && !(own[v.id] && VIS_MODES.includes(own[v.id].mode)))
-  const plan = planSchedule(ready, (v) => store.presetFor(v))
-  const planOf = new Map(ready.map((v, i) => [v.id, plan[i]]))
+  const byChannel = new Map()
+  for (const v of ready) { const k = channelFor(v).key; if (!byChannel.has(k)) byChannel.set(k, []); byChannel.get(k).push(v) }
+  const planOf = new Map()
+  for (const group of byChannel.values()) { const plan = planSchedule(group, presetOf); group.forEach((v, i) => planOf.set(v.id, plan[i])) }
   const channel = store.settings.channel
   raw = new Map()
   state.scan = {
     root: r.root, videoDir: vdir, errors: r.errors, at: r.at,
     videos: r.videos.map((v) => {
-      const preset = store.presetFor(v)
+      const preset = presetOf(v)
+      const opts = videoOptsOf(v.id)
+      const chan = channelFor(v)
       const p = planOf.get(v.id) || { publishAt: null, warning: '' }
       const ov = own[v.id] && VIS_MODES.includes(own[v.id].mode) ? own[v.id] : null
       const vis = applyVisibility(buildVideoMeta(v, preset, { publishAt: p.publishAt, channel, settings: store.settings }), ov)
-      const meta = vis.meta
+      const meta = opts.monetize === 'on' || opts.monetize === 'off' ? { ...vis.meta, monetize: opts.monetize } : vis.meta
       const problems = v.errors.length ? v.errors : validateMeta(meta)
+      if (!v.errors.length && chan.missing) problems.push('Kênh riêng đã chọn cho video này không còn được tick ở trang Tài khoản: chọn lại kênh cho video.')
       const script = scriptFor(v)
-      raw.set(v.id, { layout: v.layout, key: v.key, folder: v.folder, video: v.video, files: v.files, doneDir: v.doneDir, infoFile: v.infoFile, thumbnail: v.thumbnail, meta, info: v.info, name: v.name, script, ok: !problems.length })
+      raw.set(v.id, { layout: v.layout, key: v.key, folder: v.folder, video: v.video, files: v.files, doneDir: v.doneDir, infoFile: v.infoFile, thumbnail: v.thumbnail, meta, info: v.info, name: v.name, script, ok: !problems.length,
+        channelKey: chan.key, queue: queueKey(opts.queue, v.id), presetId: preset.id })
       return {
         id: v.id, layout: v.layout, dir: v.dir, folder: v.folder, name: v.name, size: v.size || 0,
         thumb: v.thumbnail ? path.basename(v.thumbnail) : '', infoFile: v.infoFile ? path.basename(v.infoFile) : '',
@@ -168,6 +201,9 @@ function runScan(quiet = false) {
         script: script ? { file: path.basename(script.path), auto: script.auto } : null,
         errors: problems, warnings: v.warnings.concat(p.warning && !ov ? [p.warning] : [], vis.warning ? [vis.warning] : []),
         vis: ov, // che do hien thi rieng (null = theo mau)
+        // cai dat rieng: opts (da chon tay), kenh dang thuc te, hang cho, mau, kiem tien thuc te
+        opts: { channel: chan.own && chan.key ? chan.key : opts.channel || '', preset: opts.preset || '', monetize: opts.monetize || '', queue: opts.queue || '' },
+        channelKey: chan.key, channelName: channelName(chan.key), presetId: preset.id, queue: opts.queue || 1, queueLabel: queueLabel(opts.queue), monetize: meta.monetize,
       }
     }),
     posts: r.posts.map((p) => ({
@@ -329,15 +365,16 @@ function syncUploadChannels() {
   // khoa cu (UC, hoac "tai-khoan:Ten kenh" truoc khi biet UC) -> kenh tuong ung; khong con -> kenh dau tien
   if (list.length && !list.some((c) => c.key === key)) key = (list.find((c) => (c.ucId && c.ucId === key) || key.endsWith(`:${c.name}`)) || list[0]).key
   if (JSON.stringify(list) !== JSON.stringify(state.upload.channels) || key !== state.upload.channelKey) {
-    state.upload = { channelKey: key, channels: list }
-    push()
+    Object.assign(state.upload, { channelKey: key, channels: list })
+    if (store && (videoDir() || store.settings.root) && state.scan.at) runScan(true)
+    else push()
   }
 }
 function setUploadChannel(key) {
   state.upload.channelKey = String(key || '')
   store.save({ uploadChannel: state.upload.channelKey })
   refreshSettings()
-  push()
+  runScan(true) // video theo kenh mac dinh: doi kenh + lich xep theo kenh
 }
 
 function setJob(id, patch) {
@@ -345,59 +382,127 @@ function setJob(id, patch) {
   push()
 }
 
-// Dang cac video da chon len kenh dang video, lan luot, bang hop thoai tai len cua Studio trong cua so an
-// cua tai khoan (src/flows/upload.js). Dung giua chung khi dang tai len se de lai ban nhap trong Studio,
-// nen bam Dung luc dang tai len thi dung sau video do.
-let uploading = false
+// Dang video: moi video len kenh rieng cua no (mac dinh: kenh chon o dau trang), bang hop thoai tai len cua Studio
+// (src/flows/upload.js). Video chia vao cac hang cho (src/upload-queue.js): video cung hang cho dang LAN LUOT, cac hang cho
+// chay CUNG LUC (toi da settings.uploadParallel). Hang cho dau tien dang chay dung khung Studio ben phai (nhu truoc); hang
+// cho thu 2 tro di moi hang cho mot cua so dang video rieng. Bam Dang them luc dang chay = them vao hang cho.
+// Dung giua chung khi dang tai len se de lai ban nhap trong Studio, nen bam Dung thi khong bat dau video moi, video dang tai
+// van tai cho xong (bam Dung lan nua moi dung han).
+let uq = null // hang cho dang chay
+let uploading = 0 // so video dang tai len
 let stopAfter = false
+let runTotal = 0
+let runOk = 0
+const runningOn = new Map() // id video dang tai -> { accountId, key, name } cua kenh
+let sameAccountWarned = false
+function pushRun() {
+  state.upload.parallel = store.settings.uploadParallel || 2
+  state.upload.run = uq ? uq.snapshot().map((q) => {
+    const it = raw.get(q.running || q.waiting[0]) || {}
+    return { key: q.key, label: q.key.startsWith('solo:') ? 'Chạy riêng' : `Hàng chờ ${q.key.slice(1)}`, lane: q.lane, window: q.lane ? `upload-${q.lane}` : '',
+      running: q.running, waiting: q.waiting, channel: channelName(it.channelKey) }
+  }) : []
+  push()
+}
+
+async function uploadJob(job, lane) {
+  const id = job.id
+  if (stop || stopAfter) { setJob(id, { status: 'stopped' }); return }
+  const item = raw.get(id)
+  if (!item || !item.ok) { setJob(id, { status: 'error', error: 'Video không còn sẵn sàng (đã quét lại thư mục?).' }); return }
+  const ch = ctx.accounts && ((job.channelKey && ctx.accounts.find(job.channelKey)) || (item.channelKey && ctx.accounts.find(item.channelKey)))
+  if (!ch) { setJob(id, { status: 'error', error: 'Chưa có kênh đăng cho video này (chọn kênh ở đầu trang hoặc trong cài đặt riêng của video).' }); return }
+  const preset = store.settings.presets.find((p) => p.id === item.presetId) || store.presetFor({ info: item.info })
+  setJob(id, { status: 'run', step: 'open', progress: 0, error: '', lane, channelName: ch.name, title: item.meta.title })
+  // hai luong cung tai khoan Google, khac kenh: YouTube cho mo nhieu kenh cung luc theo dia chi /channel/UC..., nhung tool chua
+  // kiem tren YouTube that -> nhac kiem tra mot lan moi luot dang
+  const twin = [...runningOn.entries()].find(([, x]) => x.accountId === ch.accountId && x.key !== ch.key)
+  if (twin && !sameAccountWarned) {
+    sameAccountWarned = true
+    log('info', `Đang đăng cùng lúc lên 2 kênh của cùng một tài khoản Google ("${twin[1].name}" và "${ch.name}"). Sau khi xong, hãy xem trang Nội dung của từng kênh trong Studio để chắc mỗi video nằm đúng kênh (lần đầu dùng tính năng này).`)
+  }
+  runningOn.set(id, { accountId: ch.accountId, key: ch.key, name: ch.name })
+  uploading++
+  pushRun()
+  try {
+    const r = await ctx.withChannel(ch.key, (page) => uploadOne(page, item, {
+      urls: URLS, uc: channelOf(page.url()) || ch.ucId, root: videoDir(), preset, channelName: ch.name,
+      log: (level, msg) => log(level, lane ? `[Luồng ${lane + 1}] ${msg}` : msg),
+      onStep: (step) => setJob(id, { step }),
+      onProgress: (progress) => setJob(id, { progress }),
+    }), { label: `dang-video-${item.name || id}`, worker: lane ? `upload-${lane}` : '' })
+    addHistory({ folder: item.key || item.folder, movedTo: r.folder, id: r.id, url: r.url, title: item.meta.title, channel: ch.ucId || ch.key, at: new Date().toISOString() })
+    setJob(id, { status: 'done', step: '', progress: 100, url: r.url, warnings: r.warnings, monetization: r.monetization || '' })
+    const vv = { ...(store.settings.videoVis || {}) }
+    const vo = { ...(store.settings.videoOpts || {}) }
+    if (vv[id] || vo[id]) { delete vv[id]; delete vo[id]; store.save({ videoVis: vv, videoOpts: vo }); refreshSettings() }
+    if (r.after && ctx.afterUpload) ctx.afterUpload({ videoId: r.id, title: item.meta.title, publishAt: r.schedule || item.meta.publishAt, tpl: r.after, presetId: preset.id || '', channelId: ch.key })
+    runOk++
+  } catch (e) {
+    const stopped = stop && /dừng theo yêu cầu/.test(e.message)
+    setJob(id, { status: stopped ? 'stopped' : 'error', error: e.message })
+    log(stopped ? 'warn' : 'error', `${item.meta.title}: ${e.message}`)
+    // gioi han tai len hang ngay / mat dang nhap: cac video sau cung se loi, dung han
+    // ... hoac Google doi xac minh danh tinh (nguoi dung phai tu lam o trang Tai khoan)
+    if (/giới hạn tải lên|upload limit|chưa đăng nhập|đăng nhập lại|xác minh danh tính/i.test(e.message)) { stopAfter = true; if (uq) uq.stopStarting() }
+  } finally {
+    uploading--
+    runningOn.delete(id)
+    pushRun()
+  }
+}
+
 async function runUploads(ids) {
   syncUploadChannels()
-  const key = state.upload.channelKey
-  const ch = key && ctx.accounts && ctx.accounts.find(key)
-  if (!ch) return log('warn', 'Hãy chọn kênh đăng video (trang Đăng video). Kênh lấy từ trang Tài khoản: đăng nhập Google rồi tick kênh.')
   if (!ctx.withChannel) return log('error', 'Chưa có tài khoản Google nào (trang Tài khoản).')
-  const list = (ids && ids.length ? ids : [...raw.keys()]).filter((id) => raw.get(id) && raw.get(id).ok && (!state.jobs[id] || state.jobs[id].status !== 'done'))
+  const list = (ids && ids.length ? ids : [...raw.keys()]).filter((id) => raw.get(id) && raw.get(id).ok && !['done', 'queued', 'run'].includes((state.jobs[id] || {}).status))
   if (!list.length) return log('warn', 'Không có video nào sẵn sàng để đăng.')
+  const jobs = []
+  for (const id of list) {
+    const item = raw.get(id)
+    if (!item.channelKey || !(ctx.accounts && ctx.accounts.find(item.channelKey))) {
+      log('warn', `"${item.meta.title}": chưa có kênh đăng (chọn kênh ở đầu trang Đăng video, hoặc kênh riêng của video).`)
+      continue
+    }
+    jobs.push({ id, queue: item.queue, channelKey: item.channelKey }) // kenh chot luc bam Dang (doi kenh mac dinh sau do khong anh huong)
+  }
+  if (!jobs.length) return log('warn', 'Hãy chọn kênh đăng video (trang Đăng video). Kênh lấy từ trang Tài khoản: đăng nhập Google rồi tick kênh.')
+  const mark = () => { for (const j of jobs) setJob(j.id, { status: 'queued', step: '', progress: 0, error: '', url: '', lane: null, title: raw.get(j.id).meta.title, channelName: channelName(raw.get(j.id).channelKey), queueLabel: queueLabel(videoOptsOf(j.id).queue) }) }
+  const names = (js) => [...new Set(js.map((j) => channelName(raw.get(j.id).channelKey)))]
+  // dang chay: them vao hang cho
+  if (uq) {
+    mark()
+    if (uq.add(jobs) >= 0) {
+      runTotal += jobs.length
+      log('info', `Đã thêm ${jobs.length} video vào hàng chờ đang chạy (${names(jobs).join(', ')}).`)
+      return pushRun()
+    }
+  }
+  if (busy) return log('warn', 'Tool đang bận (đang cập nhật?). Đợi xong rồi đăng.')
   busy = true
   stop = false
   stopAfter = false
   state.status = 'run'
-  for (const id of list) setJob(id, { status: 'queued', step: '', progress: 0, error: '', url: '', title: raw.get(id).meta.title })
-  log('info', `Bắt đầu đăng ${list.length} video lên kênh "${ch.name}".`)
-  let ok = 0
+  runTotal = jobs.length
+  runOk = 0
+  sameAccountWarned = false
+  mark()
+  const parallel = store.settings.uploadParallel || 2
+  const q = new UploadQueue({ parallel, runOne: uploadJob, onChange: pushRun })
+  uq = q
+  q.add(jobs)
+  const queues = new Set(jobs.map((j) => j.queue)).size
+  const chs = names(jobs)
+  log('info', `Bắt đầu đăng ${jobs.length} video lên ${chs.length > 1 ? 'các kênh' : 'kênh'} ${chs.map((n) => `"${n}"`).join(', ')}${queues > 1 ? ` (${queues} hàng chờ, tối đa ${Math.min(parallel, queues)} chạy cùng lúc)` : ''}.`)
   try {
-    for (const id of list) {
-      if (stop || stopAfter) { setJob(id, { status: 'stopped' }); continue }
-      const item = raw.get(id)
-      const preset = store.presetFor({ info: item.info })
-      setJob(id, { status: 'run', step: 'open', progress: 0 })
-      uploading = true
-      try {
-        const r = await ctx.withChannel(key, (page) => uploadOne(page, item, {
-          urls: URLS, uc: channelOf(page.url()) || ch.ucId, root: videoDir(), preset, channelName: ch.name, log,
-          onStep: (step) => setJob(id, { step }),
-          onProgress: (progress) => setJob(id, { progress }),
-        }), { label: `dang-video-${item.name || id}` })
-        addHistory({ folder: item.key || item.folder, movedTo: r.folder, id: r.id, url: r.url, title: item.meta.title, channel: ch.ucId || key, at: new Date().toISOString() })
-        setJob(id, { status: 'done', step: '', progress: 100, url: r.url, warnings: r.warnings })
-        if ((store.settings.videoVis || {})[id]) { const all = { ...store.settings.videoVis }; delete all[id]; store.save({ videoVis: all }) }
-        if (r.after && ctx.afterUpload) ctx.afterUpload({ videoId: r.id, title: item.meta.title, publishAt: r.schedule || item.meta.publishAt, tpl: r.after, presetId: preset.id || '', channelId: key })
-        ok++
-      } catch (e) {
-        const stopped = stop && /dừng theo yêu cầu/.test(e.message)
-        setJob(id, { status: stopped ? 'stopped' : 'error', error: e.message })
-        log(stopped ? 'warn' : 'error', `${item.meta.title}: ${e.message}`)
-        // gioi han tai len hang ngay / mat dang nhap: cac video sau cung se loi, dung han
-        // ... hoac Google doi xac minh danh tinh (nguoi dung phai tu lam o trang Tai khoan)
-        if (/giới hạn tải lên|upload limit|chưa đăng nhập|đăng nhập lại|xác minh danh tính/i.test(e.message)) stopAfter = true
-      } finally {
-        uploading = false
-      }
-    }
+    await q.done
+    for (const j of q.pending()) setJob(j.id, { status: 'stopped' })
   } finally {
+    uq = null
     busy = false
     state.status = 'idle'
-    log(ok === list.length ? 'ok' : 'warn', `Xong: đăng được ${ok}/${list.length} video.`)
+    log(runOk === runTotal ? 'ok' : 'warn', `Xong: đăng được ${runOk}/${runTotal} video.`)
+    pushRun()
     runScan(true)
   }
 }
@@ -537,13 +642,67 @@ const commands = {
   stop: () => {
     if (uploading && !stopAfter) {
       stopAfter = true
-      log('info', 'Sẽ dừng sau khi video đang tải lên xong (dừng giữa chừng sẽ để lại bản nháp trong Studio).')
+      if (uq) uq.stopStarting()
+      log('info', `Sẽ dừng sau khi ${uploading > 1 ? `${uploading} video` : 'video'} đang tải lên xong, không bắt đầu video mới (dừng giữa chừng sẽ để lại bản nháp trong Studio). Bấm Dừng lần nữa để dừng hẳn.`)
       return
     }
     stop = true
+    if (uq) uq.stopStarting()
   },
-  upload: (ids) => !busy && runUploads(ids),
-  upload_channel: (key) => !busy && setUploadChannel(key),
+  upload: (ids) => runUploads(ids),
+  upload_channel: (key) => setUploadChannel(key),
+  // so hang cho dang video chay cung luc (1-4)
+  upload_parallel: (n) => {
+    const v = Math.max(1, Math.min(MAX_PARALLEL, Math.floor(Number(n) || 1)))
+    store.save({ uploadParallel: v })
+    refreshSettings()
+    if (uq) uq.setParallel(v)
+    pushRun()
+  },
+  // bo mot video dang cho trong hang cho (chua bat dau)
+  upload_cancel: (id) => {
+    if (uq && uq.cancel(id)) { setJob(id, { status: 'stopped' }); log('info', `Đã bỏ "${(raw.get(id) || { meta: {} }).meta.title || id}" khỏi hàng chờ.`); pushRun() }
+  },
+  // dua cua so dang video cua mot luong len truoc (luong 0 = khung ben phai)
+  upload_window: (name) => { if (!(ctx.accounts && name && ctx.accounts.showWorker(name))) log('info', 'Luồng này chạy trong khung trình duyệt bên phải của tool.') },
+  // cai dat rieng cua mot video: { id, patch: { channel, preset, monetize, queue } } (gia tri rong = theo mac dinh)
+  video_opts: (p) => {
+    if (!p || !p.id || !p.patch) return
+    const job = state.jobs[p.id]
+    if (job && ['run', 'done'].includes(job.status)) return log('warn', 'Video đang đăng hoặc đã đăng: không đổi cài đặt được nữa.')
+    const all = { ...(store.settings.videoOpts || {}) }
+    const o = { ...(all[p.id] || {}) }
+    const pt = p.patch
+    if ('channel' in pt) o.channel = String(pt.channel || '')
+    if ('preset' in pt) o.preset = store.settings.presets.some((x) => x.id === pt.preset) ? pt.preset : ''
+    if ('monetize' in pt) o.monetize = ['on', 'off'].includes(pt.monetize) ? pt.monetize : ''
+    if ('queue' in pt) o.queue = pt.queue === 'solo' ? 'solo' : Math.max(0, Math.min(VIDEO_QUEUES, Math.floor(Number(pt.queue) || 0))) || ''
+    for (const k of Object.keys(o)) if (!o[k]) delete o[k]
+    if (Object.keys(o).length) all[p.id] = o
+    else delete all[p.id]
+    store.save({ videoOpts: all })
+    refreshSettings()
+    runScan(true)
+  },
+  // chia hang cho nhanh cho cac video chua dang: one = tat ca mot hang cho | channel = moi kenh mot hang cho | solo = moi video chay rieng
+  video_queue_bulk: (mode) => {
+    const all = { ...(store.settings.videoOpts || {}) }
+    const order = []
+    for (const v of state.scan.videos) {
+      if (['run', 'done'].includes((state.jobs[v.id] || {}).status)) continue
+      const o = { ...(all[v.id] || {}) }
+      if (mode === 'solo') o.queue = 'solo'
+      else if (mode === 'channel') { if (!order.includes(v.channelKey)) order.push(v.channelKey); o.queue = Math.min(VIDEO_QUEUES, order.indexOf(v.channelKey) + 1) }
+      else delete o.queue
+      if (o.queue === 1) delete o.queue
+      if (Object.keys(o).length) all[v.id] = o
+      else delete all[v.id]
+    }
+    store.save({ videoOpts: all })
+    refreshSettings()
+    runScan(true)
+    log('info', mode === 'solo' ? 'Mỗi video một hàng chờ riêng: các video chạy cùng lúc (tối đa theo số luồng).' : mode === 'channel' ? `Mỗi kênh một hàng chờ (${order.length} hàng chờ): các kênh đăng cùng lúc, video cùng kênh lần lượt.` : 'Tất cả video một hàng chờ: đăng lần lượt.')
+  },
   describe: (p) => (p && typeof p === 'object' ? describe(p.id, p.request) : describe(p)),
   // che do hien thi rieng cua mot video: { id, mode: '' (theo mau) | private | unlisted | public | premiere | schedule, at, premiere }
   video_visibility: (p) => {

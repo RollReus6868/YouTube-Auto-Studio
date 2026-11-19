@@ -116,6 +116,7 @@ module.exports = [
     assert(progress.length && progress[progress.length - 1] === 100, `tien do: ${progress}`)
     for (const s of ['open', 'file', 'details', 'thumbnail', 'playlist', 'more', 'endscreen', 'visibility', 'wait', 'publish']) assert(steps.includes(s), `buoc ${s}: ${steps}`)
     assert(ctx.mock.events.some((e) => e.type === 'share-closed' && e.id === u.id), 'dong hop thoai chia se')
+    assert.deepEqual([r.monetization, r.adRating, u.monetization], ['', '', ''], 'kenh chua bat kiem tien: khong co buoc Kiem tien')
   }],
 
   ['len lich (chua dang nhap: trang tong quan khong mo -> ?d=ud khong tu mo -> Tao -> Tai video len), mau giu nguyen het', async (ctx) => {
@@ -159,6 +160,48 @@ module.exports = [
     assert(progress.filter((n) => n > 0 && n < 100).length >= 2, `tien do tang dan: ${progress}`)
     assert.deepEqual(r.warnings, [], ctx.logs.join('\n'))
     assert.deepEqual(r.missed, [])
+    assert.deepEqual([u.monetization, u.adRating, r.monetization, r.adRating], ['ON', 'none', 'on', 'none'], 'Monetization: On + Ad suitability: None of the above')
+  }],
+
+  ['kenh da bat kiem tien (video quay 19/11/2026): Kiem tien -> Chon -> Bat -> Xong, Muc do phu hop -> Khong chua noi dung nao o tren -> Gui thong tin danh gia', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { monet: true, monetcallout: true, monetslow: true, nocheckwarn: true })
+    const uc = await login(ctx)
+    const { p, steps } = run(ctx, JOB(f, { uc, thumbnail: null }))
+    const r = await p
+    const [u] = await uploads(ctx.mock)
+    assert.deepEqual([u.monetization, u.adRating], ['ON', 'none'], JSON.stringify(u))
+    assert.deepEqual([r.monetization, r.adRating], ['on', 'none'])
+    assert(ctx.mock.events.some((e) => e.type === 'monetization' && e.value === 'ON'))
+    assert(ctx.mock.events.some((e) => e.type === 'ad-rating' && e.none === true))
+    assert(steps.includes('monetization'), steps.join())
+    assert.equal(u.visibility, 'PUBLIC')
+    assert.deepEqual(r.warnings, [], ctx.logs.join('\n'))
+    assert(ctx.logs.some((l) => /Đã chọn Kiếm tiền: "Bật"/.test(l)), ctx.logs.join('\n'))
+    assert(ctx.logs.some((l) => /Đã gửi mức độ phù hợp để chạy quảng cáo/.test(l)), ctx.logs.join('\n'))
+  }],
+
+  ['kenh da bat kiem tien, cai dat Tat kiem tien: chon Tat, khong co buoc Muc do phu hop', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { monet: true, nocheckwarn: true })
+    const uc = await login(ctx)
+    const r = await run(ctx, JOB(f, { uc, thumbnail: null, monetize: 'off' })).p
+    const [u] = await uploads(ctx.mock)
+    assert.deepEqual([u.monetization, u.adRating], ['OFF', ''])
+    assert.deepEqual([r.monetization, r.adRating], ['off', ''])
+    assert.deepEqual(r.warnings, [], ctx.logs.join('\n'))
+  }],
+
+  ['kenh da bat kiem tien, o Kiem tien da la Bat san: khong mo hop thoai, van gui Muc do phu hop', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { monet: true, monetpre: true, nocheckwarn: true, en: true })
+    const uc = await login(ctx)
+    const r = await run(ctx, JOB(f, { uc, thumbnail: null })).p
+    const [u] = await uploads(ctx.mock)
+    assert.deepEqual([u.monetization, u.adRating], ['ON', 'none'])
+    assert(!ctx.mock.events.some((e) => e.type === 'monetization'), 'khong doi o Kiem tien')
+    assert.equal(r.monetization, 'on')
+    assert(ctx.logs.some((l) => /đã là "Bật" sẵn/.test(l)), ctx.logs.join('\n'))
   }],
 
   ['co phan mo ta mac dinh (Cai dat): thay mo ta Studio dien san bang mo ta da ghep, khong lap dong', async (ctx) => {
@@ -230,6 +273,23 @@ module.exports = [
     assert.equal(b.kind, 'stale')
     assert.match(b.text, /Bạn đã hoàn tất.*Hãy thử làm mới trang/)
     assert.equal(await p.text({ selector: LABELS.trustClose.any }), 'Đã hiểu')
+  }],
+
+  ['HTML that (loi-trang 19/11): buoc Kiem tien - nhan buoc, o "Chon", nut mo hop thoai, radio Bat / Tat, nut Xong', async (ctx) => {
+    await ctx.page.goto(`${ctx.urls.studio}/that-upload/kiem-tien`)
+    const p = ctx.page
+    assert.equal(await _t.onMonetizationStep(p), true, 'dang o buoc Kiem tien')
+    assert.equal(await _t.monetizationValue(p), '', 'chua chon (o hien "Chon")')
+    assert.equal(await p.count({ selector: LABELS.monEdit.any, hidden: true }), 1, 'nut mo hop thoai Kiem tien (anh svg da bo nen khong co kich thuoc)')
+    assert.equal(await p.count({ selector: SEL.monDialog }), 1, 'hop thoai Bat/Tat')
+    for (const [k, id] of [['monOn', 'radio-on'], ['monOff', 'radio-off']]) {
+      assert.equal(await p.eval((t) => { const el = window.__ya.one(t); return el && el.closest('tp-yt-paper-radio-button').id }, { ...LABELS[k], within: { selector: SEL.monDialog } }), id)
+    }
+    assert.equal(await p.eval((t) => { const el = window.__ya.one(t); return el && el.closest('ytcp-button').id }, { ...LABELS.monSave, within: { selector: SEL.monDialog } }), 'save-button')
+    // bong goi y #monetization-callout: chi bo chon theo ma, trung dung MOT nut (khong trung nut Dong cua hop thoai tai len)
+    assert.equal(await p.count({ ...LABELS.monCallout, hidden: true }), 1, 'nut Dong cua bong goi y')
+    assert(!('text' in LABELS.monCallout) && !('regex' in LABELS.monCallout), 'khong tim nut Dong theo chu')
+    assert.equal(await p.eval(_t.suitScan, LABELS.suitNone, LABELS.suitTitle), null, 'chua toi buoc Muc do phu hop')
   }],
 
   ['video dai: "Ban da hoan tat ... lam moi trang" 2 lan -> Da hieu, lam moi Studio, mo lai hop thoai, chon lai file -> dang duoc', async (ctx) => {

@@ -155,10 +155,10 @@ const waitFor = async (fn, what, ms = 30000) => {
     assert(st.logs.some((l) => /Khung Studio: mở .*\/studio\/video\/Prem0000001\/edit \(kênh "Dark Bible Stories"\)/.test(l.msg)), st.logs.slice(-6).map((l) => l.msg).join('\n'))
 
     // 7) kenh dang video = cac kenh da tick; kenh cu (UCcu...) khong con -> kenh dau tien; chon kenh khac -> luu
-    await ui.getByRole('button', { name: 'Đăng video', exact: true }).click()
-    const pick = ui.getByLabel('Kênh đăng video')
+    await ui.getByRole('button', { name: 'Đăng video', exact: true }).first().click()
+    const pick = ui.getByLabel('Kênh đăng video mặc định')
     await pick.waitFor()
-    assert.deepEqual(await pick.locator('option').allTextContents(), ['Dark Bible Stories (@BibleStoriies)', 'Simple Bible Animation (@BibleSimpleAnimation68)'])
+    assert.deepEqual(await pick.locator('option').allTextContents(), ['Mặc định: Dark Bible Stories', 'Mặc định: Simple Bible Animation'])
     assert.equal((await call('hello')).upload.channelKey, 'UCmock000000000000000000')
     await pick.selectOption('UCBibleSimpleAnimation68')
     await waitFor(() => JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8')).uploadChannel === 'UCBibleSimpleAnimation68', 'luu kenh dang video')

@@ -104,6 +104,8 @@ const SNAPSHOT_HTML = `(() => {
 })()`
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+// loi mang Chromium co the het khi thu lai
+const TRANSIENT_NET = /ERR_(FAILED|NETWORK_CHANGED|CONNECTION_(RESET|CLOSED|REFUSED|ABORTED|TIMED_OUT)|TIMED_OUT|EMPTY_RESPONSE|INTERNET_DISCONNECTED|NAME_NOT_RESOLVED|NETWORK_IO_SUSPENDED|HTTP2_PROTOCOL_ERROR|QUIC_PROTOCOL_ERROR)/
 const describe = (t) => (typeof t === 'string' ? `"${t}"` : t.text !== undefined ? `"${t.text}"` : t.regex ? `/${t.regex}/` : t.selector)
 const target = (t) => (typeof t === 'string' ? { text: t } : t)
 
@@ -126,9 +128,20 @@ class Page {
   url() { return this.wc.getURL() }
 
   async goto(url, { wait } = {}) {
-    try { await this.wc.loadURL(url) } catch (e) {
-      // ERR_ABORTED: trang tu chuyen huong (SPA) - khong phai loi
-      if (!/ERR_ABORTED|\(-3\)/.test(String(e.message))) throw new StepError(`Không mở được ${url}: ${e.message}`, this.step)
+    // Loi mang thoang qua (mang chap chon, trang dang tai do dang bi huy): thu lai 2 lan. Loi that 13/11/2026: sau khi doi
+    // kenh khong duoc, tai lai Studio bao "ERR_FAILED (-2)" va ca loat bai sau cua kenh deu loi theo.
+    for (let i = 0; ; i++) {
+      try { await this.wc.loadURL(url); break } catch (e) {
+        const msg = String(e.message)
+        // ERR_ABORTED: trang tu chuyen huong (SPA) - khong phai loi
+        if (/ERR_ABORTED|\(-3\)/.test(msg)) break
+        if (i < 2 && TRANSIENT_NET.test(msg) && !this.shouldStop() && !this.wc.isDestroyed()) {
+          this.log('warn', `Mở ${url} lỗi (${msg.replace(/ loading .*$/, '')}): thử lại sau ${i + 1} giây.`)
+          await sleep(1000 * (i + 1))
+          continue
+        }
+        throw new StepError(`Không mở được ${url}: ${msg}`, this.step)
+      }
     }
     if (wait) await this.waitFor(wait)
   }

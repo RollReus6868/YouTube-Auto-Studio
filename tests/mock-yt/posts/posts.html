@@ -463,7 +463,13 @@ function popups() {
   const r = more.getBoundingClientRect()
   L.appendChild(h(`<tp-yt-iron-dropdown><div id="contentWrapper"><ytd-menu-popup-renderer role="menu" aria-label="Danh sách các hành động trong menu" style="left:${r.left - 60 + scrollX}px;top:${r.bottom + 8 + scrollY}px">
     <tp-yt-paper-listbox id="items" role="none"><ytd-menu-service-item-renderer role="menuitem"><tp-yt-paper-item role="menuitem">🕒 <div><yt-formatted-string>Lên lịch đăng bài</yt-formatted-string></div></tp-yt-paper-item></ytd-menu-service-item-renderer></tp-yt-paper-listbox></ytd-menu-popup-renderer></div></tp-yt-iron-dropdown>`))
-  $('#popups tp-yt-paper-item').onclick = () => { S.menu = false; S.sched = true; render() }
+  $('#popups tp-yt-paper-item').onclick = () => {
+    // schedMiss = n: n lan bam dau tien (moi lan tai trang) menu dong ma khung len lich khong hien (loi that 18/11/2026: bai dau
+    // tien sau khi doi kenh "Qua 10 giay van chua thay o chon ngay gio dang")
+    if (window.__schedMiss === undefined) window.__schedMiss = Number(FLAGS.schedMiss) || 0
+    if (window.__schedMiss > 0) { window.__schedMiss--; S.menu = false; popups(); return }
+    S.menu = false; S.sched = true; render()
+  }
 }
 
 // ---- dang / len lich ----

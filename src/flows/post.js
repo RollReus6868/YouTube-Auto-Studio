@@ -603,13 +603,34 @@ async function pickDate(page, trig, at, wantDate, log = () => {}) {
   if (await inPage(page, 'dateIs', wantDate)) log('info', `Đã chọn ngày ${wantDate} (cách dự phòng: gõ ngày vào ô nhập của lịch).`)
 }
 
+// Mui ten "Menu tac vu" canh "Dang" -> "Len lich dang bai" -> khung ngay gio. Loi that 18/11/2026 (bai dau tien ngay sau khi
+// doi kenh): menu dong ma khung len lich khong hien -> "Qua 10 giay van chua thay o chon ngay gio dang". Mo lai toi da 3 lan.
+async function openSchedule(page, log = () => {}) {
+  for (let i = 0; i < 3; i++) {
+    const open = await inPage(page, 'sched').catch(() => null)
+    if (open) return open
+    const more = await inPage(page, 'markMore')
+    if (!more) throw new StepError('Không tìm thấy nút mũi tên cạnh "Đăng".', page.step)
+    await page.click({ selector: more })
+    try {
+      await page.click({ regex: LABELS.scheduleItem }, { timeout: 8000 })
+    } catch (e) {
+      if (page.shouldStop()) throw e
+      log('info', `Menu cạnh nút "Đăng" chưa hiện mục "Lên lịch đăng bài" (lần ${i + 1}): mở lại.`)
+      await page.press('Escape').catch(() => {})
+      await sleep(800)
+      continue
+    }
+    const dd = await waitPage(page, 'sched', [], { timeout: i < 2 ? 6000 : 10000, what: 'ô chọn ngày giờ đăng' }).catch((e) => { if (page.shouldStop()) throw e; return null })
+    if (dd) return dd
+    log('info', `Đã bấm "Lên lịch đăng bài" nhưng khung chọn ngày giờ chưa hiện (lần ${i + 1}): mở lại menu.`)
+    await sleep(800)
+  }
+  throw new StepError('Quá 3 lần mở "Lên lịch đăng bài" vẫn chưa thấy ô chọn ngày giờ đăng.', page.step)
+}
+
 async function setSchedule(page, at, log) {
-  // mui ten "Menu tac vu" canh "Dang" -> "Len lich dang bai"
-  const more = await inPage(page, 'markMore')
-  if (!more) throw new StepError('Không tìm thấy nút mũi tên cạnh "Đăng".', page.step)
-  await page.click({ selector: more })
-  await page.click({ regex: LABELS.scheduleItem })
-  let dd = await waitPage(page, 'sched', [], { timeout: 10000, what: 'ô chọn ngày giờ đăng' })
+  let dd = await openSchedule(page, log)
   const wantDate = dateText(at, dd.date.text)
   if (norm(dd.date.text) !== norm(wantDate)) {
     await pickDate(page, dd.date.sel, at, wantDate, log)

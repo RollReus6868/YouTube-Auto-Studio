@@ -181,6 +181,18 @@ function findBrowser() {
       await dd.getByText('Gemini trên trình duyệt (tài khoản Nick Thắng)').waitFor()
       await dd.getByRole('alert').getByRole('button', { name: 'Mở Gemini' }).waitFor()
       await check('mo-ta-gemini-loi')
+      // dang video: hang cho dang chay, cai dat rieng tung video (kenh, mau, kiem tien, hang cho), chia hang cho nhanh
+      await page.goto(`${URL}?demo#videos`)
+      await page.getByText('Hàng chờ đang chạy').waitFor()
+      await page.getByRole('button', { name: 'Mỗi kênh một hàng chờ' }).waitFor()
+      assert.deepEqual(await page.getByLabel('Số hàng chờ chạy cùng lúc').locator('option').allTextContents(), ['Lần lượt (1)', 'Cùng lúc: 2', 'Cùng lúc: 3', 'Cùng lúc: 4'])
+      await page.getByRole('button', { name: /Hậu trường: một ngày quay phim/ }).click()
+      await page.getByText('Cài đặt riêng của video này').waitFor()
+      assert.equal(await page.getByLabel('Kiếm tiền của Hậu trường: một ngày quay phim giữa rừng sâu').inputValue(), 'off')
+      assert.equal(await page.getByLabel('Hàng chờ của Hậu trường: một ngày quay phim giữa rừng sâu').inputValue(), 'solo')
+      await page.getByText('Tắt kiếm tiền', { exact: true }).first().waitFor()
+      await page.getByText('Cài đặt riêng của video này').scrollIntoViewIfNeeded()
+      await check('videos-cai-dat-rieng')
       // trang chu kenh: kenh co anh dai dien hien anh that (nhu trang Tai khoan), khong anh / anh loi -> chu cai
       await page.goto(`${URL}?demo#hometab`)
       const homeRow = (name) => page.locator('li', { has: page.getByLabel(`Chọn kênh ${name}`) })

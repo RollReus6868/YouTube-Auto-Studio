@@ -101,6 +101,22 @@ const LABELS = {
   // video len lich: cung hop thoai "Chung toi van dang kiem tra noi dung cua ban" nhung chi co nut [Da hieu]
   checksOk: L('Đã hiểu', '^(đã hiểu|got it|ok)$'),
   shareClose: L('Đóng', '^(đóng|close|đã hiểu|got it)$', 'ytcp-video-share-dialog #close-button, ytcp-uploads-still-processing-dialog #close-button'),
+  // buoc "Kiem tien" (chi kenh da bat kiem tien; HTML that loi-trang 19/11/2026): o "Chon" (ytcp-video-monetization, nut
+  // ytcp-icon-button.edit-button "Chinh sua trang thai kiem tien cua video") -> hop thoai ytcp-video-monetization-edit-dialog:
+  // tp-yt-paper-radio-button#radio-on "Bat" / #radio-off "Tat" + ytcp-button#save-button "Xong" (khoa toi khi chon)
+  monEdit: L('Chỉnh sửa trạng thái kiếm tiền của video', '^(chỉnh sửa trạng thái kiếm tiền của video|edit video monetization status|edit monetization)$', 'ytcp-uploads-monetization ytcp-video-monetization .edit-button'),
+  monOn: L('Bật', '^(bật|on)$', 'ytcp-video-monetization-edit-dialog #radio-on'),
+  monOff: L('Tắt', '^(tắt|off)$', 'ytcp-video-monetization-edit-dialog #radio-off'),
+  monSave: L('Xong', '^(xong|done)$', 'ytcp-video-monetization-edit-dialog #save-button'),
+  // bong goi y tinh nang moi (ytcp-feature-discovery-callout#monetization-callout) co nut "Dong" co the che o Kiem tien
+  // CHI tim theo ma (khong tim chu "Dong": se trung nut Dong cua chinh hop thoai tai len = mat video dang tai)
+  monCallout: { selector: 'ytcp-uploads-monetization #monetization-callout #close-button, ytcp-uploads-monetization ytcp-feature-discovery-callout #close-button' },
+  // buoc "Muc do phu hop de chay quang cao" (sau khi Bat kiem tien; video quay 19/11/2026, chua co HTML): 9 muc "Khong co",
+  // o "Khong chua noi dung nao o tren" o cuoi danh sach, nut "Gui thong tin danh gia" ben phai -> "Da luu thong tin danh gia"
+  suitTitle: '^(mức độ phù hợp để chạy quảng cáo|ad suitability|mức độ phù hợp với quảng cáo)$',
+  suitNone: '^(không chứa nội dung nào ở trên|none of the above)$',
+  suitSubmit: L('Gửi thông tin đánh giá', '^(gửi thông tin đánh giá|submit rating|gửi đánh giá)$', '#submit-questionnaire-button'),
+  suitSaved: '(đã lưu thông tin đánh giá|rating saved|đã gửi thông tin đánh giá|rating submitted)',
 }
 const SEL = {
   picker: 'ytcp-uploads-file-picker',
@@ -137,6 +153,9 @@ const SEL = {
   share: 'ytcp-video-share-dialog tp-yt-paper-dialog, ytcp-uploads-still-processing-dialog tp-yt-paper-dialog, ytcp-video-share-dialog [role=dialog], ytcp-uploads-still-processing-dialog [role=dialog]',
   // trinh chinh man hinh ket thuc (giong trang Chi tiet video, html/yt-5)
   esDialog: 'tp-yt-paper-dialog:has(#video-editor-modal-host-title), tp-yt-paper-dialog:has(ytve-editor)',
+  monStep: 'ytcp-uploads-monetization',
+  monText: 'ytcp-uploads-monetization ytcp-video-monetization #text-container, ytcp-uploads-monetization ytcp-video-monetization',
+  monDialog: 'ytcp-video-monetization-edit-dialog tp-yt-paper-dialog',
   // phu de: hop thoai rieng (khong phai hop thoai tai len)
   subsDialog: 'ytve-captions-editor-modal, ytgn-captions-upload-dialog, ytcp-captions-upload-dialog, ytve-modal-host',
 }
@@ -251,7 +270,7 @@ const DIALOG_FIELDS = ['paidPromotion', 'ai', 'tags', 'language', 'recordingDate
 //        subtitles: [{file, lang}], privacy: public|unlisted|private, premiere (Cong khai: "Dat o che do Cong chieu ngay"),
 //        publishAt (ISO|null: "Len lich"), schedulePremiere ("Dat lam video Cong chieu" khi len lich), notifySubscribers,
 //        template (mau toi uu cua preset, src/optimize-template.js: cac muc chi co trong Studio), channelName }
-// Tra ve { id, url, warnings, missed, applied, schedule, visibility: private|unlisted|public|schedule, premiere }
+// Tra ve { id, url, warnings, missed, applied, schedule, visibility: private|unlisted|public|schedule, premiere, monetization: 'on'|'off'|'' (kenh khong co buoc Kiem tien), adRating: 'none'|'failed'|'' }
 //   missed: muc cua mau (playlists, paidPromotion, ai, tags, ..., endScreen) + 'notify' chua dat duoc trong hop thoai
 //   applied: muc cua mau da dung toi trong hop thoai (dat moi hoac da dung san)
 async function uploadVideo(page, job, o = {}) {
@@ -570,9 +589,27 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
         await closeExtraDialogs(page)
       }
     }
+    // ---- Kiem tien (kenh da bat kiem tien moi co buoc nay): chon Bat / Tat theo cai dat; Bat thi Studio them buoc
+    //      "Muc do phu hop de chay quang cao": tick "Khong chua noi dung nao o tren" + "Gui thong tin danh gia" ----
+    const wantM10n = job.monetize === 'off' ? 'off' : 'on'
+    let monetization = ''
+    let adRating = ''
+    const atMonetization = async () => {
+      if (monetization || !(await onMonetizationStep(page))) return
+      monetization = await step('monetization', `Kiếm tiền: ${wantM10n === 'on' ? 'Bật' : 'Tắt'}`, () => setMonetization(page, wantM10n, log))
+    }
+    const atSuitability = async () => {
+      if (adRating || !(await page.eval(suitScan, LABELS.suitNone, LABELS.suitTitle).catch(() => null))) return
+      adRating = 'try'
+      const ok = await soft('monetization', 'Mức độ phù hợp để chạy quảng cáo', () => rateSuitability(page, log),
+        'Chưa gửi được "Mức độ phù hợp để chạy quảng cáo" (Không chứa nội dung nào ở trên)')
+      adRating = ok ? 'none' : 'failed'
+    }
     await step('visibility', 'Tới bước Chế độ hiển thị', async () => {
       const vis = inD({ selector: SEL.vis })
-      for (let i = 0; i < 8 && !(await page.has(vis)); i++) {
+      for (let i = 0; i < 10 && !(await page.has(vis)); i++) {
+        await atMonetization()
+        await atSuitability()
         await atElements()
         const before = await stepPrint(page)
         const next = inD(LABELS.next)
@@ -707,7 +744,7 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
       })
     }
     const visibility = at ? 'schedule' : ({ public: 'public', unlisted: 'unlisted' }[job.privacy] || 'private')
-    return { id, url: `https://youtu.be/${id}`, warnings, missed: [...missed], applied: [...applied], schedule: at ? at.toISOString() : null, visibility, premiere }
+    return { id, url: `https://youtu.be/${id}`, warnings, missed: [...missed], applied: [...applied], schedule: at ? at.toISOString() : null, visibility, premiere, monetization, adRating: adRating === 'try' ? '' : adRating }
   } catch (e) {
     if (!(e instanceof StepError)) throw e
     await shot((e.step || 'loi').replace(/[^\p{L}\w]+/gu, '-').slice(0, 40))
@@ -740,6 +777,100 @@ function guardUpload(page, log = () => {}) {
   }
   wc.on('will-navigate', onNav)
   return () => { try { wc.removeListener('will-navigate', onNav) } catch (_) { /* da dong */ } }
+}
+
+// ---- Kiem tien ----
+// Hop thoai tai len dang o buoc "Kiem tien"? (o Kiem tien dang hien, hoac nut buoc test-id="MONETIZATION" dang chon)
+const onMonetizationStep = (page) => page.eval((s) => {
+  const ya = window.__ya
+  if (ya.find({ selector: s.monStep }, true).some((el) => ya.visible(el) && el.closest('ytcp-uploads-dialog'))) return true
+  return ya.all(document, 'ytcp-uploads-dialog [id^="step-badge-"][test-id="MONETIZATION"]').some((b) => b.hasAttribute('active') || b.getAttribute('aria-selected') === 'true')
+}, SEL).catch(() => false)
+
+// Chu dang hien trong o Kiem tien: 'on' | 'off' | '' (chua chon: "Chon")
+const monetizationValue = (page) => page.eval((s) => {
+  const el = window.__ya.find({ selector: s.monText }, true)[0]
+  const t = window.__ya.norm(el ? el.innerText || el.textContent : '')
+  if (/(^|\s)(bật|on)(\s|$)/.test(t)) return 'on'
+  if (/(^|\s)(tắt|off)(\s|$)/.test(t)) return 'off'
+  return ''
+}, SEL).catch(() => '')
+
+// Chon Bat / Tat trong o Kiem tien (bat buoc: chua chon thi Studio khoa nut Tiep). Tra ve 'on' | 'off'.
+async function setMonetization(page, want, log = () => {}) {
+  const label = want === 'on' ? 'Bật' : 'Tắt'
+  if ((await monetizationValue(page)) === want) { log('info', `Kiếm tiền đã là "${label}" sẵn.`); return want }
+  // bong goi y tinh nang moi che o Kiem tien: dong truoc
+  if (await page.has(LABELS.monCallout).catch(() => false)) await page.click(LABELS.monCallout).catch(() => {})
+  const dialog = { selector: SEL.monDialog }
+  for (let i = 0; i < 3; i++) {
+    if (!(await page.has(dialog))) {
+      if (await page.has(LABELS.monEdit)) await page.click(LABELS.monEdit)
+      else await page.click({ selector: SEL.monText })
+      if (!(await poll(page, () => page.has(dialog), 8000))) continue
+    }
+    const radio = { ...(want === 'on' ? LABELS.monOn : LABELS.monOff), selector: 'tp-yt-paper-radio-button', within: dialog }
+    await pickRadio(page, radio)
+    const save = { ...LABELS.monSave, within: dialog }
+    if (!(await poll(page, () => isEnabled(page, save), 5000))) throw new StepError(`Nút "Xong" của hộp thoại Kiếm tiền vẫn bị khóa sau khi chọn "${label}".`, page.step)
+    await page.click(save)
+    if (await poll(page, async () => !(await page.has(dialog)) && (await monetizationValue(page)) === want, 8000)) {
+      log('info', `Đã chọn Kiếm tiền: "${label}".`)
+      return want
+    }
+  }
+  throw new StepError(`Không chọn được Kiếm tiền "${label}" (ô Kiếm tiền đang là "${(await monetizationValue(page)) || 'Chọn'}"). Nút "Tiếp" của Studio bị khóa tới khi chọn.`, page.step)
+}
+
+// Buoc "Muc do phu hop de chay quang cao": tim o "Khong chua noi dung nao o tren" dang hien trong hop thoai tai len.
+// null = khong o buoc nay; khong thi { box: dau o (data-ya), checked, disabled }. Chay trong trang.
+function suitScan(noneRe, titleRe) {
+  const ya = window.__ya
+  const re = new RegExp(noneRe, 'i')
+  const dlg = ya.all(document, 'ytcp-uploads-dialog')[0]
+  if (!dlg) return null
+  // nhan chu "Khong chua noi dung nao o tren" (phan tu sau nhat co dung chu nay)
+  const labels = ya.all(dlg, '*').filter((el) => ya.visible(el) && [el.getAttribute('aria-label'), el.innerText].some((t) => re.test(ya.norm(t))))
+  const lab = labels.filter((el) => !labels.some((o) => o !== el && el.contains(o)))[0]
+  if (!lab) {
+    const t = new RegExp(titleRe, 'i')
+    return ya.all(dlg, 'h1, h2, .title, #title').some((el) => ya.visible(el) && t.test(ya.norm(el.innerText))) ? { box: '', checked: false, disabled: false } : null
+  }
+  let box = lab.matches('[role=checkbox], input[type=checkbox]') ? lab : null
+  for (let p = lab, i = 0; !box && p && i < 4; p = p.parentElement, i++) {
+    box = p.querySelector('[role=checkbox], input[type=checkbox]') || (p.shadowRoot && p.shadowRoot.querySelector('[role=checkbox], input[type=checkbox]'))
+  }
+  box = box || lab
+  if (!box.getAttribute('data-ya')) box.setAttribute('data-ya', 'suit-none')
+  return {
+    box: `[data-ya="${box.getAttribute('data-ya')}"]`,
+    checked: box.getAttribute('aria-checked') === 'true' || box.checked === true,
+    disabled: box.getAttribute('aria-disabled') === 'true' || box.hasAttribute('disabled') || box.disabled === true,
+  }
+}
+
+// Tick "Khong chua noi dung nao o tren" roi "Gui thong tin danh gia" (nhu video nguoi dung quay). Da gui roi (o bi khoa,
+// da tick) thi bo qua. Gui xong: thong bao "Da luu thong tin danh gia" hoac nut gui bi khoa.
+async function rateSuitability(page, log = () => {}) {
+  let st = await poll(page, () => page.eval(suitScan, LABELS.suitNone, LABELS.suitTitle), 10000)
+  if (!st || !st.box) throw new StepError('Không thấy ô "Không chứa nội dung nào ở trên".', page.step)
+  const submit = inD(LABELS.suitSubmit)
+  if (st.disabled && st.checked) { log('info', 'Mức độ phù hợp để chạy quảng cáo đã gửi trước đó.'); return 'none' }
+  if (!st.checked) {
+    await page.click({ selector: st.box, hidden: true })
+    st = await poll(page, async () => { const x = await page.eval(suitScan, LABELS.suitNone, LABELS.suitTitle); return x && x.checked ? x : null }, 5000)
+    if (!st) throw new StepError('Bấm "Không chứa nội dung nào ở trên" nhưng ô chưa được đánh dấu.', page.step)
+  }
+  await page.waitFor(submit)
+  if (!(await poll(page, () => isEnabled(page, submit), 8000))) throw new StepError('Nút "Gửi thông tin đánh giá" vẫn bị khóa.', page.step)
+  await page.click(submit)
+  const done = await poll(page, async () => {
+    const toast = await page.has({ regex: LABELS.suitSaved }).catch(() => false)
+    return toast || !(await page.has(submit)) || !(await isEnabled(page, submit))
+  }, 15000)
+  if (!done) throw new StepError('Đã bấm "Gửi thông tin đánh giá" nhưng YouTube chưa xác nhận.', page.step)
+  log('info', 'Đã gửi mức độ phù hợp để chạy quảng cáo: "Không chứa nội dung nào ở trên".')
+  return 'none'
 }
 
 // Muc `key` cua mau co can dung toi khong (khi khong mo duoc "Hien them" -> tinh la chua dat)
@@ -949,4 +1080,4 @@ async function checkSchedule(page, at) {
   return { date: d, time: tm }
 }
 
-module.exports = { LABELS, SEL, uploadVideo, uploadPhase, ID_RE, DIALOG_FIELDS, _t: { setSchedule, checkSchedule, pickScheduleDay, findBlocker, addSubtitles, readId, openEndScreen, touches } }
+module.exports = { LABELS, SEL, uploadVideo, uploadPhase, ID_RE, DIALOG_FIELDS, _t: { onMonetizationStep, monetizationValue, setMonetization, suitScan, rateSuitability, setSchedule, checkSchedule, pickScheduleDay, findBlocker, addSubtitles, readId, openEndScreen, touches } }

@@ -131,7 +131,8 @@ const waitFor = async (fn, what, ms = 30000) => {
     s = await st()
     assert.equal(s.studio.job, '', 'nha khung')
     assert.equal(s.geminiWeb.open, false, 'khong mo cua so Gemini rieng')
-    assert.equal(geminiPages().length, 0, 'khung da tra ve Studio')
+    // khung tai lai trang Studio truoc do (bat dong bo): cho danh sach trang cap nhat, khong doc ngay
+    await waitFor(() => geminiPages().length === 0, 'khung da tra ve Studio', 10000)
     await waitFor(() => allPages().some((p) => p.url() === before), `khung ve lai ${before}`)
     assert(s.logs.some((l) => l.msg === 'Gemini (trình duyệt): đang viết thử (khung trình duyệt bên phải)…'))
     assert(!s.logs.slice(-6).some((l) => /Đã vào YouTube Studio/.test(l.msg)), 'khong bao vao Studio lai')

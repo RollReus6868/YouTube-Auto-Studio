@@ -15,7 +15,10 @@
 // tai len #upload-icon, nut Tao). Can /__file/optimize/data.js (OPT). window.__UP = { uc, cookieCh } do trang chu dat.
 // Bien the (localStorage 'up-<ten>' = true): en (Studio tieng Anh), slow (tai len cham), noid (khong co duong lien ket
 // trong hop thoai), limit (gioi han tai len hang ngay), failmid (loi giua chung), nothumb (kenh chua xac minh), nosubs
-// (khong co muc phu de), monet (them buoc Kiem tien), checkswait (buoc Kiem tra khoa nut Tiep 2,5 giay), noshare (khong
+// (khong co muc phu de), monet (kenh bat kiem tien: buoc "Kiem tien" chep HTML that loi-trang 19/11/2026 - o "Chon" bat buoc,
+// hop thoai Bat/Tat + Xong; Bat thi them buoc "Muc do phu hop de chay quang cao": tick "Khong chua noi dung nao o tren" +
+// "Gui thong tin danh gia", chua gui thi nut Tiep khoa), monetpre (o Kiem tien da la "Bat" san), monetcallout (bong goi y
+// "Dong" che o Kiem tien), monetslow (hop thoai Bat/Tat mo cham 1,5 giay), checkswait (buoc Kiem tra khoa nut Tiep 2,5 giay), noshare (khong
 // hien hop thoai chia se), nocheckwarn (kiem tra xong ngay: khong hoi "Van xuat ban"), checkinfo (len lich khi chua kiem tra xong: hop thoai
 // kiem tra chi co [Da hieu]; bam moi luu), hidelabel (khong co chu tien do
 // trong hop thoai; sau khi dong chi con o tien do goc trang), morepl (kenh co them 2 danh sach phat),
@@ -38,7 +41,7 @@
   css.textContent = `
   [hidden] { display: none !important }
   ytcp-uploads-dialog, ytcp-uploads-file-picker, ytcp-stepper, ytcp-uploads-details, ytcp-uploads-video-elements, ytcp-uploads-checks,
-  ytcp-uploads-review, ytcp-uploads-monetization, ytcp-video-metadata-editor, ytcp-video-metadata-editor-basics, ytcp-video-metadata-editor-advanced,
+  ytcp-uploads-review, ytcp-uploads-monetization, ytcp-uploads-content-ratings, ytpp-video-monetization-basics, ytpp-self-certification-questionnaire, ytcp-video-monetization, ytcp-video-metadata-monetization, ytcp-feature-discovery-callout, ytcp-video-metadata-editor, ytcp-video-metadata-editor-basics, ytcp-video-metadata-editor-advanced,
   ytcp-social-suggestions-textbox, ytcp-thumbnail-uploader, ytcp-thumbnail-editor, ytcp-video-metadata-playlists, ytcp-text-dropdown-trigger,
   tp-yt-paper-radio-group, ytcp-form-input-container, ytcp-free-text-chip-bar, ytcp-chip-bar, ytcp-form-language-input, ytcp-form-select, ytcp-select,
   ytcp-form-checkbox, ytcp-video-info, ytcp-visibility-scheduler, ytcp-text-menu, tp-yt-paper-listbox, ytcp-playlist-dialog, ytcp-checkbox-group,
@@ -150,8 +153,10 @@
     language: LANGS[3], titleLanguage: LANGS[3], recDate: '', location: '', license: LICS[0], embed: true, notify: true,
     remix: REMIX[0], category: CATS[3], comments: COMMENTS[0], showLikes: true, endscreen: '', subs: [], vis: '', date: fmtDate(new Date()),
     time: T('09:00', '9:00 AM'), premiere: false, schedulePremiere: false, id: '', pct: 0, uploaded: false, checked: false, failed: '', step: 0, earlyDone: false, anyway: false, published: false,
+    m10n: F('monetpre') ? 'ON' : '', rated: false, ratedNone: false,
   })
-  const STEPS = () => [['details', T('Chi tiết', 'Details')]].concat(F('monet') ? [['monetization', T('Kiếm tiền', 'Monetization')]] : [], [['video-elements', T('Các thành phần của video', 'Video elements')], ['checks', T('Kiểm tra ban đầu', 'Checks')], ['review', T('Chế độ hiển thị', 'Visibility')]])
+  const STEPS = () => [['details', T('Chi tiết', 'Details')]].concat(F('monet') ? [['monetization', T('Kiếm tiền', 'Monetization')]] : [],
+    F('monet') && W && W.m10n === 'ON' ? [['content-ratings', T('Mức độ phù hợp để chạy quảng cáo', 'Ad suitability')]] : [], [['video-elements', T('Các thành phần của video', 'Video elements')], ['checks', T('Kiểm tra ban đầu', 'Checks')], ['review', T('Chế độ hiển thị', 'Visibility')]])
 
   // ---- o tha xuong: ytcp-text-menu > tp-yt-paper-dialog > tp-yt-paper-listbox > tp-yt-paper-item ----
   let openMenu = null
@@ -254,6 +259,107 @@
     for (const b of w.querySelectorAll('ytcp-button')) b.onclick = () => log({ type: 'verify-clicked', id: b.id })
   }
 
+  // ---- thanh buoc: ten + trang thai (stepper that: button#step-badge-N test-id=... state=... active) ----
+  const STEP_ID = { details: 'DETAILS', monetization: 'MONETIZATION', 'content-ratings': 'CONTENT_RATINGS', 'video-elements': 'VIDEO_ELEMENTS', checks: 'CHECKS', review: 'REVIEW' }
+  function stepperHtml(i) {
+    return STEPS().map(([k, label], j) => `<button id="step-badge-${j}" class="step" test-id="${STEP_ID[k]}" ${j === i ? 'active state="active" aria-selected="true"' : `state="${j < i ? 'completed' : 'default'}" aria-selected="false"`}>${esc(label)}</button>`).join('')
+  }
+
+  // ---- Kiem tien (chep HTML that loi-trang 19/11/2026): o "Chon" + nut ytcp-icon-button.edit-button -> hop thoai
+  // ytcp-video-monetization-edit-dialog (radio #radio-on "Bat" / #radio-off "Tat", nut Huy + #save-button "Xong" khoa toi khi chon) ----
+  const M10N = { ON: T('Bật', 'On'), OFF: T('Tắt', 'Off') }
+  function monetizationHtml() {
+    const val = W.m10n ? M10N[W.m10n] : ''
+    return `<ytcp-uploads-monetization class="ytcp-uploads-dialog" hidden><h1>${T('Kiếm tiền', 'Monetization')}</h1><div class="description">${T('Chọn cách thức mà bạn muốn dùng để kiếm tiền bằng video', 'Choose how you want to earn money from your video')}</div>
+      <ytpp-video-monetization-basics class="monetization-basics" in-video-upload-flow=""><div class="main"><div class="simplified-ad-controls-container"><div class="left-column">
+      <div class="simplified-ad-controls-section-title section-label">${T('Quảng cáo trên Trang xem và YouTube Premium', 'Watch page ads and YouTube Premium')}</div>
+      <div class="simplified-ad-controls-section-text description">${T('Chúng tôi chọn những quảng cáo cân bằng giữa thu nhập của bạn và trải nghiệm tích cực cho người xem', 'We choose ads that balance your earnings with a positive viewer experience')}<br><a>${T('Tìm hiểu thêm về vị trí đặt quảng cáo', 'Learn more about ad placement')}</a></div>
+      <div class="monetization-status-field"><ytcp-video-metadata-monetization class="monetization-status-setting"><ytcp-form-input-container id="m10n-container" ${W.m10n ? '' : 'invalid=""'}><div id="outer"><div id="child-input">
+        <ytcp-video-monetization class="right-align-edit-handle" save-button-text="${T('Xong', 'Done')}"><div id="container"><div id="text-container"><div class="m10n-text clickable" style="display:flex;justify-content:space-between;align-items:center;min-width:340px;border:1px solid #888;border-radius:4px;padding:10px 12px;cursor:pointer">
+          ${val ? `<div class="m10n-value">${esc(val)}</div>` : `<div class="placeholder-text">${T('Chọn', 'Select')}</div>`}
+          <ytcp-icon-button icon="yt-studio-system-icons:chevron_down" class="edit-button show" aria-label="${T('Chỉnh sửa trạng thái kiếm tiền của video', 'Edit video monetization status')}" tabindex="0" aria-disabled="false" role="button">▾</ytcp-icon-button>
+        </div></div></div></ytcp-video-monetization></div></div>
+        <div id="error-message" class="error-short" ${W.m10n ? 'hidden' : ''}>${T('Bạn cần chọn tùy chọn cài đặt kiếm tiền cho video của mình', 'Select a monetization option for your video')}</div></ytcp-form-input-container>
+        ${F('monetcallout') ? `<ytcp-feature-discovery-callout id="monetization-callout" standalone=""><div id="callout" role="dialog" style="position:absolute;z-index:5;background:#333;padding:12px;border-radius:8px;margin-top:-30px;margin-left:20px;width:300px">${T('Mới: chọn kiếm tiền cho từng video', 'New: choose monetization per video')}<div id="single-step-navigation">${OPT.button('close-button', T('Đóng', 'Close'))}</div></div></ytcp-feature-discovery-callout>` : ''}
+      </ytcp-video-metadata-monetization></div>
+      <div id="ads-in-video" ${W.m10n === 'ON' ? '' : 'hidden'}>${OPT.checkbox('', T('Hiện quảng cáo trong video của tôi', 'Show ads in my video'), true)}<div class="description">${T('YouTube sẽ tự động chèn các vị trí quảng cáo tại những điểm ngắt tự nhiên nhất trong video của bạn.', 'YouTube will automatically place ad breaks at natural points in your video.')}</div>${OPT.button('review-ad-breaks', T('Xem lại vị trí đặt quảng cáo trong video', 'Review ad breaks'))}</div>
+      </div><div class="right-column"></div></div></div></ytpp-video-monetization-basics></ytcp-uploads-monetization>
+      <ytcp-uploads-content-ratings hidden><h1>${T('Mức độ phù hợp để chạy quảng cáo', 'Ad suitability')}</h1>
+      <ytpp-self-certification-questionnaire><div class="description">${T('Nội dung, tiêu đề, thông tin mô tả hoặc từ khóa cho video của bạn có đề cập đến bất kỳ mục nào sau đây không?', "Does any part of your video's content, title, description or keywords include any of the following?")}</div>
+      <div style="display:flex;gap:16px"><div id="questions" style="flex:1;max-height:260px;overflow-y:auto">
+        ${[['Ngôn từ không phù hợp', 'Inappropriate language'], ['Nội dung người lớn', 'Adult content'], ['Bạo lực', 'Violence'], ['Nội dung gây sốc', 'Shocking content'], ['Tạo điều kiện cho hành vi không trung thực', 'Enabling dishonest behavior'], ['Nội dung gây hận thù và xúc phạm', 'Hateful & derogatory content'], ['Nội dung có liên quan đến súng ống', 'Firearms-related content'], ['Sự kiện nhạy cảm', 'Sensitive events'], ['Các vấn đề gây tranh cãi', 'Controversial issues']].map(([vi, en]) => `<ytpp-self-certification-question class="q-row" style="display:block;border:1px solid #444;border-radius:12px;padding:14px;margin:8px 0"><div class="section-label">${T(vi, en)}</div><span class="q-answer description">${T('Không có', 'None')}</span></ytpp-self-certification-question>`).join('')}
+        <div id="none-of-above" style="padding:8px 0">${OPT.checkbox('', '', false).replace(/aria-label="[^"]*"/, 'aria-label=""').replace('</div></ytcp-checkbox-lit>', `<span id="label" class="label">${T('Không chứa nội dung nào ở trên', 'None of the above')}</span></div></ytcp-checkbox-lit>`)}</div>
+      </div><div class="right-column" style="width:260px;background:#2a2a2a;border-radius:12px;padding:12px">
+        <div>${T('Nhìn chung, bạn đánh giá video của mình là:', 'Overall, you rated your video as:')}</div><div id="overall-rating" class="description">–</div>
+        ${OPT.button('submit-questionnaire-button', T('Gửi thông tin đánh giá', 'Submit rating'), { disabled: true })}
+        <div class="description">${T('Bạn sẽ không thể thay đổi phản hồi của mình sau khi gửi nội dung đánh giá.', "You won't be able to change your answers after you submit your rating.")}</div>
+      </div></div></ytpp-self-certification-questionnaire></ytcp-uploads-content-ratings>`
+  }
+  function bindMonetization() {
+    const sec = $('ytcp-uploads-monetization', dlg)
+    const cr = $('ytcp-uploads-content-ratings', dlg)
+    const repaint = () => {
+      const host = $('ytcp-uploads-monetization', dlg)
+      const tmp = document.createElement('div')
+      tmp.innerHTML = monetizationHtml()
+      const fresh1 = tmp.querySelector('ytcp-uploads-monetization')
+      fresh1.hidden = host.hidden
+      host.replaceWith(fresh1)
+      bindEdit()
+      if (W.step < STEPS().length && STEPS()[W.step][0] === 'monetization') OPT.setDisabled($('#next-button', dlg), !W.m10n)
+      $('#stepper', dlg).innerHTML = stepperHtml(W.step)
+    }
+    const bindEdit = () => {
+      const s2 = $('ytcp-uploads-monetization', dlg)
+      const call = $('#monetization-callout', s2)
+      if (call) $('#close-button', call).onclick = (e) => { e.stopPropagation(); call.remove() }
+      $('.m10n-text', s2).onclick = () => setTimeout(editDialog, F('monetslow') ? 1500 : 200)
+    }
+    function editDialog() {
+      if (document.querySelector('ytcp-video-monetization-edit-dialog')) return
+      const d = document.createElement('ytcp-video-monetization-edit-dialog')
+      let pick = W.m10n
+      d.innerHTML = `<tp-yt-paper-dialog id="dialog" aria-label="${T('Chỉnh sửa trạng thái kiếm tiền của video', 'Edit video monetization status')}" role="dialog" style="position:fixed;left:200px;top:300px;z-index:2204;min-width:400px;background:#282828;padding:16px;border-radius:12px">
+        <div class="dialog-content"><tp-yt-paper-radio-group role="radiogroup">${OPT.radio('ON', M10N.ON).replace('<tp-yt-paper-radio-button ', '<tp-yt-paper-radio-button id="radio-on" ')}${OPT.radio('OFF', M10N.OFF).replace('<tp-yt-paper-radio-button ', '<tp-yt-paper-radio-button id="radio-off" ')}</tp-yt-paper-radio-group>
+        <div class="button-area" style="display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #444;padding-top:8px">${OPT.button('cancel-button', T('Hủy', 'Cancel')).replace('<ytcp-button ', '<ytcp-button hidden ')}${OPT.button('save-button', T('Xong', 'Done'), { disabled: true })}</div></div></tp-yt-paper-dialog>`
+      document.body.appendChild(d)
+      for (const r of d.querySelectorAll('tp-yt-paper-radio-button')) {
+        r.setAttribute('aria-checked', String(r.getAttribute('name') === pick))
+        r.onclick = () => { pick = r.getAttribute('name'); for (const x of d.querySelectorAll('tp-yt-paper-radio-button')) x.setAttribute('aria-checked', String(x === r)); OPT.setDisabled($('#save-button', d), false) }
+      }
+      $('#save-button', d).onclick = () => {
+        if ($('#save-button', d).getAttribute('aria-disabled') === 'true') return
+        d.remove()
+        W.m10n = pick
+        log({ type: 'monetization', value: pick })
+        saving()
+        repaint()
+      }
+    }
+    bindEdit()
+    // Muc do phu hop: tick "Khong chua noi dung nao o tren" -> mo nut gui; gui -> khoa ca bang, thong bao "Da luu thong tin danh gia"
+    const none = $('#none-of-above ytcp-checkbox-lit', cr)
+    const box = $('#checkbox', none)
+    const submit = $('#submit-questionnaire-button', cr)
+    none.onclick = () => {
+      if (W.rated || box.getAttribute('aria-disabled') === 'true') return
+      const on = box.getAttribute('aria-checked') !== 'true'
+      box.setAttribute('aria-checked', String(on))
+      $('#overall-rating', cr).textContent = on ? T('An toàn cho quảng cáo', 'Ad-friendly') : '–'
+      OPT.setDisabled(submit, !on)
+    }
+    submit.onclick = () => {
+      if (submit.getAttribute('aria-disabled') === 'true' || W.rated) return
+      W.rated = true
+      W.ratedNone = box.getAttribute('aria-checked') === 'true'
+      box.setAttribute('aria-disabled', 'true')
+      OPT.setDisabled(submit, true)
+      log({ type: 'ad-rating', none: W.ratedNone })
+      setTimeout(() => OPT.toast(T('Đã lưu thông tin đánh giá', 'Rating saved')), 300)
+      if (STEPS()[W.step][0] === 'content-ratings') OPT.setDisabled($('#next-button', dlg), false)
+    }
+  }
+
   function details() {
     const thumb = F('nothumb')
       ? `<ytcp-thumbnail-uploader><ytcp-thumbnail-editor><button id="select-button" aria-label="${T('Tải tệp lên', 'Upload file')}" disabled aria-disabled="true"><span id="select-text">${T('Tải tệp lên', 'Upload file')}</span></button></ytcp-thumbnail-editor><div class="description">${T('Để tải hình thu nhỏ tùy chỉnh lên, bạn cần xác minh tài khoản.', 'To upload custom thumbnails, verify your account.')}</div></ytcp-thumbnail-uploader>`
@@ -264,7 +370,7 @@
       .replace('</tp-yt-paper-radio-button>', `<div class="visibility-description description">${esc(T(dvi, den))}</div></tp-yt-paper-radio-button>`)
     const row = (title, desc, buttons) => `<div class="el-row"><div><div class="section-label">${title}</div><div class="description">${desc}</div></div><div>${buttons}</div></div>`
     $('#up-body', dlg).innerHTML = `
-      <ytcp-stepper id="stepper">${STEPS().map(([, label], i) => `<button id="step-badge-${i}" class="step" ${i === 0 ? 'active state="active"' : 'state="pending"'}>${esc(label)}</button>`).join('')}</ytcp-stepper>
+      <ytcp-stepper id="stepper">${stepperHtml(0)}</ytcp-stepper>
       <ytcp-uploads-details><div class="up-cols"><div>
         <h2>${T('Chi tiết', 'Details')}</h2>
         <ytcp-video-metadata-editor><ytcp-video-metadata-editor-basics>
@@ -284,7 +390,7 @@
       </div><ytcp-video-info><div style="width:280px;height:158px;background:#444">player</div>
         <div class="label description">${T('Đường liên kết của video', 'Video link')}</div><span class="video-url-fadeable" id="link-host">${T('Đang tải lên...', 'Uploading...')}</span>
         <div class="label description">${T('Tên tệp', 'Filename')}</div><div id="filename">${esc(W.file)}</div></ytcp-video-info></div></ytcp-uploads-details>
-      ${F('monet') ? `<ytcp-uploads-monetization hidden><h2>${T('Kiếm tiền', 'Monetization')}</h2><p>${T('Kiếm tiền: Bật', 'Monetization: On')}</p></ytcp-uploads-monetization>` : ''}
+      ${F('monet') ? monetizationHtml() : ''}
       <ytcp-uploads-video-elements hidden><h2>${T('Các thành phần của video', 'Video elements')}</h2>
         ${F('nosubs') ? '' : row(T('Phụ đề', 'Subtitles'), T('Tiếp cận nhiều người xem hơn bằng cách thêm phụ đề vào video', 'Reach a broader audience by adding subtitles to your video') + '<div id="subs-status"></div>', OPT.button('subtitles-button', T('Thêm', 'Add')))}
         ${row(T('Màn hình kết thúc', 'End screen'), T('Quảng bá nội dung có liên quan ở cuối video', 'Promote related content at the end of your video') + '<div id="es-status"></div>', OPT.button('import-endscreen-from-video-button', T('Nhập từ video', 'Import from video')) + ' ' + OPT.button('endscreens-button', T('Thêm', 'Add')))}
@@ -377,12 +483,15 @@
     const steps = STEPS()
     W.step = i
     steps.forEach(([k], j) => { const el = $(`ytcp-uploads-${k}`, dlg); if (el) el.hidden = j !== i })
-    steps.forEach((_, j) => { const b = $(`#step-badge-${j}`, dlg); if (j === i) { b.setAttribute('active', ''); b.setAttribute('state', 'active') } else { b.removeAttribute('active'); b.setAttribute('state', j < i ? 'done' : 'pending') } })
+    $('#stepper', dlg).innerHTML = stepperHtml(i)
     const last = i === steps.length - 1
     $('#next-button', dlg).hidden = last
     $('#done-host', dlg).hidden = !last
     $('#back-button', dlg).hidden = i === 0
     OPT.setDisabled($('#next-button', dlg), false)
+    // Kiem tien: chua chon Bat/Tat thi khoa Tiep (loi do duoi o); Muc do phu hop: chua gui danh gia thi khoa Tiep
+    if (steps[i][0] === 'monetization' && !W.m10n) OPT.setDisabled($('#next-button', dlg), true)
+    if (steps[i][0] === 'content-ratings' && !W.rated) OPT.setDisabled($('#next-button', dlg), true)
     if (steps[i][0] === 'checks') {
       $('#checks-text', dlg).textContent = W.checked ? T('Bản quyền: Không phát hiện thấy vấn đề nào', 'Copyright: No issues found') : T('Đang kiểm tra... Bạn có thể tiếp tục trong khi chúng tôi kiểm tra', 'Checking... You can continue while we check')
       if (F('checkswait')) {
@@ -436,6 +545,7 @@
       paintAdv()
     }
     $('#next-button', dlg).onclick = () => { if ($('#next-button', dlg).getAttribute('aria-disabled') !== 'true' && W.step < STEPS().length - 1) showStep(W.step + 1) }
+    if (F('monet')) bindMonetization()
     $('#back-button', dlg).onclick = () => { if (W.step > 0) showStep(W.step - 1) }
     // ---- Che do hien thi: Luu hoac xuat ban / Len lich ----
     const radiosEl = $('#privacy-radios', dlg)
@@ -765,6 +875,7 @@
       language: W.language, titleLanguage: W.titleLanguage, recDate: W.recDate, location: W.location, category: W.category, license: W.license, embed: W.embed, notify: W.notify,
       remix: W.remix, comments: W.comments, showLikes: W.showLikes, endscreen: W.endscreen, subtitles: W.subs, visibility: W.vis, scheduleDate: W.vis === 'SCHEDULE' ? W.date : '',
       scheduleTime: W.vis === 'SCHEDULE' ? W.time : '', premiere: W.vis === 'PUBLIC' && W.premiere, schedulePremiere: W.vis === 'SCHEDULE' && W.schedulePremiere, earlyDone: W.earlyDone, anyway: W.anyway, lang: EN ? 'en' : 'vi',
+      monetization: W.m10n, adRating: W.rated ? (W.ratedNone ? 'none' : 'other') : '',
     }
     fetch('/studio/__upload/done', { method: 'POST', body: JSON.stringify(u) }).then(() => {
       dlg.remove(); dlg = null

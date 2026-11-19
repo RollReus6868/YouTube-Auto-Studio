@@ -54,6 +54,7 @@ export type Preset = {
   schedulePremiere?: boolean // "Dat lam video Cong chieu" (khi Len lich)
   optimizeAfterUpload?: boolean // sau khi dang: thich / binh luan / ghim (va dat lai muc hop thoai tai len chua dat duoc)
   optimize?: OptimizeTemplate // cac muc dat trong hop thoai tai len cua Studio (ban cu chua co -> mau goc)
+  monetize?: 'on' | 'off' // kenh da bat kiem tien: buoc "Kiem tien" chon Bat (+ gui Muc do phu hop) / Tat; kenh chua bat: bo qua
 }
 export type Settings = {
   root: string
@@ -108,9 +109,18 @@ export type VideoItem = {
   meta: VideoMeta
   script?: { file: string; auto: boolean } | null // kich ban cho Gemini viet mo ta (auto: file canh video, khong thi chon tay)
   vis?: VideoVis | null // che do hien thi rieng cua video (null = theo mau)
+  // cai dat rieng cua video (trang Dang video); rong = theo mac dinh
+  opts?: { channel: string; preset: string; monetize: '' | 'on' | 'off'; queue: number | 'solo' | '' }
+  channelKey?: string // kenh se dang (rieng hoac mac dinh)
+  channelName?: string
+  presetId?: string
+  queue?: number | 'solo'
+  queueLabel?: string
+  monetize?: 'on' | 'off' // kiem tien thuc te (rieng > file thong tin > mau)
   errors: string[]
   warnings: string[]
 }
+export type UploadRun = { key: string; label: string; lane: number | null; window: string; running: string; waiting: string[]; channel: string }
 export type VideoVis = { mode: 'private' | 'unlisted' | 'public' | 'premiere' | 'schedule'; at?: string; premiere?: boolean }
 export type PostItem = {
   id: string
@@ -132,7 +142,7 @@ export type PostItem = {
   answers?: { text: string; image: string; correct: boolean }[]
   explanation?: string
 }
-export type Job = { status: 'queued' | 'run' | 'done' | 'error' | 'stopped'; title?: string; step: string; progress: number; error: string; url: string; warnings?: string[] }
+export type Job = { status: 'queued' | 'run' | 'done' | 'error' | 'stopped'; title?: string; step: string; progress: number; error: string; url: string; warnings?: string[]; lane?: number | null; channelName?: string; queueLabel?: string; monetization?: string }
 export type UploadChannel = { key: string; name: string; handle: string; ucId: string; avatar: string }
 export type Comment = { id: string; videoId: string; videoTitle: string; author: string; text: string; publishedAt: string; likeCount: number; status: 'new' | 'ready' | 'sent' | 'skipped' | 'error'; kind: string; draft: string; error: string; note: string }
 // script: ten file kich ban da gui cho Gemini; request: yeu cau rieng da gui; code: ma loi Gemini (GEMINI_SIGNIN...); via: web | api
@@ -147,7 +157,8 @@ export type State = {
   geminiWeb?: GeminiWebStatus // Gemini tren trinh duyet (chua co = ban nay chua co dich vu)
   scan: { root: string; videoDir?: string; videos: VideoItem[]; posts: PostItem[]; errors: string[]; at: string }
   studio: { channelId: string; channelName?: string; url: string; visible: boolean; job?: string } // job: viec tool dang chay trong khung
-  upload: { channelKey: string; channels: UploadChannel[] } // kenh dang video = cac kenh da tick o trang Tai khoan
+  // kenh dang video mac dinh + cac kenh da tick o trang Tai khoan; parallel: so hang cho chay cung luc; run: hang cho dang chay
+  upload: { channelKey: string; channels: UploadChannel[]; parallel?: number; maxParallel?: number; run?: UploadRun[] }
   jobs: Record<string, Job>
   draft: Draft | null
   comments: { items: Comment[]; busy: boolean; at: string; sentLastHour: number }
@@ -218,8 +229,8 @@ export const demoState: State = {
     root: demoSettings.root, videoDir: demoSettings.videoDir, errors: [], at: '2026-10-26T12:00:00Z',
     videos: [
       { id: 'v1', layout: 'flat', thumb: 'Bí ẩn rừng sâu tập 1.jpg', infoFile: 'Bí ẩn rừng sâu tập 1.txt', dir: 'Bí ẩn rừng sâu tập 1', folder: '', name: 'Bí ẩn rừng sâu tập 1', size: 734003200, video: 'Bí ẩn rừng sâu tập 1.mp4', thumbUrl: '', subtitles: [{ file: 'Bí ẩn rừng sâu tập 1.vi.srt', lang: 'vi' }], preset: 'Video dài', meta: meta('Bí ẩn rừng sâu tập 1', '2026-10-30T02:00:00.000Z', true), script: { file: 'Bí ẩn rừng sâu tập 1.kich-ban.docx', auto: true }, errors: [], warnings: [] },
-      { id: 'v2', layout: 'flat', thumb: '', infoFile: 'Bí ẩn rừng sâu tập 2.txt', dir: 'Bí ẩn rừng sâu tập 2', folder: '', name: 'Bí ẩn rừng sâu tập 2', size: 812003200, video: 'Bí ẩn rừng sâu tập 2.mp4', thumbUrl: '', subtitles: [], preset: 'Video dài', meta: meta('Bí ẩn rừng sâu tập 2', '2026-10-31T02:00:00.000Z', true), errors: [], warnings: ['Chưa có ảnh thumbnail cùng tên ("Bí ẩn rừng sâu tập 2.jpg", .jpeg, .png hoặc .webp): YouTube tự chọn ảnh từ video.'] },
-      { id: 'v3', layout: 'flat', thumb: 'Hậu trường.png', infoFile: 'Hậu trường.txt', dir: 'Hậu trường', folder: '', name: 'Hậu trường', size: 3221225472, video: 'Hậu trường.mov', thumbUrl: '', subtitles: [], preset: 'Video dài', meta: { ...meta('Hậu trường: một ngày quay phim giữa rừng sâu', null), titleBase: 'Hậu trường', titleOwn: 'Hậu trường: một ngày quay phim giữa rừng sâu' }, errors: [], warnings: [] },
+      { id: 'v2', layout: 'flat', thumb: '', infoFile: 'Bí ẩn rừng sâu tập 2.txt', dir: 'Bí ẩn rừng sâu tập 2', folder: '', name: 'Bí ẩn rừng sâu tập 2', size: 812003200, video: 'Bí ẩn rừng sâu tập 2.mp4', thumbUrl: '', subtitles: [], preset: 'Video dài', meta: meta('Bí ẩn rừng sâu tập 2', '2026-10-31T02:00:00.000Z', true), opts: { channel: 'UCC0AJ_NoUOq5718yK4_ehBw', preset: '', monetize: '', queue: 2 }, channelKey: 'UCC0AJ_NoUOq5718yK4_ehBw', channelName: 'Dark Bible Stories', queue: 2, queueLabel: 'Hàng chờ 2', monetize: 'on', errors: [], warnings: ['Chưa có ảnh thumbnail cùng tên ("Bí ẩn rừng sâu tập 2.jpg", .jpeg, .png hoặc .webp): YouTube tự chọn ảnh từ video.'] },
+      { id: 'v3', layout: 'flat', thumb: 'Hậu trường.png', infoFile: 'Hậu trường.txt', dir: 'Hậu trường', folder: '', name: 'Hậu trường', size: 3221225472, video: 'Hậu trường.mov', thumbUrl: '', subtitles: [], preset: 'Video dài', meta: { ...meta('Hậu trường: một ngày quay phim giữa rừng sâu', null), titleBase: 'Hậu trường', titleOwn: 'Hậu trường: một ngày quay phim giữa rừng sâu' }, opts: { channel: '', preset: '', monetize: 'off', queue: 'solo' }, channelKey: 'UCxxxxxxxxxxxxxxxxxxxxxx', channelName: 'Kênh Của Tôi', queue: 'solo', queueLabel: 'Chạy riêng', monetize: 'off', errors: [], warnings: [] },
     ],
     posts: [
       { id: 'p1', dir: '2026-10-29_bai-hoi-y-kien', folder: '', name: 'bai hoi y kien', date: '2026-10-29', time: null, text: 'Các bạn muốn xem tập tiếp theo về chủ đề gì? Bình luận cho mình biết nhé!', images: [], errors: [], warnings: [] },
@@ -233,10 +244,14 @@ export const demoState: State = {
       { key: 'UCxxxxxxxxxxxxxxxxxxxxxx', name: 'Kênh Của Tôi', handle: '@kenhcuatoi', ucId: 'UCxxxxxxxxxxxxxxxxxxxxxx', avatar: '' },
       { key: 'UCC0AJ_NoUOq5718yK4_ehBw', name: 'Dark Bible Stories', handle: '@DarkBibleStories', ucId: 'UCC0AJ_NoUOq5718yK4_ehBw', avatar: '' },
     ],
+    parallel: 2, maxParallel: 4,
+    run: [
+      { key: 'q2', label: 'Hàng chờ 2', lane: 0, window: '', running: 'v2', waiting: [], channel: 'Dark Bible Stories' },
+    ],
   },
   jobs: {
     v1: { status: 'done', step: '', progress: 100, error: '', url: 'https://youtu.be/abc123' },
-    v2: { status: 'run', step: 'details', progress: 42, error: '', url: '' },
+    v2: { status: 'run', step: 'details', progress: 42, error: '', url: '', lane: 0, channelName: 'Dark Bible Stories', queueLabel: 'Hàng chờ 2' },
   },
   draft: null,
   comments: {

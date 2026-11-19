@@ -24,6 +24,9 @@ function defaultPreset(id = 'mac-dinh', name = 'Mặc định') {
     privacy: 'private', // public | unlisted | private (khi len lich: Studio de rieng tu toi gio dang)
     premiere: false, // Cong khai: "Dat o che do Cong chieu ngay"
     schedulePremiere: false, // Len lich: "Dat lam video Cong chieu"
+    // kenh da bat kiem tien: buoc "Kiem tien" cua hop thoai tai len chon Bat (+ gui "Muc do phu hop de chay quang cao":
+    // Khong chua noi dung nao o tren) | off = Tat. Kenh chua bat kiem tien khong co buoc nay: bo qua.
+    monetize: 'on',
     // Len lich ("Dat lich chuyen sang che do cong khai"): now = khong len lich | date = ngay + gio cu the (video sau cach
     // intervalHours) | times = khung gio co dinh moi ngay | interval = cach nhau deu N gio tu times[0]
     schedule: { mode: 'now', times: ['19:00'], intervalHours: 24, date: '', time: '09:00' },
@@ -49,6 +52,7 @@ function normalizePreset(p, seed) {
   out.premiere = out.premiere === true
   out.schedulePremiere = out.schedulePremiere === true
   out.optimizeAfterUpload = out.optimizeAfterUpload === true
+  if (!MONETIZE.includes(out.monetize)) out.monetize = 'on'
   out.optimize = normalizeTemplate(p && p.optimize && typeof p.optimize === 'object' ? p.optimize : seed)
   // preset cu (dang qua API): danh muc / ngon ngu / giay phep / nhung / AI chuyen sang mau Studio roi bo
   if (p && API_PRESET_FIELDS.some((k) => k in p)) {
@@ -59,6 +63,9 @@ function normalizePreset(p, seed) {
 }
 
 const SCHEDULE_MODES = ['now', 'date', 'times', 'interval']
+const MONETIZE = ['on', 'off']
+// "Kiếm tiền: Tắt" trong file thong tin cua video -> 'off'; "Bật" -> 'on'; khac -> ''
+const monetizeOf = (v) => (/^(bật|bat|on|có|co|yes)$/i.test(String(v || '').trim()) ? 'on' : /^(tắt|tat|off|không|khong|no)$/i.test(String(v || '').trim()) ? 'off' : '')
 const splitTags = (s) => String(s || '').split(/[,\n]/).map((t) => t.trim()).filter(Boolean)
 
 const pad = (n) => String(n).padStart(2, '0')
@@ -121,6 +128,7 @@ function buildVideoMeta(item, preset, extra = {}) {
     premiere: privacy === 'public' && p.premiere,
     publishAt,
     schedulePremiere: !!publishAt && p.schedulePremiere,
+    monetize: monetizeOf(info.kiem_tien) || p.monetize,
     thumbnail: item.thumbnail || null,
     subtitles: item.subtitles || [],
   }

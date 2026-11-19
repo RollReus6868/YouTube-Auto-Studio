@@ -1,3 +1,21 @@
+## YT Auto Studio 0.8.0
+
+### Đăng video: nhiều video, nhiều kênh, chạy cùng lúc
+- **Mỗi video một cài đặt riêng.** Bấm vào video, mục "Cài đặt riêng của video này": chọn **kênh đăng**, **mẫu**, **bật / tắt kiếm tiền** và **hàng chờ** cho riêng video đó. Video không chọn gì thì theo kênh mặc định (ô "Mặc định" ở đầu trang) và mẫu mặc định. Lịch đăng của mẫu giờ xếp riêng theo từng kênh.
+- **Hàng chờ chạy cùng lúc.** Video cùng hàng chờ đăng lần lượt; các hàng chờ khác nhau đăng cùng lúc (ô "Cùng lúc" ở đầu trang, tối đa 4). Hàng chờ đầu chạy trong khung bên phải như trước; mỗi hàng chờ khác chạy trong một cửa sổ đăng video riêng (nút "Xem cửa sổ"). Nút nhanh: "Tất cả lần lượt", "Mỗi kênh một hàng chờ", "Mỗi video chạy riêng".
+- **Đang đăng vẫn thêm video được**: bấm "Thêm N video vào hàng chờ"; bỏ một video đang chờ bằng "Bỏ khỏi hàng chờ". Bấm Dừng: không bắt đầu video mới, các video đang tải vẫn tải cho xong.
+- Lưu ý: nhiều video cùng lúc dùng chung đường mạng, nên nếu mạng tải lên đã chậm thì tổng thời gian không nhanh hơn. Đăng cùng lúc lên 2 kênh của **cùng một tài khoản Google** chưa được thử trên YouTube thật: lần đầu, hãy xem trang Nội dung của từng kênh để chắc mỗi video nằm đúng kênh.
+
+### Đăng video: bước Kiếm tiền
+- **Kênh đã bật kiếm tiền**: ở bước "Kiếm tiền" của hộp thoại tải lên, tool chọn **Bật** → Xong, rồi ở bước "Mức độ phù hợp để chạy quảng cáo" tick **"Không chứa nội dung nào ở trên"** và bấm **"Gửi thông tin đánh giá"**, đúng như video bạn quay. Trước đây tool dừng với lỗi "Bấm Tiếp nhưng hộp thoại không sang bước sau (đang ở Kiếm tiền)".
+- Muốn **Tắt** kiếm tiền: tắt "Bật kiếm tiền" trong mẫu (Mẫu mặc định → Tùy chọn khác), hoặc chọn "Tắt kiếm tiền" trong cài đặt riêng của video, hoặc ghi dòng "Kiếm tiền: Tắt" trong file .txt cùng tên video. **Kênh chưa bật kiếm tiền** không có bước này nên tool bỏ qua.
+
+### Đăng bài AI
+- **Sửa lỗi "Quá 10 giây vẫn chưa thấy ô chọn ngày giờ đăng"** (bài đầu tiên ngay sau khi đổi kênh): bấm "Lên lịch đăng bài" mà khung ngày giờ chưa hiện thì tool mở lại menu, tối đa 3 lần.
+- **Bài lỗi thoáng qua được thử lại một lần** ở cuối lượt đăng (tool kiểm tra bài trùng trước nên không đăng 2 lần).
+- **Kênh lỗi 2 bài liên tiếp thì tạm dừng các bài còn lại của kênh đó** (trước đây cả chục bài của một kênh lỗi y hệt nhau "Không mở được studio.youtube.com: ERR_FAILED").
+- Mở trang YouTube bị lỗi mạng thoáng qua (ERR_FAILED, mất kết nối…): tool tự mở lại 2 lần trước khi báo lỗi (áp dụng cho mọi tính năng).
+
 ## YT Auto Studio 0.7.4
 
 ### Tối ưu video

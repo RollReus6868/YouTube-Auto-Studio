@@ -57,7 +57,7 @@ const CHANNEL_DESC = 'Donate to Us: https://example.org/donate\nGet the ebook he
     assert.equal((await call('hello')).settings.videoDir, dir)
     await ui.getByText('Thư mục video', { exact: true }).first().waitFor()
     await ui.getByText('Chưa có kênh: đăng nhập Google ở trang Tài khoản').waitFor()
-    assert(await ui.getByRole('button', { name: 'Đăng 1 video' }).isDisabled(), 'chua co kenh thi khong dang duoc')
+    assert(await ui.getByRole('button', { name: 'Đăng video', exact: true }).last().isDisabled(), 'chua co kenh thi khong dang duoc')
 
     // dang nhap Google trong khung Studio (trang Tai khoan), tick kenh
     await ui.getByRole('button', { name: 'Tài khoản', exact: true }).click()
@@ -77,11 +77,11 @@ const CHANNEL_DESC = 'Donate to Us: https://example.org/donate\nGet the ebook he
     const key = (await acc()).channels.find((c) => c.name === NUTSHELL).key
 
     // trang Dang video: chon kenh dang video (luu vao cai dat)
-    await ui.getByRole('button', { name: 'Đăng video', exact: true }).click()
-    const pick = ui.getByLabel('Kênh đăng video')
+    await ui.getByRole('button', { name: 'Đăng video', exact: true }).first().click()
+    const pick = ui.getByLabel('Kênh đăng video mặc định')
     await pick.waitFor()
-    assert.deepEqual(await pick.locator('option').allTextContents(), ['Dark Bible Room (@DarkRoom6868)', `${NUTSHELL} (@Bible-inaNutshell999)`])
-    await pick.selectOption({ label: `${NUTSHELL} (@Bible-inaNutshell999)` })
+    assert.deepEqual(await pick.locator('option').allTextContents(), ['Mặc định: Dark Bible Room', `Mặc định: ${NUTSHELL}`])
+    await pick.selectOption({ label: `Mặc định: ${NUTSHELL}` })
     await waitFor(async () => (await call('hello')).upload.channelKey === key, 'chon kenh dang video')
     await waitFor(() => JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8')).uploadChannel === key, 'luu kenh dang video')
 
@@ -101,7 +101,7 @@ const CHANNEL_DESC = 'Donate to Us: https://example.org/donate\nGet the ebook he
     await ui.getByLabel('Gemini API key').fill('gemini-ok')
     await ui.getByRole('button', { name: 'Lưu key' }).click()
     await ui.getByText(/Đã lưu API key/).waitFor()
-    await ui.getByRole('button', { name: 'Đăng video', exact: true }).click()
+    await ui.getByRole('button', { name: 'Đăng video', exact: true }).first().click()
     await card.click()
     await ui.getByText(`Kịch bản: ${NAME}.kich-ban.txt`).first().waitFor()
     await ui.getByText('(tự nhận, cùng tên video)', { exact: false }).waitFor()

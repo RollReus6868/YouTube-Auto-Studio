@@ -196,6 +196,17 @@ module.exports = [
         assert(!ctx.logs.some((l) => /^error /.test(l)), ctx.logs.join('\n'))
       } finally { ctx.mock.server.postsFlags = {} }
     }]),
+  ['len lich: bam "Len lich dang bai" 2 lan dau khung ngay gio khong hien (loi that 18/11) -> mo lai menu, van len lich dung', async (ctx) => {
+    fresh(ctx.mock)
+    ctx.mock.server.postsFlags = { schedMiss: 2 }
+    try {
+      const at = inDays(5, 0, 0)
+      const r = await run(ctx, { type: 'text', text: 'Bài đầu tiên sau khi đổi kênh', when: at.toISOString() })
+      assert.equal(r.mismatch, '', ctx.logs.join('\n'))
+      assert.match(db(ctx.mock)[0].scheduledAt, new RegExp(`-${String(at.getDate()).padStart(2, '0')}T00:00$`))
+      assert.equal(ctx.logs.filter((l) => /khung chọn ngày giờ chưa hiện/.test(l)).length, 2, ctx.logs.join('\n'))
+    } finally { ctx.mock.server.postsFlags = {} }
+  }],
   ['len lich: bam o ngay khong an -> du phong go ngay, van dung ngay', async (ctx) => {
     fresh(ctx.mock)
     ctx.mock.server.postsFlags = { dateClick: 'none' }

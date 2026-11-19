@@ -1,10 +1,10 @@
 import {
-  AlertTriangle, ArrowUpCircle, BookOpen, CalendarClock, Clapperboard, Copy, Download, Eraser, ExternalLink, FileText, FileVideo, FolderOpen, FolderPlus, Globe, Home,
-  ImageIcon, LayoutTemplate, Palette, Paperclip, PenLine, Plus, RefreshCw, RotateCcw, Save, ScrollText, Settings, Sparkles,
-  Square, Subtitles, Trash2, Upload, X,
+  AlertTriangle, AppWindow, ArrowUpCircle, BookOpen, CalendarClock, CircleDollarSign, Clapperboard, Copy, Download, Eraser, ExternalLink, FileText, FileVideo, FolderOpen, FolderPlus, Globe, Home,
+  ImageIcon, Layers, LayoutTemplate, ListOrdered, Palette, Paperclip, PenLine, Plus, RefreshCw, RotateCcw, Save, ScrollText, Settings, Sparkles,
+  Square, Subtitles, Trash2, Tv, Upload, X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { call, demoName, demoState, emptyState, isDemo, newPreset, type Job, type Preset, type Settings as SettingsT, type State, type VideoItem, type VideoVis } from './api'
+import { call, demoName, demoState, emptyState, isDemo, newPreset, type Job, type Preset, type Settings as SettingsT, type State, type UploadRun, type VideoItem, type VideoVis } from './api'
 import {
   ActionBar, AppShell, BrowserPane, Button, Card, Choice, Dialog, EmptyState, Field, GradientProgress, PageBody, PageHeader, Pill, Select,
   Sidebar, TextArea, TextInput, ThemeGrid, ToggleRow, cn, useStickToBottom, type Tone,
@@ -217,15 +217,27 @@ const STEPS: Record<string, string> = {
   open: 'Đang mở hộp thoại tải lên', file: 'Đang chọn file video', details: 'Đang điền chi tiết', thumbnail: 'Đang đặt hình thu nhỏ',
   playlist: 'Đang chọn danh sách phát', more: 'Đang đặt các mục nâng cao', subtitles: 'Đang thêm phụ đề', endscreen: 'Đang thêm màn hình kết thúc',
   visibility: 'Đang chọn chế độ hiển thị', schedule: 'Đang lên lịch', wait: 'Đang chờ tải lên xong', publish: 'Đang lưu',
+  monetization: 'Đang chọn Kiếm tiền',
 }
+const laneText = (lane?: number | null) => (lane ? `luồng ${lane + 1} (cửa sổ riêng)` : 'luồng 1 (khung bên phải)')
 
-function JobLine({ job, send }: { job: Job; send: Backend['send'] }) {
-  if (job.status === 'queued') return <Pill tone="muted">Đang chờ đăng</Pill>
+function JobLine({ id, job, send }: { id: string; job: Job; send: Backend['send'] }) {
+  if (job.status === 'queued') {
+    return (
+      <span className="inline-flex flex-wrap items-center gap-2">
+        <Pill tone="muted">Đang chờ đăng{job.queueLabel ? ` · ${job.queueLabel}` : ''}{job.channelName ? ` · ${job.channelName}` : ''}</Pill>
+        <button className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline" onClick={() => send('upload_cancel', id)}>Bỏ khỏi hàng chờ</button>
+      </span>
+    )
+  }
   if (job.status === 'run') {
     return (
       <div className="space-y-1">
         <GradientProgress value={job.progress} />
-        <p className="text-[11px] text-muted-foreground">{STEPS[job.step] || 'Đang xử lý'}… · đã tải lên {job.progress}%</p>
+        <p className="flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+          <span>{STEPS[job.step] || 'Đang xử lý'}… · đã tải lên {job.progress}%{job.channelName ? ` · ${job.channelName}` : ''} · {laneText(job.lane)}</span>
+          {!!job.lane && <button className="font-semibold text-primary hover:underline" onClick={() => send('upload_window', `upload-${job.lane}`)}>Xem cửa sổ</button>}
+        </p>
       </div>
     )
   }
@@ -241,9 +253,47 @@ function JobLine({ job, send }: { job: Job; send: Backend['send'] }) {
   return <Pill tone="error" className="max-w-full">{job.error}</Pill>
 }
 
-function VideoCard({ v, job, open, onToggle, busy, connected, send }: {
-  v: VideoItem; job?: Job; open: boolean; onToggle: () => void; busy: boolean; connected: boolean; send: Backend['send'] // connected: da chon kenh dang video
+// Cai dat rieng cua mot video: kenh dang, mau, kiem tien, hang cho (backend: video_opts). Rong = theo mac dinh.
+const QUEUES: [string, string][] = [...Array.from({ length: 6 }, (_, i): [string, string] => [String(i + 1), `Hàng chờ ${i + 1}`]), ['solo', 'Chạy riêng (song song)']]
+function VideoOptions({ v, state, disabled, send }: { v: VideoItem; state: State; disabled: boolean; send: Backend['send'] }) {
+  const o = v.opts ?? { channel: '', preset: '', monetize: '', queue: '' }
+  const up = state.upload
+  const def = up.channels.find((c) => c.key === up.channelKey)
+  const presets = state.settings?.presets ?? []
+  const defPreset = presets.find((p) => p.id === state.settings?.defaultPreset)
+  const save = (patch: Record<string, string>) => send('video_opts', { id: v.id, patch })
+  const presetMon = (presets.find((p) => p.id === (o.preset || v.presetId)) ?? defPreset)?.monetize === 'off' ? 'Tắt' : 'Bật'
+  const row = 'grid grid-cols-[92px_minmax(0,1fr)] items-center gap-2'
+  return (
+    <div className="space-y-2 rounded-lg bg-muted/40 px-2.5 py-2">
+      <p className="text-xs font-bold text-muted-foreground">Cài đặt riêng của video này</p>
+      <div className="grid gap-2 lg:grid-cols-2">
+        <label className={row}><span className="text-xs text-muted-foreground">Kênh đăng</span>
+          <Select label={`Kênh đăng của ${v.meta.title || v.name}`} className="h-8 text-xs" disabled={disabled} value={o.channel} onChange={(channel) => save({ channel })}
+            options={[['', def ? `Kênh mặc định (${def.name})` : 'Kênh mặc định (chưa chọn)'], ...up.channels.map((c): [string, string] => [c.key, c.handle ? `${c.name} (${c.handle})` : c.name])]} /></label>
+        <label className={row}><span className="text-xs text-muted-foreground">Mẫu</span>
+          <Select label={`Mẫu của ${v.meta.title || v.name}`} className="h-8 text-xs" disabled={disabled} value={o.preset} onChange={(preset) => save({ preset })}
+            options={[['', `Theo mặc định (${v.preset})`], ...presets.map((p): [string, string] => [p.id, p.name])]} /></label>
+        <label className={row}><span className="text-xs text-muted-foreground">Kiếm tiền</span>
+          <Select label={`Kiếm tiền của ${v.meta.title || v.name}`} className="h-8 text-xs" disabled={disabled} value={o.monetize} onChange={(monetize) => save({ monetize })}
+            options={[['', `Theo mẫu (${presetMon})`], ['on', 'Bật kiếm tiền'], ['off', 'Tắt kiếm tiền']]} /></label>
+        <label className={row}><span className="text-xs text-muted-foreground">Hàng chờ</span>
+          <Select label={`Hàng chờ của ${v.meta.title || v.name}`} className="h-8 text-xs" disabled={disabled} value={o.queue === '' ? '1' : String(o.queue)} onChange={(queue) => save({ queue })}
+            options={QUEUES} /></label>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        Đăng lên <b>{v.channelName || 'chưa chọn kênh'}</b>. Kiếm tiền chỉ làm ở kênh đã bật kiếm tiền (Bật: chọn “Bật” + gửi “Không chứa nội dung nào ở trên” ở bước Mức độ phù hợp); kênh chưa bật thì bỏ qua.
+        Video cùng hàng chờ đăng lần lượt; các hàng chờ khác nhau chạy cùng lúc.
+      </p>
+    </div>
+  )
+}
+
+function VideoCard({ v, job, open, onToggle, busy, queueOk, send, state }: {
+  // busy: tool dang chay (khong cho Gemini viet); queueOk: duoc bam Dang (tool ranh, hoac dang dang video thi them vao hang cho)
+  v: VideoItem; job?: Job; open: boolean; onToggle: () => void; busy: boolean; queueOk: boolean; send: Backend['send']; state: State
 }) {
+  const connected = !!v.channelKey
   const bad = v.errors.length > 0
   const active = job && (job.status === 'run' || job.status === 'queued')
   return (
@@ -256,7 +306,10 @@ function VideoCard({ v, job, open, onToggle, busy, connected, send }: {
         <div className="min-w-0 flex-1 space-y-1.5">
           <h3 className="line-clamp-2 text-sm font-bold leading-snug">{v.meta.title || v.name}</h3>
           <div className="flex flex-wrap gap-1">
+            {v.channelName && <Chip icon={Tv} tone={v.opts?.channel ? 'active' : undefined}>{v.channelName}</Chip>}
             <Chip icon={LayoutTemplate} tone="active">{v.preset}</Chip>
+            {v.queueLabel && v.queue !== 1 && <Chip icon={ListOrdered} tone="active">{v.queueLabel}</Chip>}
+            {v.monetize === 'off' && <Chip icon={CircleDollarSign} tone="active">Tắt kiếm tiền</Chip>}
             {v.meta.titleOwn && <Chip icon={PenLine} tone="active">Tiêu đề riêng</Chip>}
             {v.meta.publishAt ? <Chip icon={CalendarClock} tone={v.vis ? 'active' : undefined}>{fmtWhen(v.meta.publishAt)}</Chip> : <Chip tone={v.vis ? 'active' : undefined}>{PRIVACY[v.meta.privacy]} ngay</Chip>}
             {(v.meta.premiere || (v.meta.publishAt && v.meta.schedulePremiere)) && <Chip icon={Clapperboard}>Công chiếu</Chip>}
@@ -269,7 +322,7 @@ function VideoCard({ v, job, open, onToggle, busy, connected, send }: {
       </button>
       {/* nam ngoai nut mo/dong: trong dong trang thai co lien ket bam duoc */}
       <div className="-mt-[34px] mb-3 ml-[152px] mr-3 min-h-[22px]">
-        {job && !bad ? <JobLine job={job} send={send} />
+        {job && !bad ? <JobLine id={v.id} job={job} send={send} />
           : bad ? <Pill tone="error" className="max-w-full">{v.errors[0]}</Pill>
           : v.warnings.length > 0 ? <Pill tone="warning" className="max-w-full">{v.warnings[0]}</Pill>
           : <Pill tone="success">Sẵn sàng</Pill>}
@@ -308,13 +361,14 @@ function VideoCard({ v, job, open, onToggle, busy, connected, send }: {
             <dt className="text-muted-foreground">Playlist</dt><dd className="truncate font-semibold">{v.meta.playlist || '—'}</dd>
             <dt className="text-muted-foreground">Dành cho trẻ em</dt><dd className="font-semibold">{v.meta.madeForKids ? 'Có' : 'Không'}</dd>
           </dl>
+          <VideoOptions v={v} state={state} disabled={!!active || job?.status === 'done'} send={send} />
           <VisPicker v={v} disabled={!!active || job?.status === 'done'} send={send} />
           {[...v.errors.slice(1), ...v.warnings.slice(v.errors.length ? 0 : 1), ...(job?.warnings ?? [])].map((m) => (
             <p key={m} className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />{m}</p>
           ))}
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="h-8 px-3 text-xs" disabled={busy || !v.folder || !v.video} onClick={() => send('describe', v.id)}><Sparkles /> Gemini viết mô tả{v.script ? ' theo kịch bản' : ''}</Button>
-            <Button variant="outline" className="h-8 px-3 text-xs" disabled={busy || bad || !connected || job?.status === 'done'} onClick={() => send('upload', [v.id])}><Upload /> Đăng video này</Button>
+            <Button variant="outline" className="h-8 px-3 text-xs" disabled={!queueOk || bad || !connected || !!active || job?.status === 'done'} title={connected ? '' : 'Chọn kênh đăng (đầu trang hoặc Cài đặt riêng của video)'} onClick={() => send('upload', [v.id])}><Upload /> {job && !active && job.status !== 'done' ? 'Đăng lại video này' : 'Đăng video này'}</Button>
             <Button variant="subtle" className="h-8 px-3 text-xs" onClick={() => send('open_path', v.folder)} disabled={!v.folder}><FolderOpen /> Mở thư mục</Button>
           </div>
         </div>
@@ -388,12 +442,43 @@ function FlatHelp() {
   )
 }
 
+// Hang cho dang chay: moi hang cho mot luong (luong 1 = khung ben phai, luong 2+ = cua so dang video rieng)
+function UploadRunCard({ state, send }: Backend) {
+  const run: UploadRun[] = state.upload.run ?? []
+  if (!run.length) return null
+  const title = (id: string) => state.jobs[id]?.title || state.scan.videos.find((v) => v.id === id)?.meta.title || id
+  return (
+    <Card title="Hàng chờ đang chạy" hint={`tối đa ${state.upload.parallel ?? 2} hàng chờ cùng lúc · video cùng hàng chờ đăng lần lượt`}>
+      <ul className="space-y-2">
+        {run.map((q) => {
+          const j = q.running ? state.jobs[q.running] : undefined
+          return (
+            <li key={q.key} className="rounded-lg bg-muted/40 px-2.5 py-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <Pill tone={q.running ? 'active' : 'muted'}>{q.label}</Pill>
+                <span className="text-xs text-muted-foreground">{q.channel}{q.lane !== null ? ` · ${laneText(q.lane)}` : ' · đang chờ luồng rảnh'}</span>
+                {!!q.lane && <button className="text-xs font-semibold text-primary hover:underline" onClick={() => send('upload_window', q.window)}><AppWindow className="mr-1 inline h-3 w-3" />Xem cửa sổ</button>}
+              </div>
+              {q.running && <p className="mt-1 truncate text-xs"><b>Đang đăng:</b> {title(q.running)}{j ? ` · ${j.progress}%` : ''}</p>}
+              {q.waiting.length > 0 && <p className="mt-0.5 truncate text-xs text-muted-foreground">Chờ: {q.waiting.map(title).join(' → ')}</p>}
+            </li>
+          )
+        })}
+      </ul>
+    </Card>
+  )
+}
+
 function VideosPage({ state, send, go }: Backend & { go: (p: string) => void }) {
   const [open, setOpen] = useState<string | null>(null)
-  const ready = state.scan.videos.filter((v) => !v.errors.length && state.jobs[v.id]?.status !== 'done')
+  const ready = state.scan.videos.filter((v) => !v.errors.length && !['done', 'run', 'queued'].includes(state.jobs[v.id]?.status ?? '') && !!v.channelKey)
   const up = state.upload
-  const connected = up.channels.some((c) => c.key === up.channelKey)
   const busy = state.status !== 'idle'
+  // dang dang video: van bam Dang duoc (them vao hang cho)
+  const uploading = (up.run?.length ?? 0) > 0 || Object.values(state.jobs).some((j) => j.status === 'run' || j.status === 'queued')
+  const queueOk = !busy || uploading
+  const channelsUsed = new Set(state.scan.videos.map((v) => v.channelKey).filter(Boolean)).size
+  const queuesUsed = new Set(ready.map((v) => String(v.queue ?? 1) === 'solo' ? `solo:${v.id}` : String(v.queue ?? 1))).size
   const finished = Object.entries(state.jobs).filter(([id, j]) => j.status === 'done' && !state.scan.videos.some((v) => v.id === id))
   return (
     <>
@@ -404,13 +489,19 @@ function VideosPage({ state, send, go }: Backend & { go: (p: string) => void }) 
         actions={<>
           <UpdateBadge state={state} go={() => go('update')} />
           {up.channels.length ? (
-            <div className="w-72 max-w-full shrink-0">
-              <Select
-                label="Kênh đăng video"
-                value={up.channelKey}
-                onChange={(v) => send('upload_channel', v)}
-                options={up.channels.map((c) => [c.key, c.handle ? `${c.name} (${c.handle})` : c.name])}
-              />
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="w-64 max-w-full shrink-0" title="Kênh đăng của các video không chọn kênh riêng">
+                <Select
+                  label="Kênh đăng video mặc định"
+                  value={up.channelKey}
+                  onChange={(v) => send('upload_channel', v)}
+                  options={up.channels.map((c) => [c.key, `Mặc định: ${c.name}`])}
+                />
+              </div>
+              <div className="w-40 shrink-0" title="Số hàng chờ đăng cùng lúc (video cùng hàng chờ vẫn đăng lần lượt)">
+                <Select label="Số hàng chờ chạy cùng lúc" value={String(up.parallel ?? 2)} onChange={(n) => send('upload_parallel', Number(n))}
+                  options={Array.from({ length: up.maxParallel ?? 4 }, (_, i): [string, string] => [String(i + 1), i ? `Cùng lúc: ${i + 1}` : 'Lần lượt (1)'])} />
+              </div>
             </div>
           ) : <button onClick={() => go('accounts')} className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted/70">Chưa có kênh: đăng nhập Google ở trang Tài khoản</button>}
         </>}
@@ -424,6 +515,7 @@ function VideosPage({ state, send, go }: Backend & { go: (p: string) => void }) 
         ))}
       </div>
       <PageBody>
+        <UploadRunCard state={state} send={send} />
         {finished.length > 0 && (
           <Card title="Vừa đăng xong" hint="file đã chuyển vào da-dang/, không đăng lại">
             <ul className="space-y-1.5">
@@ -444,19 +536,24 @@ function VideosPage({ state, send, go }: Backend & { go: (p: string) => void }) 
           </div>
         ) : (
           <>
-            <p className="text-xs text-muted-foreground">{state.scan.videos.length} video · {ready.length} sẵn sàng · bấm vào một video để sửa tiêu đề, xem mô tả, nhờ Gemini viết (tùy chọn), hoặc đăng riêng</p>
+            <p className="text-xs text-muted-foreground">{state.scan.videos.length} video · {ready.length} sẵn sàng{channelsUsed > 1 ? ` · ${channelsUsed} kênh` : ''} · bấm vào một video để chọn kênh, mẫu, kiếm tiền, hàng chờ riêng, sửa tiêu đề, nhờ Gemini viết mô tả, hoặc đăng riêng</p>
+            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/30 px-2.5 py-1.5 text-xs">
+              <Layers className="h-3.5 w-3.5 text-muted-foreground" /><span className="text-muted-foreground">Chia hàng chờ nhanh:</span>
+              <Button variant="subtle" className="h-7 px-2 text-xs" onClick={() => send('video_queue_bulk', 'one')}>Tất cả lần lượt</Button>
+              <Button variant="subtle" className="h-7 px-2 text-xs" onClick={() => send('video_queue_bulk', 'channel')}>Mỗi kênh một hàng chờ</Button>
+              <Button variant="subtle" className="h-7 px-2 text-xs" onClick={() => send('video_queue_bulk', 'solo')}>Mỗi video chạy riêng</Button>
+            </div>
             {state.scan.videos.map((v) => (
-              <VideoCard key={v.id} v={v} job={state.jobs[v.id]} open={open === v.id} onToggle={() => setOpen(open === v.id ? null : v.id)} busy={busy} connected={connected} send={send} />
+              <VideoCard key={v.id} v={v} job={state.jobs[v.id]} open={open === v.id} onToggle={() => setOpen(open === v.id ? null : v.id)} busy={busy} queueOk={queueOk} send={send} state={state} />
             ))}
           </>
         )}
       </PageBody>
       <ActionBar>
-        {busy ? (
-          <Button variant="danger" size="sm" onClick={() => send('stop')}><Square /> Dừng sau video đang tải</Button>
-        ) : (
-          <Button variant="gradient" size="sm" disabled={!connected || !ready.length} title={connected ? '' : 'Chọn kênh đăng video (đăng nhập Google và tick kênh ở trang Tài khoản)'} onClick={() => send('upload')}>
-            <Upload /> {ready.length ? `Đăng ${ready.length} video` : 'Đăng video'}
+        {busy && <Button variant="danger" size="sm" onClick={() => send('stop')}><Square /> Dừng sau video đang tải</Button>}
+        {(!busy || (uploading && ready.length > 0)) && (
+          <Button variant="gradient" size="sm" disabled={!queueOk || !ready.length} title={up.channels.length ? '' : 'Chọn kênh đăng video (đăng nhập Google và tick kênh ở trang Tài khoản)'} onClick={() => send('upload')}>
+            <Upload /> {!ready.length ? 'Đăng video' : uploading ? `Thêm ${ready.length} video vào hàng chờ` : `Đăng ${ready.length} video${queuesUsed > 1 ? ` (${queuesUsed} hàng chờ)` : ''}`}
           </Button>
         )}
         <Button variant="subtle" size="icon-sm" aria-label="Sửa mẫu mặc định" title="Sửa mẫu mặc định" onClick={() => go('presets')}>
@@ -587,6 +684,7 @@ function PresetsPage({ state, send }: Backend) {
             <VisibilityCard p={p} set={set} />
             <Card title="Tùy chọn khác">
               <ToggleRow title="Thông báo cho người đăng ký" hint="Mục “Xuất bản lên nguồn cấp dữ liệu Kênh đăng ký và thông báo cho người đăng ký” trong Hiện thêm." checked={p.notifySubscribers} onChange={(v) => set({ notifySubscribers: v })} />
+              <ToggleRow title="Bật kiếm tiền (kênh đã bật kiếm tiền)" hint="Bước “Kiếm tiền” của hộp thoại tải lên: chọn Bật, rồi ở “Mức độ phù hợp để chạy quảng cáo” tick “Không chứa nội dung nào ở trên” và Gửi thông tin đánh giá. Tắt: chọn Tắt. Kênh chưa bật kiếm tiền không có bước này nên tool bỏ qua." checked={p.monetize !== 'off'} onChange={(v) => set({ monetize: v ? 'on' : 'off' })} />
             </Card>
             <Card title="Xem trước" hint="với video mẫu “Bí ẩn rừng sâu”, tập 1">
               <div className="space-y-2">

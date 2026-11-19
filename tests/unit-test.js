@@ -660,6 +660,20 @@ test('tool ranh han: viec dang chay / xep hang / vua thao tac -> chua ranh', () 
   assert.equal(busyReason({ ...idle, lastActive: now - 30e3, quietMs: 60e3 }), 'bạn vừa dùng tool (chờ 1 phút không thao tác, còn khoảng 1 phút)')
 })
 
+test('kiem tien: mau mac dinh Bat, mau Tat, file thong tin "Kiếm tiền: tắt" ghi de, gia tri la ve Bat', () => {
+  const item = { name: 'Video', info: {} }
+  assert.equal(md.defaultPreset().monetize, 'on')
+  assert.equal(md.normalizePreset({ id: 'x', name: 'X' }).monetize, 'on', 'mau cu chua co truong nay')
+  assert.equal(md.normalizePreset({ id: 'x', name: 'X', monetize: 'bậy' }).monetize, 'on')
+  assert.equal(md.buildVideoMeta(item, md.defaultPreset()).monetize, 'on')
+  assert.equal(md.buildVideoMeta(item, { ...md.defaultPreset(), monetize: 'off' }).monetize, 'off')
+  assert.equal(md.buildVideoMeta({ ...item, info: { kiem_tien: 'Tắt' } }, md.defaultPreset()).monetize, 'off')
+  assert.equal(md.buildVideoMeta({ ...item, info: { kiem_tien: 'bật' } }, { ...md.defaultPreset(), monetize: 'off' }).monetize, 'on')
+  const { jobOf } = require('../src/uploader')
+  assert.equal(jobOf({ video: 'v.mp4', meta: { ...md.buildVideoMeta(item, md.defaultPreset()), monetize: 'off' } }, 'UC').monetize, 'off')
+  assert.equal(jobOf({ video: 'v.mp4', meta: md.buildVideoMeta(item, md.defaultPreset()) }, 'UC').monetize, 'on')
+})
+
 ;(async () => {
   let failed = 0
   for (const [name, fn] of tests) {

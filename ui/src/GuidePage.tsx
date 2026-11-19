@@ -71,11 +71,14 @@ export function GuidePage({ state, send, go }: { state: State; send: Send; go: (
                   <p>Đăng xong, tool chuyển video, ảnh và file kèm theo vào thư mục con <code>da-dang</code> nên không bao giờ đăng lại.</p>
                 </Step>
                 <Step n={3} title="Chọn kênh và chế độ hiển thị">
-                  <p>Chọn kênh ở ô <b>Kênh đăng video</b>. Ở <b>Mẫu mặc định → Chế độ hiển thị</b>, chọn như trong Studio: <b>Lưu hoặc xuất bản</b> (Riêng tư, Không công khai, Công khai, có thể bật <b>Công chiếu ngay</b>) hoặc <b>Lên lịch</b> (ngày, giờ theo mốc 15 phút, <b>Đặt làm video Công chiếu</b>).</p>
+                  <p>Chọn kênh ở ô <b>Mặc định</b> (đầu trang). Video nào cần đăng lên kênh khác, mẫu khác, bật / tắt kiếm tiền riêng hoặc vào hàng chờ khác: bấm vào video, mục <b>Cài đặt riêng của video này</b>.</p>
+                  <p><b>Hàng chờ:</b> video cùng hàng chờ đăng lần lượt; các hàng chờ khác nhau chạy <b>cùng lúc</b> (ô <b>Cùng lúc</b> ở đầu trang, tối đa 4). Hàng chờ đầu chạy trong khung bên phải, các hàng chờ khác mỗi hàng một cửa sổ đăng video riêng (đừng thu nhỏ hay đóng cửa sổ đó khi đang tải). Nút <b>Mỗi kênh một hàng chờ</b> chia nhanh. Đang chạy vẫn bấm Đăng thêm được: video mới vào hàng chờ của nó. Nhiều video cùng lúc dùng chung đường mạng, nên tổng thời gian không nhanh hơn nếu mạng đã chậm.</p>
+                  <p><b>Kiếm tiền:</b> kênh đã bật kiếm tiền có thêm bước <b>Kiếm tiền</b>: tool chọn <b>Bật</b> rồi ở <b>Mức độ phù hợp để chạy quảng cáo</b> tick <b>Không chứa nội dung nào ở trên</b> và <b>Gửi thông tin đánh giá</b> (muốn Tắt: tắt ở mẫu hoặc ở cài đặt riêng của video). Kênh chưa bật kiếm tiền không có bước này, tool bỏ qua.</p>
+                  <p><b>Chế độ hiển thị:</b> ở <b>Mẫu mặc định → Chế độ hiển thị</b>, chọn như trong Studio: <b>Lưu hoặc xuất bản</b> (Riêng tư, Không công khai, Công khai, có thể bật <b>Công chiếu ngay</b>) hoặc <b>Lên lịch</b> (ngày, giờ theo mốc 15 phút, <b>Đặt làm video Công chiếu</b>).</p>
                   <p>Tool mở hộp thoại <b>Tải video lên</b> của Studio trong cửa sổ chạy ngầm và điền như bạn tự làm: tiêu đề, mô tả (nối sau mô tả mặc định của kênh), hình thu nhỏ, danh sách phát, các mục trong <b>Hiện thêm</b> theo <b>Mẫu Studio</b> của mẫu mặc định, màn hình kết thúc, chế độ hiển thị hoặc lịch đăng.</p>
                 </Step>
                 <Step n={4} title="Để tool chạy tới khi tải lên xong">
-                  <p>Đừng tắt tool khi video đang tải lên. Bấm <b>Dừng</b> thì tool dừng sau video đang tải; video dở dang nằm trong Studio dưới dạng bản nháp.</p>
+                  <p>Đừng tắt tool khi video đang tải lên. Bấm <b>Dừng</b> thì tool không bắt đầu video mới, các video đang tải vẫn tải cho xong (bấm Dừng lần nữa để dừng hẳn; video dở dang nằm trong Studio dưới dạng bản nháp).</p>
                 </Step>
               </ol>
             </Card>
