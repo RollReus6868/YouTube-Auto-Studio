@@ -100,6 +100,10 @@ const LABELS = {
   publishAnyway: L('Vẫn xuất bản', '^(vẫn xuất bản|publish anyway)$'),
   // video len lich: cung hop thoai "Chung toi van dang kiem tra noi dung cua ban" nhung chi co nut [Da hieu]
   checksOk: L('Đã hiểu', '^(đã hiểu|got it|ok)$'),
+  // kenh da bat kiem tien, dang ngay (HTML that loi-trang 27/11/2026): "Chung toi van dang kiem tra video cua ban"
+  // [#secondary-action-button "Xuat ban"] [#primary-action-button "Thay doi che do hien thi"]. CHI tim trong hop thoai nay
+  // (nut Luu cua hop thoai tai len cung la "Xuat ban"); khong bao gio bam "Thay doi che do hien thi".
+  checksPublish: L('Xuất bản', '^(xuất bản|publish)$', 'ytcp-prechecks-warning-dialog #secondary-action-button'),
   shareClose: L('Đóng', '^(đóng|close|đã hiểu|got it)$', 'ytcp-video-share-dialog #close-button, ytcp-uploads-still-processing-dialog #close-button'),
   // buoc "Kiem tien" (chi kenh da bat kiem tien; HTML that loi-trang 19/11/2026): o "Chon" (ytcp-video-monetization, nut
   // ytcp-icon-button.edit-button "Chinh sua trang thai kiem tien cua video") -> hop thoai ytcp-video-monetization-edit-dialog:
@@ -284,7 +288,33 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
   const missed = new Set()
   const applied = new Set()
   const warn = (m) => { warnings.push(m); log('warn', m) }
-  const step = (key, name, fn) => { onStep(key); return page.run(name, fn) }
+  // Google hien "Xac minh danh tinh cua ban" (ytcp-auth-confirmation-dialog) GIUA LUC dang tai (loi that 26/11/2026: tool
+  // bam tiep va bao loi lung tung "Qua 20 giay van chua thay Ngay quay", "Nut Gui thong tin danh gia van bi khoa"). Tool khong
+  // xac minh thay: bao nguoi dung tu lam trong khung / cua so dang video, CHO (video van dang tai), het hop thoai thi lam tiep.
+  let chosen = false // da chon file video (tu day video nam trong Studio dang ban nhap)
+  const verifyWait = (job && job.verifyWaitMs) || 10 * 60e3
+  const userVerify = async () => {
+    if (!chosen) return false // truoc khi chon file: luong chon file tu bao loi xac minh (noDraft)
+    const b = await blocker(page)
+    if (!b || b.kind !== 'verify') return false
+    warn(`Google đang hiện "Xác minh danh tính của bạn" (video vẫn đang tải lên). Hãy tự bấm "Tiếp theo" trong khung Studio / cửa sổ đăng video và làm theo hướng dẫn của Google; tool chờ tối đa ${Math.round(verifyWait / 60e3)} phút rồi làm tiếp. Tool không tự xác minh thay bạn.`)
+    if (page.awake) await page.awake().catch(() => {})
+    const ok = await poll(page, async () => { const x = await blocker(page); return !x || x.kind !== 'verify' }, verifyWait, 1000)
+    if (!ok) throw new StepError(VERIFY_MSG, page.step)
+    log('info', 'Hộp thoại xác minh danh tính đã đóng: làm tiếp.')
+    await sleep(1000)
+    return true
+  }
+  const step = async (key, name, fn) => {
+    onStep(key)
+    await userVerify()
+    try { return await page.run(name, fn) } catch (e) {
+      if (page.shouldStop() || e.noDraft) throw e
+      // loi vi hop thoai xac minh che: cho nguoi dung xac minh roi lam lai buoc nay mot lan
+      if (!(await userVerify())) throw e
+      return page.run(name, fn)
+    }
+  }
   const shot = (name) => (page.snapshot ? page.snapshot(`dang-video-${name}`).catch(() => '') : '')
   // muc tuy chon: loi -> canh bao + anh trang, dong menu / hop thoai dang mo, lam tiep
   const soft = async (key, name, fn, what) => {
@@ -374,7 +404,6 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
 
   await openDialog('Mở hộp thoại tải video lên')
   // sau khi chon file video da nam trong Studio (ban nhap): loi bat buoc thi bao them de nguoi dung kiem tra truoc khi dang lai
-  let chosen = false
   let stopProgress = false
   let lastPct = -1
   let progressText = ''
@@ -409,11 +438,36 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
   let unguard = () => {}
   // hop thoai tai len bien mat giua chung (trang bi tai lai / chuyen trang): bao ro, khong doi nut "Lưu" vo ich
   let goneSince = 0
+  // Loi that 21/11/2026: Studio tu chuyen sang trang "Chi tiet video" (/video/<id>/edit) giua luc tai, video VAN dang tai trong
+  // trang do ("Dang tai video len..."). Tool bao loi roi chuyen kenh cho viec sau -> mat video. Nay: giu trang toi khi tai
+  // xong (dong / chuyen trang la mat video), roi bao ro con thieu che do hien thi (video da nam trong Studio, khong dang lai).
+  const holdMovedUpload = async () => {
+    const m = /\/video\/([\w-]{11})\/edit/.exec(page.url())
+    if (!m) return
+    const running = (l) => ['uploading', 'finishing'].includes(uploadPhase(l).phase)
+    const moving = async () => running(await readLabel(page, SEL.progressOut)) || (await page.has({ regex: '^(đang tải video lên|uploading video)' }).catch(() => false))
+    if (!(await poll(page, moving, 5000))) return
+    const vid = m[1]
+    warn(`Studio đã tự chuyển sang trang Chi tiết video (https://youtu.be/${vid}) khi video đang tải được ${Math.max(lastPct, 0)}%. Video vẫn tải tiếp trong trang này: tool giữ trang tới khi tải xong (đừng đóng tool hay đổi trang ở khung này).`)
+    const limit = Date.now() + 30 * 60e3 + Math.ceil(size / (200 * 1024)) * 1000
+    for (;;) {
+      const label = await readLabel(page, SEL.progressOut)
+      const p = uploadPhase(label)
+      if (p.phase === 'error') break
+      if (p.phase === 'uploading') { report(p.pct); if (p.pct !== null) logSpeed(p.pct, label) }
+      if (!running(label) && !(await page.has({ regex: '^(đang tải video lên|uploading video)' }).catch(() => false))) break
+      if (Date.now() > limit || page.shouldStop()) break
+      await sleep(3000)
+    }
+    const done = !running(await readLabel(page, SEL.progressOut))
+    throw noDraft(new StepError(`Studio đã tự chuyển sang trang Chi tiết video giữa lúc tải lên (https://youtu.be/${vid}). ${done ? 'Tool đã giữ trang cho video tải xong' : 'Video chưa tải xong'}, nhưng chưa chọn được chế độ hiển thị: video đang nằm trong Studio (trang Nội dung) ở dạng nháp. Vào Studio chọn chế độ hiển thị cho video này, đừng đăng lại.`, page.step))
+  }
   const dialogGone = async () => {
     const there = await page.eval((s) => window.__ya.all(document, s).length > 0, 'ytcp-uploads-dialog #title-textarea, ytcp-uploads-dialog ytcp-uploads-review, ytcp-uploads-dialog #done-button').catch(() => true)
     if (there) { goneSince = 0; return }
     goneSince = goneSince || Date.now()
     if (Date.now() - goneSince < 3000) return
+    await holdMovedUpload()
     throw new StepError(`Hộp thoại tải lên của Studio đã biến mất khi video mới tải được ${Math.max(lastPct, 0)}% (trang Studio bị tải lại hoặc chuyển trang, hoặc hộp thoại bị đóng). Video dừng ở dạng bản nháp: xoá bản nháp trong trang Nội dung rồi đăng lại.`, page.step)
   }
   try {
@@ -698,16 +752,19 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
       await page.waitFor(done)
       if (!(await poll(page, () => isEnabled(page, done), 60000, 500))) throw new StepError(`Nút "${(await page.text(done)) || 'Lưu'}" bị khóa.`, page.step)
       await page.click(done)
-      // "Chung toi van dang kiem tra noi dung cua ban": [Quay lai] [Van xuat ban], hoac chi [Da hieu] khi len lich
+      // "Chung toi van dang kiem tra noi dung cua ban": [Quay lai] [Van xuat ban], hoac chi [Da hieu] khi len lich, hoac (kenh
+      // da bat kiem tien) [Xuat ban] [Thay doi che do hien thi]
+      const inChecks = { selector: SEL.checks, hidden: true } // the hop thoai co the khong co kich thuoc (con la position fixed)
       const checks = [
         [{ ...LABELS.publishAnyway, selector: 'button, ytcp-button, [role=button]' }, 'Vẫn xuất bản'],
+        [{ text: LABELS.checksPublish.text, regex: LABELS.checksPublish.regex, selector: 'button, ytcp-button', within: inChecks }, 'Xuất bản'],
         [{ ...LABELS.checksOk, selector: `${SEL.checks} button, ${SEL.checks} ytcp-button` }, 'Đã hiểu'],
       ]
       const clicked = {}
       const r = await poll(page, async () => {
         for (const [btn, name] of checks) {
           if ((clicked[name] && Date.now() - clicked[name] < 5000) || !(await page.has(btn))) continue
-          if (!clicked[name]) log('info', `Studio vẫn đang kiểm tra video: bấm "${name}".`)
+          if (!clicked[name]) log('info', `Studio vẫn đang kiểm tra video: bấm "${name}"${name === 'Xuất bản' ? ' (YouTube khuyên đợi kiểm tra xong để chắc video đủ điều kiện kiếm tiền; muốn đợi thì đăng ở chế độ Lên lịch / Riêng tư)' : ''}.`)
           clicked[name] = Date.now()
           await page.click(btn)
           return null
@@ -747,6 +804,10 @@ async function upload(page, job, { urls, log = () => {}, onStep = () => {}, onPr
     return { id, url: `https://youtu.be/${id}`, warnings, missed: [...missed], applied: [...applied], schedule: at ? at.toISOString() : null, visibility, premiere, monetization, adRating: adRating === 'try' ? '' : adRating }
   } catch (e) {
     if (!(e instanceof StepError)) throw e
+    // buoc nao do loi vi Studio tu chuyen sang trang Chi tiet video (video van dang tai): giu trang toi khi tai xong, bao ro
+    if (chosen && !e.noDraft && !page.shouldStop()) {
+      try { await holdMovedUpload() } catch (m) { if (m instanceof StepError) e = m }
+    }
     await shot((e.step || 'loi').replace(/[^\p{L}\w]+/gu, '-').slice(0, 40))
     if (chosen && !e.noDraft && !/trước khi đăng lại/.test(e.message)) e.message += ' (Video có thể đã nằm trong Studio dạng bản nháp: xem trang Nội dung trước khi đăng lại.)'
     throw e

@@ -181,6 +181,61 @@ module.exports = [
     assert(ctx.logs.some((l) => /Đã gửi mức độ phù hợp để chạy quảng cáo/.test(l)), ctx.logs.join('\n'))
   }],
 
+  ['kenh da bat kiem tien, dang ngay khi Studio chua kiem tra xong (loi that 27/11): hop thoai [Xuat ban] [Thay doi che do hien thi] -> bam Xuat ban', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { monet: true, checkmonet: true })
+    const uc = await login(ctx)
+    const r = await run(ctx, JOB(f, { uc, thumbnail: null })).p
+    const [u] = await uploads(ctx.mock)
+    assert.deepEqual([u.visibility, u.anyway, u.monetization, u.adRating], ['PUBLIC', true, 'ON', 'none'], JSON.stringify(u))
+    assert(ctx.mock.events.some((e) => e.type === 'checks-monet'), 'co hien hop thoai kiem tra cua kenh kiem tien')
+    assert(!ctx.mock.events.some((e) => e.type === 'checks-change-visibility'), 'khong bam "Thay doi che do hien thi"')
+    assert(ctx.logs.some((l) => /bấm "Xuất bản"/.test(l)), ctx.logs.join('\n'))
+    assert(r.id)
+  }],
+
+  ['Google hien "Xac minh danh tinh cua ban" giua luc dang tai (loi that 26/11): tool bao va CHO nguoi dung, xac minh xong thi lam tiep', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { monet: true, nocheckwarn: true, authdlg: 1200 })
+    const uc = await login(ctx)
+    const { p } = run(ctx, JOB(f, { uc, thumbnail: null }))
+    // "nguoi dung" bam Tiep theo sau khi tool bao
+    for (let t = 0; t < 60000 && !ctx.logs.some((l) => /Xác minh danh tính của bạn/.test(l)); t += 250) await new Promise((r) => setTimeout(r, 250))
+    assert(ctx.logs.some((l) => /tool chờ tối đa 10 phút/.test(l)), ctx.logs.join('\n'))
+    await new Promise((r) => setTimeout(r, 2500))
+    assert(!ctx.mock.events.some((e) => e.type === 'upload'), 'chua dang khi con hop thoai xac minh')
+    await ctx.page.eval(() => document.querySelector('ytcp-auth-confirmation-dialog #confirm-button').click())
+    const r = await p
+    const [u] = await uploads(ctx.mock)
+    assert.deepEqual([u.visibility, u.monetization, u.adRating], ['PUBLIC', 'ON', 'none'], JSON.stringify(u))
+    assert(ctx.mock.events.some((e) => e.type === 'auth-done'))
+    assert(ctx.logs.some((l) => /Hộp thoại xác minh danh tính đã đóng: làm tiếp/.test(l)))
+    assert.equal(r.warnings.filter((w) => /Xác minh danh tính/.test(w)).length, 1, r.warnings.join('\n'))
+    assert(!r.warnings.some((w) => /Bỏ qua mục|Chưa gửi được/.test(w)), r.warnings.join('\n'))
+  }],
+
+  ['Studio tu chuyen sang trang Chi tiet video giua luc tai (loi that 21/11): giu trang toi khi tai xong, bao ro chua chon che do hien thi', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { slow: true, nocheckwarn: true, moveedit: 30, finishing: 6000 })
+    const uc = await login(ctx)
+    const err = await run(ctx, JOB(f, { uc, thumbnail: null })).p.then(() => null, (e) => e)
+    assert(err, 'phai bao loi (chua chon che do hien thi)')
+    assert.match(err.message, /tự chuyển sang trang Chi tiết video .*Tool đã giữ trang cho video tải xong.*đừng đăng lại/)
+    assert(!/xoá bản nháp|Video có thể đã nằm/.test(err.message), err.message)
+    const iMoved = ctx.mock.events.findIndex((e) => e.type === 'moved-edit')
+    assert(iMoved >= 0, 'trang gia da chuyen trang')
+    assert(ctx.mock.events.findIndex((e) => e.type === 'upload-finished') > iMoved, 'tool giu trang toi khi video tai xong')
+    assert(/\/video\/[\w-]{11}\/edit/.test(ctx.page.url()), ctx.page.url())
+  }],
+
+  ['"Xac minh danh tinh" giua luc tai ma nguoi dung khong xac minh: het gio cho -> bao loi xac minh ro rang', async (ctx) => {
+    const f = files(ctx.tmp)
+    await flags(ctx, { nocheckwarn: true, authdlg: 500 })
+    const uc = await login(ctx)
+    await assert.rejects(run(ctx, JOB(f, { uc, thumbnail: null, verifyWaitMs: 3000 })).p, /YouTube yêu cầu xác minh danh tính.*Tool không tự xác minh/)
+    assert(!ctx.mock.events.some((e) => e.type === 'upload'))
+  }],
+
   ['kenh da bat kiem tien, cai dat Tat kiem tien: chon Tat, khong co buoc Muc do phu hop', async (ctx) => {
     const f = files(ctx.tmp)
     await flags(ctx, { monet: true, nocheckwarn: true })
@@ -273,6 +328,13 @@ module.exports = [
     assert.equal(b.kind, 'stale')
     assert.match(b.text, /Bạn đã hoàn tất.*Hãy thử làm mới trang/)
     assert.equal(await p.text({ selector: LABELS.trustClose.any }), 'Đã hiểu')
+  }],
+
+  ['HTML that (loi-trang 27/11): hop thoai kiem tra cua kenh kiem tien - nut "Xuat ban" dung la #secondary-action-button, khong trung nut Luu', async (ctx) => {
+    await ctx.page.goto(`${ctx.urls.studio}/that-upload/kiem-tra-kiem-tien`)
+    const target = { text: LABELS.checksPublish.text, regex: LABELS.checksPublish.regex, selector: 'button, ytcp-button', within: { selector: SEL.checks, hidden: true } }
+    const hit = await ctx.page.eval((t) => { const el = window.__ya.one(t); return el && [el.closest('ytcp-button').id, el.closest('ytcp-prechecks-warning-dialog') ? 'trong' : 'ngoai'] }, target)
+    assert.deepEqual(hit, ['secondary-action-button', 'trong'])
   }],
 
   ['HTML that (loi-trang 19/11): buoc Kiem tien - nhan buoc, o "Chon", nut mo hop thoai, radio Bat / Tat, nut Xong', async (ctx) => {

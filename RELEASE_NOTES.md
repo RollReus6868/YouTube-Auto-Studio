@@ -1,3 +1,10 @@
+## YT Auto Studio 0.8.1
+
+### Đăng video: sửa lỗi
+- **Sửa lỗi "Đã bấm Lưu nhưng hộp thoại tải lên không đóng"** ở kênh đã bật kiếm tiền (lỗi ngày 28/11). Khi đăng Công khai mà YouTube chưa kiểm tra xong, kênh kiếm tiền hiện hộp thoại mới "Chúng tôi vẫn đang kiểm tra video của bạn" với hai nút [Xuất bản] [Thay đổi chế độ hiển thị]; tool chưa biết hộp thoại này nên đứng chờ. Nay tool bấm **Xuất bản** (đúng chế độ bạn chọn). YouTube khuyên đợi kiểm tra xong để chắc video đủ điều kiện kiếm tiền; muốn đợi thì đăng ở chế độ Lên lịch hoặc Riêng tư.
+- **Google hiện "Xác minh danh tính của bạn" giữa lúc đang tải** (lỗi ngày 26/11): trước đây tool cứ bấm tiếp và báo lỗi lung tung ("Quá 20 giây vẫn chưa thấy Ngày quay", "Nút Gửi thông tin đánh giá vẫn bị khóa"). Nay tool dừng lại, ghi nhật ký nhờ bạn tự bấm "Tiếp theo" trong khung Studio / cửa sổ đăng video và xác minh; video vẫn tải tiếp. Xác minh xong (trong 10 phút) thì tool làm tiếp từ bước đang dở. Tool không tự xác minh thay bạn.
+- **Studio tự chuyển sang trang "Chi tiết video" giữa lúc tải** (lỗi ngày 21/11): trước đây tool báo lỗi rồi đổi kênh làm việc khác, làm hỏng video đang tải. Nay tool giữ trang cho video tải xong rồi báo rõ: video đã nằm trong Studio, chỉ cần vào chọn chế độ hiển thị, đừng đăng lại.
+
 ## YT Auto Studio 0.8.0
 
 ### Đăng video: nhiều video, nhiều kênh, chạy cùng lúc

@@ -19,7 +19,8 @@
 // hop thoai Bat/Tat + Xong; Bat thi them buoc "Muc do phu hop de chay quang cao": tick "Khong chua noi dung nao o tren" +
 // "Gui thong tin danh gia", chua gui thi nut Tiep khoa), monetpre (o Kiem tien da la "Bat" san), monetcallout (bong goi y
 // "Dong" che o Kiem tien), monetslow (hop thoai Bat/Tat mo cham 1,5 giay), checkswait (buoc Kiem tra khoa nut Tiep 2,5 giay), noshare (khong
-// hien hop thoai chia se), nocheckwarn (kiem tra xong ngay: khong hoi "Van xuat ban"), checkinfo (len lich khi chua kiem tra xong: hop thoai
+// hien hop thoai chia se), moveedit (N: toi N% Studio tu chuyen sang trang Chi tiet video, video van tai), checkmonet (kenh kiem tien dang ngay: hop thoai [Xuat ban] [Thay doi che do hien thi]), authdlg (ms:
+// Google hien "Xac minh danh tinh cua ban" giua luc dang tai, khoa nut Tiep toi khi bam "Tiep theo"), nocheckwarn (kiem tra xong ngay: khong hoi "Van xuat ban"), checkinfo (len lich khi chua kiem tra xong: hop thoai
 // kiem tra chi co [Da hieu]; bam moi luu), hidelabel (khong co chu tien do
 // trong hop thoai; sau khi dong chi con o tien do goc trang), morepl (kenh co them 2 danh sach phat),
 // trust (= N: N lan dau chon file hien "Ban da hoan tat ... Hay thu lam moi trang", hop thoai tai len dung o buoc chon tep;
@@ -459,6 +460,19 @@
         log({ type: 'upload-failed', file: W.file })
         return
       }
+      // moveedit = N: toi N% Studio tu chuyen sang trang Chi tiet video (/video/<id>/edit), video van tai tiep trong trang
+      // (loi that 21/11/2026)
+      if (F('moveedit') && !W.moved && pct >= Number(F('moveedit')) && W.step === STEPS().length - 1) {
+        W.moved = true
+        if (dlg) { dlg.remove(); dlg = null }
+        history.pushState({}, '', `/studio/video/${W.id || 'Mv3dEd1tXyz'}/edit`)
+        const pg = document.createElement('div')
+        pg.id = 'edit-page'
+        pg.innerHTML = `<h1>${T('Chi tiết video', 'Video details')}</h1><div id="edit-uploading">${T('Đang tải video lên...', 'Uploading video...')}</div>`
+        document.body.appendChild(pg)
+        if (!mini()) { const m = document.createElement('ytcp-multi-progress-monitor'); document.body.appendChild(m) }
+        log({ type: 'moved-edit', pct })
+      }
       const left = Math.max(1, Math.ceil((total - (Date.now() - t0)) / 1000))
       if (pct < 100) { show(T(`Đã tải được ${pct}% ... Còn ${left} phút`, `Uploading ${pct}% ... ${left} minutes left`)); setTimeout(tick, 150); return }
       // 100%: trinh duyet con gui phan cuoi + cho YouTube xac nhan (roi trang luc nay = video ket o 100%)
@@ -467,6 +481,7 @@
       if (Date.now() < W.finishAt) { show(T('Đã tải được 100% ... Còn 0 giây', 'Uploading 100% ... 0 seconds left')); setTimeout(tick, 150); return }
       W.finishing = false
       W.uploaded = true
+      const eu = document.getElementById('edit-uploading'); if (eu) eu.remove()
       log({ type: 'upload-finished', file: W.file, published: W.published })
       show(T('Đã hoàn tất quá trình tải lên ... Quá trình xử lý sẽ sớm bắt đầu', 'Upload complete ... Processing will begin shortly'))
       setTimeout(() => { if (!W.checked) show(T('Đã tải lên xong ... Đang kiểm tra', 'Upload complete ... Checking')) }, 1500)
@@ -544,7 +559,8 @@
       $('#toggle-button button', dlg).setAttribute('aria-label', label.textContent)
       paintAdv()
     }
-    $('#next-button', dlg).onclick = () => { if ($('#next-button', dlg).getAttribute('aria-disabled') !== 'true' && W.step < STEPS().length - 1) showStep(W.step + 1) }
+    $('#next-button', dlg).onclick = () => { if (!W.blocked && $('#next-button', dlg).getAttribute('aria-disabled') !== 'true' && W.step < STEPS().length - 1) showStep(W.step + 1) }
+    if (F('authdlg')) setTimeout(authDialog, Number(F('authdlg')) || 1)
     if (F('monet')) bindMonetization()
     $('#back-button', dlg).onclick = () => { if (W.step > 0) showStep(W.step - 1) }
     // ---- Che do hien thi: Luu hoac xuat ban / Len lich ----
@@ -614,7 +630,7 @@
     paintVis()
     if (!F('nosubs')) $('#subtitles-button', dlg).onclick = subtitlesDialog
     $('#endscreens-button', dlg).onclick = endScreen
-    $('#done-button', dlg).onclick = publish
+    $('#done-button', dlg).onclick = () => { if (!W.blocked) publish() }
     showStep(0)
   }
 
@@ -892,6 +908,7 @@
   // "Chung toi van dang kiem tra noi dung cua ban" [Quay lai] [Van xuat ban]
   function checksWarning() {
     if (F('checkinfo') && W.vis === 'SCHEDULE') return checksInfo()
+    if (F('checkmonet')) return checksMonet()
     const w = document.createElement('ytcp-prechecks-warning-dialog')
     w.innerHTML = `<tp-yt-paper-dialog role="dialog"><h2>${T('Chúng tôi vẫn đang kiểm tra nội dung của bạn', "We're still checking your content")}</h2>
       <p class="description">${T('Nếu phát hiện thấy vấn đề, bạn có thể cần phải thay đổi để video không bị hạn chế.', 'If we find issues, you may need to make changes to avoid restrictions.')}</p>
@@ -900,6 +917,38 @@
     log({ type: 'checks-warning' })
     $('#secondary-action-button', w).onclick = () => w.remove()
     $('#primary-action-button', w).onclick = () => { w.remove(); W.anyway = true; publish() }
+  }
+
+  // kenh da bat kiem tien, dang ngay (HTML that loi-trang 27/11/2026): "Chung toi van dang kiem tra video cua ban"
+  // [#secondary-action-button "Xuat ban"] [#primary-action-button "Thay doi che do hien thi"] (+ nut X #cancel-button "Huy")
+  function checksMonet() {
+    const w = document.createElement('ytcp-prechecks-warning-dialog')
+    w.innerHTML = `<ytcp-dialog id="confirmation-dialog"><tp-yt-paper-dialog id="dialog" role="dialog"><div class="header"><h1 id="dialog-title" class="primary-header">${T('Chúng tôi vẫn đang kiểm tra video của bạn', "We're still checking your video")}</h1>
+      <ytcp-icon-button id="cancel-button" aria-label="${T('Hủy', 'Cancel')}" role="button">✕</ytcp-icon-button></div>
+      <div class="dialog-content"><div>${T('Hãy đợi việc kiểm tra kết thúc trước khi xuất bản video để đảm bảo rằng video của bạn có thể tham gia kiếm tiền.', 'Wait for checks to finish before publishing to make sure your video is eligible for monetization.')}</div>
+      <div>${T('Nếu bạn không muốn đợi, hãy lưu video của mình ở chế độ riêng tư hoặc không công khai. Sau đó, hãy quay lại khi chúng tôi đã kiểm tra xong.', "If you don't want to wait, save your video as private or unlisted, then come back when checks are done.")}</div></div>
+      <div id="dialog-buttons" style="display:flex;justify-content:flex-end;gap:8px">${OPT.button('secondary-action-button', T('Xuất bản', 'Publish'))}${OPT.button('primary-action-button', T('Thay đổi chế độ hiển thị', 'Change visibility'))}</div></tp-yt-paper-dialog></ytcp-dialog>`
+    document.body.appendChild(w)
+    log({ type: 'checks-monet' })
+    $('#cancel-button', w).onclick = () => w.remove()
+    $('#primary-action-button', w).onclick = () => { w.remove(); log({ type: 'checks-change-visibility' }) }
+    $('#secondary-action-button', w).onclick = () => { w.remove(); W.anyway = true; publish() }
+  }
+
+  // Google doi xac minh danh tinh GIUA LUC dang tai (HTML that loi-trang 26/11/2026: ytcp-auth-confirmation-dialog, ngoai hop
+  // thoai tai len, co lop nen che): flag authdlg = ms sau khi trang Chi tiet hien. Dang hien thi nut Tiep cua hop thoai tai
+  // len khong an (hop thoai modal). "Tiep theo" = nguoi dung tu xac minh xong (trang gia: dong hop thoai).
+  function authDialog() {
+    if (document.querySelector('ytcp-auth-confirmation-dialog')) return
+    const w = document.createElement('ytcp-auth-confirmation-dialog')
+    w.innerHTML = `<ytcp-confirmation-dialog id="confirmation-dialog"><ytcp-dialog id="dialog" modal=""><tp-yt-paper-dialog id="dialog" role="dialog" aria-modal="true" style="position:fixed;z-index:2204;left:260px;top:280px;width:560px;display:block;background:#282828;color:#fff;padding:16px;border-radius:12px">
+      <h1>${T('Xác minh danh tính của bạn', "Verify it's you")}</h1><div id="dialog-content-text"><p>${T('Để tiếp tục, chúng tôi cần xác thực danh tính của bạn. Bước bảo mật bổ sung này giúp đảm bảo an toàn cho tài khoản của bạn.', 'To continue, we need to verify your identity.')}</p></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">${OPT.button('secondary-button', T('Tìm hiểu thêm', 'Learn more'))}${OPT.button('confirm-button', T('Tiếp theo', 'Next'))}</div></tp-yt-paper-dialog></ytcp-dialog></ytcp-confirmation-dialog>
+      <div class="backdrop" style="position:fixed;inset:0;z-index:2203;background:rgba(0,0,0,.6)"></div>`
+    document.body.appendChild(w)
+    W.blocked = true
+    log({ type: 'auth-dialog' })
+    $('#confirm-button', w).onclick = () => { w.remove(); W.blocked = false; log({ type: 'auth-done' }) }
   }
 
   // len lich: "Chung toi van dang kiem tra noi dung cua ban ... Quay lai truoc khi video cua ban duoc xuat ban" [Da hieu]

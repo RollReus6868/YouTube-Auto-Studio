@@ -21,6 +21,8 @@ module.exports = [
   [/^\/studio\/that-upload\/chon-tep$/, 'that-chon-tep.html'],
   // HTML that: buoc "Kiem tien" (kenh da bat kiem tien, loi-trang 19/11/2026) + hop thoai Bat/Tat
   [/^\/studio\/that-upload\/kiem-tien$/, 'that-kiem-tien.html'],
+  // HTML that: hop thoai "Chung toi van dang kiem tra video cua ban" cua kenh kiem tien (loi-trang 27/11/2026)
+  [/^\/studio\/that-upload\/kiem-tra-kiem-tien$/, 'that-kiem-tra-kiem-tien.html'],
   [/^\/studio\/__upload\/done$/, (req, res, m, server) => {
     let body = ''
     req.setEncoding('utf8') // ghep chu dung UTF-8 khi than yeu cau den thanh nhieu manh (ky tu nhieu byte bi cat)
